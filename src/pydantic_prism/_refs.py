@@ -8,7 +8,7 @@ from collections import deque
 from collections.abc import Collection, Iterator, Mapping, Sequence, Set
 from dataclasses import dataclass
 from enum import StrEnum, unique
-from typing import TYPE_CHECKING, Any, Literal, Union, get_args, get_origin
+from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args, get_origin
 
 from ._markers import BackRef, Ref
 from .errors import RefResolutionError
@@ -17,7 +17,14 @@ if TYPE_CHECKING:
     from ._model import ScopedModel
     from ._scopes import ScopeExpr
 
-__all__ = ["RefGraph", "RefInfo", "RefShape"]
+__all__ = [
+    "BackRefInfo",
+    "EmbeddedRefInfo",
+    "IdRefInfo",
+    "RefGraph",
+    "RefInfo",
+    "RefShape",
+]
 
 RefKind = Literal["ref", "backref", "embedded"]
 
@@ -62,9 +69,16 @@ class RawEdge:
     key_type: Any = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RefInfo:
-    """One resolved relationship edge.
+    """One resolved relationship edge — the base of the three edge kinds.
+
+    ``__refs__[name]`` is typed as this base; the concrete object is one of
+    :class:`IdRefInfo` (``kind="ref"``), :class:`BackRefInfo` (``kind="backref"``,
+    adds ``via``) or :class:`EmbeddedRefInfo` (``kind="embedded"``, adds
+    ``scope``). Narrow with ``isinstance`` / ``match info.kind`` — or use the
+    kind-typed accessors :attr:`RefGraph.outgoing` / ``.incoming`` / ``.embedded``,
+    which return the precise subtype.
 
     Attributes:
         field_name: Name of the field carrying the edge on the owning model.
@@ -73,14 +87,9 @@ class RefInfo:
         shape: Storage shape (:class:`RefShape`): scalar, collection, or
             keyed dict (where the dict key is the foreign id).
         optional: True when the annotation admits ``None``.
-        kind: ``"ref"`` for forward references, ``"backref"`` for declared
-            reverse references, ``"embedded"`` for fields embedding the
-            target model (or one of its projections) directly.
-        via: For backrefs, the field on ``target`` holding the forward ref.
-        key_type: For keyed-dict shapes, the dict key type.
-        scope: For embedded edges, the scope expression of the embedded
-            projection; ``None`` means a canonical annotation (the embedded
-            shape reshapes with the outer projection).
+        kind: ``"ref"``, ``"backref"`` or ``"embedded"`` — the discriminant.
+        key_type: For keyed-dict shapes, the dict key type (shape-driven, so it
+            lives on the base, not a kind variant); ``None`` otherwise.
     """
 
     field_name: str
@@ -89,14 +98,40 @@ class RefInfo:
     shape: RefShape
     optional: bool
     kind: RefKind
-    via: str | None = None
     key_type: Any = None
-    scope: ScopeExpr | None = None
 
     @property
     def many(self) -> bool:
         """True when the edge holds more than one value (compat property)."""
         return self.shape is not RefShape.SCALAR
+
+
+@dataclass(frozen=True, kw_only=True)
+class IdRefInfo(RefInfo):
+    """A forward, id-valued reference edge (``kind="ref"``)."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class BackRefInfo(RefInfo):
+    """A declared reverse-reference edge (``kind="backref"``).
+
+    ``via`` names the field on ``target`` holding the forward ``ref`` back here.
+    """
+
+    via: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class EmbeddedRefInfo(RefInfo):
+    """An embedded-model edge: a carrier projection or composition.
+
+    ``kind="embedded"``. ``scope`` is the embedded projection's scope
+    expression, or ``None`` when the
+    embedded annotation is a canonical ScopedModel (composition that reshapes
+    with the outer projection).
+    """
+
+    scope: ScopeExpr | None = None
 
 
 def shape_of(annotation: Any) -> tuple[RefShape, bool, Any]:
@@ -168,23 +203,28 @@ class RefGraph(Mapping[str, RefInfo]):
         return f"RefGraph({self._owner.__name__}: {edges or 'no refs'})"
 
     @property
-    def outgoing(self) -> dict[str, RefInfo]:
+    def outgoing(self) -> dict[str, IdRefInfo]:
         """Forward ``ref`` edges only (id-valued)."""
-        return {n: self[n] for n, e in self._raw.items() if isinstance(e.marker, Ref)}
+        return cast(
+            "dict[str, IdRefInfo]",
+            {n: self[n] for n, e in self._raw.items() if isinstance(e.marker, Ref)},
+        )
 
     @property
-    def incoming(self) -> dict[str, RefInfo]:
+    def incoming(self) -> dict[str, BackRefInfo]:
         """Declared ``backref`` edges only."""
-        return {
-            n: self[n] for n, e in self._raw.items() if isinstance(e.marker, BackRef)
-        }
+        return cast(
+            "dict[str, BackRefInfo]",
+            {n: self[n] for n, e in self._raw.items() if isinstance(e.marker, BackRef)},
+        )
 
     @property
-    def embedded(self) -> dict[str, RefInfo]:
+    def embedded(self) -> dict[str, EmbeddedRefInfo]:
         """Auto-detected embedded-model edges only (carrier records, composition)."""
-        return {
+        edges = {
             n: self[n] for n, e in self._raw.items() if isinstance(e.marker, Embedded)
         }
+        return cast("dict[str, EmbeddedRefInfo]", edges)
 
     def targets(self) -> set[type[ScopedModel]]:
         """Every model referenced by this one (forward, embedded, or reverse)."""
@@ -249,32 +289,22 @@ class RefGraph(Mapping[str, RefInfo]):
                     f"{self._owner.__module__!r}"
                 )
             target = candidate
-        via: str | None = None
-        scope: ScopeExpr | None = None
+        common: dict[str, Any] = {
+            "field_name": field_name,
+            "target": target,
+            "target_field": marker.target_field,
+            "shape": edge.shape,
+            "optional": edge.optional,
+            "key_type": edge.key_type,
+        }
         if isinstance(marker, BackRef):
             self._check_backref(field_name, target, marker.via)
-            kind: RefKind = "backref"
-            via = marker.via
-        elif isinstance(marker, Embedded):
-            kind = "embedded"
-            scope = marker.scope
-        else:
-            kind = "ref"
-            if edge.shape is RefShape.KEYED_DICT:
-                self._check_key_type(
-                    field_name, target, marker.target_field, edge.key_type
-                )
-        return RefInfo(
-            field_name=field_name,
-            target=target,
-            target_field=marker.target_field,
-            shape=edge.shape,
-            optional=edge.optional,
-            kind=kind,
-            via=via,
-            key_type=edge.key_type,
-            scope=scope,
-        )
+            return BackRefInfo(kind="backref", via=marker.via, **common)
+        if isinstance(marker, Embedded):
+            return EmbeddedRefInfo(kind="embedded", scope=marker.scope, **common)
+        if edge.shape is RefShape.KEYED_DICT:
+            self._check_key_type(field_name, target, marker.target_field, edge.key_type)
+        return IdRefInfo(kind="ref", **common)
 
     def _check_key_type(
         self,

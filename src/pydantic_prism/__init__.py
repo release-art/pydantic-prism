@@ -7,7 +7,14 @@ relationships introspectable across projections.
 
 from ._markers import BackRef, Ref, Scoped, backref, ref, scoped
 from ._model import Projection, ScopedModel
-from ._refs import RefGraph, RefInfo, RefShape
+from ._refs import (
+    BackRefInfo,
+    EmbeddedRefInfo,
+    IdRefInfo,
+    RefGraph,
+    RefInfo,
+    RefShape,
+)
 from ._scopes import Scope, ScopeExpr
 from ._validators import scoped_validator
 from .errors import (
@@ -21,7 +28,10 @@ from .errors import (
 
 __all__ = [
     "BackRef",
+    "BackRefInfo",
+    "EmbeddedRefInfo",
     "EmptyProjectionError",
+    "IdRefInfo",
     "PrismError",
     "Projection",
     "ProjectionBaseError",

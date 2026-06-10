@@ -688,3 +688,47 @@ all have substantive README coverage (dedicated sections + API-reference rows)
 and CHANGELOG entries. **No redundant edits made** — manufacturing churn on
 already-covered docs would be dishonest; the honest deliverable was the audit
 and this record.
+
+---
+
+# API decision record — round 9 (RefInfo shape audit)
+
+Phase 2 output, 2026-06-10. See docs/design-round-9.md. The mandate was to
+*commit* one way (the drift between shapes is the failure mode).
+
+## 53. RefInfo → split by `kind` into discriminated subtypes
+
+Options: commit to the single dataclass (recommended in the memo) / split by
+`kind`.
+**Chosen: split** (owner's call, against the memo's lean — consistent with the
+codebase's structural/introspection-first bent). `RefInfo` becomes the base of
+`IdRefInfo` (`kind="ref"`), `BackRefInfo` (`+ via: str`), and `EmbeddedRefInfo`
+(`+ scope: ScopeExpr | None`). The audit corrected two things the feedback got
+wrong: it is **3** conditional fields (not ~8), and the proposed
+`Id`/`Embedded`/`KeyedDict` split mixed axes — `kind` and `shape` are
+orthogonal. The **only clean discriminant is `kind`**; `key_type` is shape-driven
+and therefore stays on the base (a kind split would not capture it). So the
+split moves exactly `via` and `scope` onto their variants.
+
+## 54. RefInfo stays the importable base class
+
+Options: base class (recommended) / union alias.
+**Chosen: base class.** `RefInfo` remains a real class the three variants
+subclass, so `isinstance(x, RefInfo)` and existing imports keep working;
+`__refs__[name]` is typed `RefInfo`. The kind-typed accessors (`.outgoing`
+`dict[str, IdRefInfo]`, `.incoming` `dict[str, BackRefInfo]`, `.embedded`
+`dict[str, EmbeddedRefInfo]`) deliver the precise types where the partition is
+already by kind.
+
+## Round-9 notes
+
+- **Breaking (pre-1.0, feedback-invited):** `via`/`scope` left the base, so a
+  base-typed read must narrow first (they were always `None` there). `RefInfo`
+  and variants are now keyword-only dataclasses (`kw_only=True`) — required so a
+  variant can add a mandatory field (`BackRefInfo.via`) after the base's
+  defaulted `key_type`. Nothing in the project constructs `RefInfo` positionally
+  (only `_resolve` does, by keyword).
+- `.many` kept on the base (cheap, documented, shape-derived).
+- Runtime-safe for existing readers: `.via` is only read on backref edges,
+  `.scope` only on embedded edges, `.key_type`/`.many` on the base — verified
+  across tests and examples before the change.

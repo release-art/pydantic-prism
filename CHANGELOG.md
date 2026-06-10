@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — round 9 (RefInfo discriminated by kind)
+
+- `RefInfo` is now the **base** of three kind-discriminated variants:
+  `IdRefInfo` (`kind="ref"`), `BackRefInfo` (adds `via: str`), and
+  `EmbeddedRefInfo` (adds `scope: ScopeExpr | None`). `__refs__[name]` is typed
+  as the base `RefInfo`; the `.outgoing` / `.incoming` / `.embedded` accessors
+  now return the precise subtype (`dict[str, IdRefInfo]` etc.), so e.g.
+  `incoming["x"].via` is a non-optional `str`. Narrow a base-typed edge with
+  `isinstance` or `match info.kind`.
+  - **Breaking:** `via` and `scope` have moved off the base `RefInfo` onto
+    `BackRefInfo` / `EmbeddedRefInfo` respectively — reading them off a
+    base-typed edge without narrowing is no longer valid (they were always
+    `None` there anyway). `key_type` (shape-driven) and `.many` stay on the
+    base. `RefInfo` and its variants are now keyword-only dataclasses.
+  - Resolves the "RefInfo shape audit": committed to discriminated subtypes
+    (the only clean axis is `kind`; `key_type` is shape-driven and stays on the
+    base) rather than the bag-of-options.
+
 ### Changed — round 8 (partial round-trip story)
 
 - `Model.from_projection()` now raises a clear `TypeError` when handed a

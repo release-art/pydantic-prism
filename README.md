@@ -179,12 +179,19 @@ info = Order.__refs__["customer_id"]
 # info.target is Customer, info.target_field == "id"
 # info.shape is RefShape.SCALAR, info.optional is False, info.kind == "ref"
 
-Order.__refs__.outgoing          # forward id-valued edges only
-Customer.__refs__.incoming       # declared backrefs only
-Order.__refs__.embedded          # embedded-model edges only (see below)
+Order.__refs__.outgoing          # forward id-valued edges (dict[str, IdRefInfo])
+Customer.__refs__.incoming       # declared backrefs    (dict[str, BackRefInfo])
+Order.__refs__.embedded          # embedded-model edges  (dict[str, EmbeddedRefInfo])
 Order.__refs__.targets()         # {Customer}
 list(Order.__refs__.walk())      # BFS over reachable forward + embedded edges
 ```
+
+`RefInfo` is the base of three kind-discriminated variants — `IdRefInfo`
+(`kind="ref"`), `BackRefInfo` (adds `.via`), `EmbeddedRefInfo` (adds `.scope`).
+`__refs__[name]` is typed as the base; the accessors above return the precise
+subtype, so `Customer.__refs__.incoming["order_ids"].via` is a `str` with no
+`None` check. Narrow a base-typed edge with `isinstance` or `match info.kind`.
+(`.key_type` is shape-driven, so it stays on the base; `.many` too.)
 
 Refs survive projection — this is the point:
 
@@ -696,8 +703,9 @@ The relationship graph:
 
 | name | kind | summary |
 |---|---|---|
-| `RefGraph` | class | `Mapping[str, RefInfo]` keyed by field name; `.owner`, `.outgoing`, `.incoming`, `.embedded`, `.targets()`, `.walk()`. |
-| `RefInfo` | dataclass | `.field_name`, `.target`, `.target_field`, `.shape`, `.optional`, `.kind` (`"ref" \| "backref" \| "embedded"`), `.via`, `.key_type`, `.scope`, `.many` (derived). |
+| `RefGraph` | class | `Mapping[str, RefInfo]` keyed by field name; `.owner`, `.targets()`, `.walk()`, plus kind-typed accessors `.outgoing` (`dict[str, IdRefInfo]`), `.incoming` (`dict[str, BackRefInfo]`), `.embedded` (`dict[str, EmbeddedRefInfo]`). |
+| `RefInfo` | dataclass | Base edge: `.field_name`, `.target`, `.target_field`, `.shape`, `.optional`, `.kind`, `.key_type` (shape-driven), `.many` (derived). `__refs__[name]` is typed as this; narrow with `isinstance`/`match .kind`. |
+| `IdRefInfo` / `BackRefInfo` / `EmbeddedRefInfo` | dataclass | `RefInfo` variants by `kind`: forward id ref / declared reverse (`+ .via: str`) / embedded carrier or composition (`+ .scope: ScopeExpr \| None`). |
 
 Static-typing CLI (see "Static types for projections"):
 
