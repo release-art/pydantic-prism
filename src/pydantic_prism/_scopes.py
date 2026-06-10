@@ -39,6 +39,10 @@ class ScopeExpr:
         """CamelCase fragment used to auto-name derived classes."""
         raise NotImplementedError
 
+    def sort_key(self) -> str:
+        """Module-qualified, structure-tagged key for canonical ordering."""
+        raise NotImplementedError
+
     def __or__(self, other: ScopeLike) -> ScopeExpr:
         return union_all([self, as_expr(other)])
 
@@ -132,6 +136,9 @@ class _Atom(ScopeExpr):
     def token(self) -> str:
         return self.scope.__name__
 
+    def sort_key(self) -> str:
+        return f"{self.scope.__module__}.{self.scope.__qualname__}"
+
     def __repr__(self) -> str:
         return self.scope.__name__
 
@@ -149,6 +156,9 @@ class _Union(ScopeExpr):
     def token(self) -> str:
         return "Or".join(operand.token() for operand in self.operands)
 
+    def sort_key(self) -> str:
+        return "or(" + ",".join(operand.sort_key() for operand in self.operands) + ")"
+
     def __repr__(self) -> str:
         return "(" + " | ".join(repr(operand) for operand in self.operands) + ")"
 
@@ -165,6 +175,9 @@ class _Intersection(ScopeExpr):
 
     def token(self) -> str:
         return "And".join(operand.token() for operand in self.operands)
+
+    def sort_key(self) -> str:
+        return "and(" + ",".join(operand.sort_key() for operand in self.operands) + ")"
 
     def __repr__(self) -> str:
         return "(" + " & ".join(repr(operand) for operand in self.operands) + ")"
@@ -184,6 +197,9 @@ class _Difference(ScopeExpr):
     def token(self) -> str:
         return f"{self.left.token()}Not{self.right.token()}"
 
+    def sort_key(self) -> str:
+        return f"sub({self.left.sort_key()},{self.right.sort_key()})"
+
     def __repr__(self) -> str:
         return f"({self.left!r} - {self.right!r})"
 
@@ -201,6 +217,9 @@ class _Complement(ScopeExpr):
     def token(self) -> str:
         return f"Not{self.operand.token()}"
 
+    def sort_key(self) -> str:
+        return f"not({self.operand.sort_key()})"
+
     def __repr__(self) -> str:
         return f"~{self.operand!r}"
 
@@ -215,9 +234,11 @@ def _flatten(
         else:
             flat.append(expr)
     # Canonical form: deduplicate and order deterministically so that
-    # structurally equal expressions compare (and cache) equal.
+    # structurally equal expressions compare (and cache) equal. The key is
+    # module-qualified: two scopes sharing a bare class name still order
+    # consistently.
     unique = list(dict.fromkeys(flat))
-    unique.sort(key=repr)
+    unique.sort(key=lambda expr: expr.sort_key())
     return tuple(unique)
 
 

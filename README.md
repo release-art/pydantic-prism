@@ -118,7 +118,8 @@ class Order(ScopedModel):
 
 - `ref(Customer)` declares a forward, FK-style reference. String targets
   (`ref("Customer")`) are allowed for cycles and resolve lazily against the
-  owning model's module.
+  owning model's module (module-level models only — for models defined inside
+  functions, pass the class object).
 - `backref(Order, via="customer_id")` declares the reverse edge explicitly —
   no global registry, no import-order magic. The marked field is a real,
   validated field (an empty default is implied) and `via=` is checked
@@ -203,14 +204,19 @@ will fail at validation time.
 | situation | error | when |
 |---|---|---|
 | marker used as a field default | `TypeError` | class definition |
+| marker nested below the field's top-level `Annotated` | `TypeError` | class definition |
 | `ref()` target neither ScopedModel nor str | `TypeError` | marker construction |
 | two `ref`/`backref` markers on one field | `TypeError` | class definition |
 | projection selects zero fields | `EmptyProjectionError` | `.scope()` call |
-| string target doesn't resolve | `RefResolutionError` | `__refs__` access |
+| one projection name for two different expressions | `ProjectionNameError` | `.scope()` call |
+| string target doesn't resolve (or model is function-local) | `RefResolutionError` | `__refs__` access |
 | `backref(via=...)` doesn't match a forward ref | `RefResolutionError` | `__refs__` access |
 
-`EmptyProjectionError` and `RefResolutionError` subclass `PrismError` (and
-`ValueError`).
+`EmptyProjectionError`, `ProjectionNameError` and `RefResolutionError`
+subclass `PrismError` (and `ValueError`). Models whose annotations were
+forward references at definition time are handled: `.scope()` resolves them
+(or raises pydantic's clear error), and an explicit `model_rebuild()`
+refreshes marker collection too.
 
 ## FastAPI
 

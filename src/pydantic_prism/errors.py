@@ -5,7 +5,12 @@ defaults) raises plain :class:`TypeError`; these classes cover domain errors
 that can only be detected once models and scopes are put together.
 """
 
-__all__ = ["EmptyProjectionError", "PrismError", "RefResolutionError"]
+__all__ = [
+    "EmptyProjectionError",
+    "PrismError",
+    "ProjectionNameError",
+    "RefResolutionError",
+]
 
 
 class PrismError(Exception):
@@ -18,6 +23,16 @@ class EmptyProjectionError(PrismError, ValueError):
     Raised by ``Model.scope(...)`` when no field of the model belongs to the
     requested scope expression. An empty model is almost always a mistake
     (a typo'd scope, or a model whose fields were never tagged).
+    """
+
+
+class ProjectionNameError(PrismError, ValueError):
+    """Two different scope expressions would produce one projection class name.
+
+    Raised by ``Model.scope(...)`` when an auto-generated or explicit ``name=``
+    is already taken by a projection of the same model with a different
+    expression (e.g. two scopes that share a bare class name). Pass ``name=``
+    to disambiguate.
     """
 
 

@@ -9,13 +9,19 @@ from ._markers import BackRef, Ref, Scoped, backref, ref, scoped
 from ._model import Projection, ScopedModel
 from ._refs import RefGraph, RefInfo
 from ._scopes import Scope, ScopeExpr
-from .errors import EmptyProjectionError, PrismError, RefResolutionError
+from .errors import (
+    EmptyProjectionError,
+    PrismError,
+    ProjectionNameError,
+    RefResolutionError,
+)
 
 __all__ = [
     "BackRef",
     "EmptyProjectionError",
     "PrismError",
     "Projection",
+    "ProjectionNameError",
     "Ref",
     "RefGraph",
     "RefInfo",

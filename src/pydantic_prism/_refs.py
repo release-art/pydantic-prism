@@ -54,7 +54,8 @@ def cardinality(annotation: Any) -> tuple[bool, bool]:
         args = get_args(ann)
         optional = type(None) in args
         rest = [arg for arg in args if arg is not type(None)]
-        many = cardinality(rest[0])[0] if len(rest) == 1 else False
+        # to-many only when every union member agrees (list[UUID] | set[UUID])
+        many = bool(rest) and all(cardinality(arg)[0] for arg in rest)
         return many, optional
     if isinstance(origin, type) and issubclass(
         origin, (list, set, frozenset, tuple, Sequence, Set)
@@ -135,6 +136,12 @@ class RefGraph(Mapping[str, RefInfo]):
                     if isinstance(target_graph, RefGraph):
                         queue.append(target_graph)
 
+    def _reset(self, entries: Mapping[str, tuple[Ref | BackRef, bool, bool]]) -> None:
+        """Replace the raw edges in place (after a model rebuild), keeping
+        graph objects already held by user code current."""
+        self._raw = dict(entries)
+        self._resolved.clear()
+
     def filtered(self, field_names: Collection[str]) -> RefGraph:
         """A sub-graph restricted to ``field_names`` (used by projections)."""
         graph = RefGraph(
@@ -152,6 +159,12 @@ class RefGraph(Mapping[str, RefInfo]):
         marker, many, optional = self._raw[field_name]
         target = marker.target
         if isinstance(target, str):
+            if "<locals>" in self._owner.__qualname__:
+                raise RefResolutionError(
+                    f"{self._owner.__name__}.{field_name}: string target {target!r} "
+                    f"cannot be resolved for a model defined inside a function; "
+                    f"pass the class object instead"
+                )
             module = sys.modules.get(self._owner.__module__)
             candidate = getattr(module, target, None)
             if not (isinstance(candidate, type) and issubclass(candidate, ScopedModel)):
