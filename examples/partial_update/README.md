@@ -9,7 +9,7 @@ classDiagram
     direction TB
     class Public
     class Storage
-    Storage --> Public : extends
+    Public <|-- Storage
 ```
 
 ## SiteRow

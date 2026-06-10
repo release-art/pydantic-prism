@@ -9,7 +9,7 @@ classDiagram
     direction TB
     class Internal
     class Public
-    Internal --> Public : extends
+    Public <|-- Internal
 ```
 
 ## ComplianceAudit

@@ -15,7 +15,14 @@ from pydantic_prism import (
     scope_diagram,
     scoped,
 )
-from pydantic_prism._diagram import Edge, Node, NodeField, _Ids, _type_label
+from pydantic_prism._diagram import (
+    Edge,
+    Node,
+    NodeField,
+    _class_member,
+    _Ids,
+    _type_label,
+)
 
 
 class Public(Scope): ...
@@ -66,11 +73,12 @@ def test_scope_diagram_no_args_discovers_all() -> None:
     assert diagram.to_mermaid()  # renders
 
 
-def test_scope_diagram_mermaid_marks_partial() -> None:
+def test_scope_diagram_mermaid_is_classdiagram_with_inheritance() -> None:
     out = scope_diagram(Update).to_mermaid()
-    assert "Update" in out
-    assert ":::partial" in out
-    assert '-->|"extends"|' in out  # edge labels are quoted (GitHub Mermaid)
+    assert out.startswith("classDiagram")
+    assert "class Update {\n        <<partial>>" in out  # partial stereotype
+    assert "Storage <|-- Update" in out  # UML inheritance: parent <|-- child
+    assert "-->" not in out  # scope edges are inheritance, not association
 
 
 def test_scope_diagram_d2_partial_node_without_fields() -> None:
@@ -121,12 +129,13 @@ def test_ref_diagram_models_fields_and_kind_labels() -> None:
 # --- renderers --------------------------------------------------------------
 
 
-def test_mermaid_edge_labels_are_quoted() -> None:
-    # ref edge labels contain parens ("customer_id (ref)") which GitHub's
-    # Mermaid parser rejects unless the whole label is quoted.
+def test_mermaid_classdiagram_associations_strip_parens() -> None:
+    # ref edges become classDiagram associations; GitHub's Mermaid breaks on
+    # parens in a relation label, so "(ref)" is stripped to "ref".
     out = Order.__refs__.diagram().to_mermaid()
-    assert '-->|"customer_id (ref)"|' in out
-    assert "-->|customer_id (ref)|" not in out  # never the bare form
+    assert out.startswith("classDiagram")
+    assert "Order --> Customer : customer_id ref" in out
+    assert "(ref)" not in out  # parentheses never reach the label
 
 
 def test_dot_record_nodes_and_edges() -> None:
@@ -157,7 +166,7 @@ def test_as_dict_roundtrips_to_json() -> None:
 
 def test_direction_lr_maps_per_format() -> None:
     diagram = scope_diagram(Internal, direction="LR")
-    assert "graph LR" in diagram.to_mermaid()
+    assert "direction LR" in diagram.to_mermaid()  # classDiagram direction
     assert "rankdir=LR;" in diagram.to_dot()
     assert "direction: right" in diagram.to_d2()
 
@@ -194,7 +203,10 @@ def test_unlabelled_edge_and_plain_nodes() -> None:
 def test_label_escaping_across_formats() -> None:
     node = Node("x", 'La"bel', "model", (NodeField("a|b"), NodeField("ok_field")))
     diagram = Diagram(nodes=(node,), edges=())
-    assert "&quot;" in diagram.to_mermaid()  # mermaid entity-escapes quote
+    # mermaid classDiagram renders the (identifier) node id, not the raw label
+    mermaid = diagram.to_mermaid()
+    assert "class x" in mermaid
+    assert 'La"bel' not in mermaid
     dot = diagram.to_dot()
     assert "\\|" in dot  # record special char escaped
     d2 = diagram.to_d2()
@@ -228,7 +240,7 @@ def test_fields_carry_type_and_description() -> None:
 
 def test_field_rows_render_name_and_type() -> None:
     diagram = projection_diagram(Order)
-    assert "customer_id: UUID" in diagram.to_mermaid()
+    assert "+UUID customer_id" in diagram.to_mermaid()  # classDiagram member
     assert "customer_id: UUID" in diagram.to_dot()  # record row
     assert "customer_id: UUID" in diagram.to_d2()  # d2 class row
 
@@ -256,6 +268,14 @@ def test_scope_node_carries_round7_description() -> None:
 
     node = next(n for n in scope_diagram(Described).nodes if n.label == "Described")
     assert node.description == "A described scope"
+
+
+def test_class_member_rendering() -> None:
+    assert _class_member(NodeField("id", "UUID")) == "UUID id"  # type name
+    assert _class_member(NodeField("tags", "list[str]")) == "list~str~ tags"  # generic
+    assert _class_member(NodeField("x")) == "x"  # no type -> name only
+    # union/optional contains `|`, which breaks classDiagram members -> name only
+    assert _class_member(NodeField("maybe", "str | None")) == "maybe"
 
 
 def test_type_label() -> None:

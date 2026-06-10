@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Changed — Mermaid output is now `classDiagram`
 
-- Mermaid edge labels are now quoted (`-->|"id (ref)"|`). GitHub's Mermaid
-  parser rejects bare parentheses/special characters in an edge label, so
-  relationship diagrams (whose labels read `field (kind)`) failed to render on
-  GitHub. Node labels were already quoted. Example READMEs regenerated.
+- Diagrams render Mermaid as a `classDiagram` (proper class boxes with a name
+  compartment + attribute list) instead of a `graph` flowchart that stacked
+  fields with `<br/>`. This both reads better on GitHub and sidesteps the
+  flowchart edge-label parser, which rejected bare parentheses in labels like
+  `field (kind)` and failed to render. Specifics:
+  - Scope diagrams use UML **inheritance** arrows (`Base <|-- Derived`) — the
+    scope hierarchy *is* `__bases__` inheritance — rather than generic arrows.
+  - Partial scopes/projections carry a `«partial»` stereotype.
+  - Field types use Mermaid generic syntax (`list~str~`); union/optional types
+    (which would break the member grammar) show the field name only — the full
+    type stays in `as_dict` and the README tables.
+  - DOT/D2 unchanged except inheritance edges now use hollow/triangle arrowheads.
+  - `Diagram` edges gained a `relation` field (`"inheritance"` / `"association"`),
+    exposed in `as_dict()`. Example READMEs regenerated.
 
 ### Added — round 13 (auto-generated example READMEs)
 

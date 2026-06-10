@@ -886,6 +886,25 @@ runs it `--check` in a **subprocess** so importing the example modules (with
 their unrun `demo()`/`__main__` lines) never drops the 100% src-coverage gate.
 A stale README fails CI, like `prism check`.
 
+## 66. Mermaid renders as `classDiagram` (round 14)
+
+The flowchart (`graph TD`) stacked a model's fields inside one box with `<br/>`
+breaks — cramped, and its edge-label parser rejected bare parentheses (GitHub
+render failure on `field (kind)`). Switched the Mermaid renderer to
+`classDiagram`: a name compartment + attribute list per class, `«partial»`
+stereotypes, association arrows for projection/ref edges, and — for scope
+diagrams specifically — UML **inheritance** arrows (`Base <|-- Derived`), since
+the scope graph *is* the `__bases__` hierarchy (there is no distinct "set
+algebra" diagram type; the hierarchy is the thing, and `<|--` is the right
+relation). To fit Mermaid's stricter class-member grammar, generic types use
+`~T~` and union/optional types fall back to name-only (full type stays in
+`as_dict` + README tables); relation labels strip parens/colons. DOT/D2 are
+unchanged apart from inheritance edges gaining hollow/triangle arrowheads. The IR
+`Edge` gained a `relation` discriminant (`"inheritance"`/`"association"`),
+surfaced in `as_dict`. **Caveat:** Mermaid/D2 output is not validated locally (no
+renderer in the toolchain) — verified by eye and on GitHub, like the earlier
+edge-label fix.
+
 ## 65. `build_readme` gained `regen_hint`; relationships gated on edges
 
 The do-not-edit banner now names the producing command (`regen_hint`) — `prism

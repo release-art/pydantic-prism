@@ -65,11 +65,18 @@ class Node:
 
 @dataclass(frozen=True)
 class Edge:
-    """A directed diagram edge with an optional label."""
+    """A directed diagram edge.
+
+    ``relation`` is ``"inheritance"`` for the scope hierarchy (``Derived`` is a
+    broader ``Base``) — rendered with UML inheritance arrows — or
+    ``"association"`` (the default) for projection/reference edges, which carry a
+    ``label``.
+    """
 
     src: str
     dst: str
     label: str = ""
+    relation: str = "association"
 
 
 @dataclass(frozen=True)
@@ -103,7 +110,13 @@ class Diagram:
                 for n in self.nodes
             ],
             "edges": [
-                {"src": e.src, "dst": e.dst, "label": e.label} for e in self.edges
+                {
+                    "src": e.src,
+                    "dst": e.dst,
+                    "label": e.label,
+                    "relation": e.relation,
+                }
+                for e in self.edges
             ],
         }
 
@@ -131,9 +144,13 @@ class Diagram:
             else:
                 lines.append(f"    class {node.id}")
         for edge in self.edges:
-            label = _class_edge_label(edge.label)
-            arrow = f"    {edge.src} --> {edge.dst}"
-            lines.append(f"{arrow} : {label}" if label else arrow)
+            if edge.relation == "inheritance":
+                # UML inheritance: parent <|-- child (the arrow says "extends")
+                lines.append(f"    {edge.dst} <|-- {edge.src}")
+            else:
+                label = _class_edge_label(edge.label)
+                arrow = f"    {edge.src} --> {edge.dst}"
+                lines.append(f"{arrow} : {label}" if label else arrow)
         return "\n".join(lines) + "\n"
 
     def to_dot(self) -> str:
@@ -154,8 +171,11 @@ class Diagram:
                 attrs.append(f'tooltip="{_dot(node.description)}"')
             lines.append(f"    {node.id} [{','.join(attrs)}];")
         for edge in self.edges:
-            label = f' [label="{_dot(edge.label)}"]' if edge.label else ""
-            lines.append(f"    {edge.src} -> {edge.dst}{label};")
+            if edge.relation == "inheritance":
+                attr = " [arrowhead=onormal]"  # UML inheritance (hollow triangle)
+            else:
+                attr = f' [label="{_dot(edge.label)}"]' if edge.label else ""
+            lines.append(f"    {edge.src} -> {edge.dst}{attr};")
         lines.append("}")
         return "\n".join(lines) + "\n"
 
@@ -174,8 +194,12 @@ class Diagram:
             else:
                 lines.append(f'{node.id}: "{_d2(node.label)}"')
         for edge in self.edges:
-            label = f": {_d2(edge.label)}" if edge.label else ""
-            lines.append(f"{edge.src} -> {edge.dst}{label}")
+            if edge.relation == "inheritance":
+                arrow = "{ target-arrowhead.shape: triangle }"
+                lines.append(f"{edge.src} -> {edge.dst} {arrow}")
+            else:
+                label = f": {_d2(edge.label)}" if edge.label else ""
+                lines.append(f"{edge.src} -> {edge.dst}{label}")
         return "\n".join(lines) + "\n"
 
 
@@ -348,7 +372,7 @@ def scope_diagram(*scopes: type[Scope], direction: str = "TD") -> Diagram:
         for scope in ordered
     )
     edges = tuple(
-        Edge(node_id[scope], node_id[parent], "extends")
+        Edge(node_id[scope], node_id[parent], relation="inheritance")
         for scope in ordered
         for parent in _scope_parents(scope, Scope)
         if parent in node_id

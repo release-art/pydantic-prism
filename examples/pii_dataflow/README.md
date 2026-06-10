@@ -12,8 +12,8 @@ classDiagram
     class Public
     class Secret
     class Storage
-    Internal --> Public : extends
-    Storage --> Internal : extends
+    Public <|-- Internal
+    Internal <|-- Storage
 ```
 
 ## Address

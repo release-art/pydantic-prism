@@ -315,11 +315,11 @@ _FX = "tests._codegen_fixtures"
 @pytest.mark.parametrize(
     ("argv", "needle"),
     [
-        (["diagram", "scope"], "graph TD"),  # no paths = all scopes
+        (["diagram", "scope"], "classDiagram"),  # no paths = all scopes
         (["diagram", "scope", f"{_FX}:Public", "--format", "dot"], "digraph prism"),
         (["diagram", "projection", f"{_FX}:Screenshot", "--format", "d2"], "direction"),
         (["diagram", "refs", f"{_FX}:Screenshot", "--format", "json"], '"nodes"'),
-        (["diagram", "scope", "--direction", "LR"], "graph LR"),
+        (["diagram", "scope", "--direction", "LR"], "direction LR"),
     ],
 )
 def test_diagram_to_stdout(
@@ -333,7 +333,7 @@ def test_diagram_to_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     out = tmp_path / "d.mmd"
     argv = ["diagram", "projection", f"{_FX}:Screenshot", "--output", str(out)]
     assert main(argv) == 0
-    assert "graph TD" in out.read_text()
+    assert "classDiagram" in out.read_text()
     assert "wrote mermaid diagram" in capsys.readouterr().out
 
 

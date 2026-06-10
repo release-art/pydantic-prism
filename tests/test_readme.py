@@ -242,7 +242,7 @@ class Person(ScopedModel):
 
 
 def test_diagrams_example() -> None:
-    assert "graph TD" in scope_diagram(Update).to_mermaid()
+    assert "classDiagram" in scope_diagram(Update).to_mermaid()
     assert "digraph prism" in projection_diagram(User).to_dot()
     assert "direction: down" in User.__refs__.diagram().to_d2()
     assert "nodes" in scope_diagram().as_dict()
