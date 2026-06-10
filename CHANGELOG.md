@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 13 (auto-generated example READMEs)
+
+- Every example under `examples/<name>/` now ships an auto-generated
+  `README.md` (scope / projection / relationship Mermaid diagrams + field tables,
+  rendered inline on GitHub). `bin/gen_example_readmes.py` (re)generates them
+  from each example's scoped models; `--check` verifies freshness, and a test
+  gates it in CI (run in a subprocess so example imports don't affect coverage).
+- `build_readme` gained a `regen_hint` argument so the do-not-edit banner names
+  the producing command; its relationship section is now emitted only when the
+  model's ref graph has forward edges (a backref-only model no longer renders an
+  empty section).
+
 ### Added — round 12 (diagram CLI + generated README)
 
 - `prism diagram {scope|projection|refs} [module:Name ...]` renders the diagram

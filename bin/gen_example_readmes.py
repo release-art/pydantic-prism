@@ -51,7 +51,7 @@ def readme_for(main_py: Path) -> str:
         and obj.__module__ == module.__name__
         for scope in sorted(obj.scopes(), key=lambda s: s.__name__)
     ]
-    return build_readme(projections)
+    return build_readme(projections, regen_hint="python bin/gen_example_readmes.py")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,8 +75,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"wrote {rel}")
 
     if stale:
+        regen = "python bin/gen_example_readmes.py"
         for rel in stale:
-            print(f"stale: {rel} — run `python bin/gen_example_readmes.py`", file=sys.stderr)
+            print(f"stale: {rel} — run `{regen}`", file=sys.stderr)
         return 1
     if args.check:
         print("example READMEs are up to date")

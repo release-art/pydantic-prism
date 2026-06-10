@@ -870,3 +870,26 @@ per-scope `scoped(..., description=...)` docs appear per projection).
   rather than threading it out of `generate()`; keeps stub and README rendering
   independent.
 - Both new outputs carry do-not-edit banners; README cells escape `|`/newlines.
+
+---
+
+# API decision record — round 13 (auto-generated example READMEs)
+
+Phase 2 output, 2026-06-10. Repo tooling, not a library API change. See
+docs/design-round-13.md.
+
+## 64. Example READMEs → script + subprocess freshness gate
+
+`bin/gen_example_readmes.py` renders `examples/<name>/README.md` from each
+example's scoped models via `build_readme`; `tests/test_example_readmes.py`
+runs it `--check` in a **subprocess** so importing the example modules (with
+their unrun `demo()`/`__main__` lines) never drops the 100% src-coverage gate.
+A stale README fails CI, like `prism check`.
+
+## 65. `build_readme` gained `regen_hint`; relationships gated on edges
+
+The do-not-edit banner now names the producing command (`regen_hint`) — `prism
+gen` for stubs, `python bin/gen_example_readmes.py` for examples — so the
+"regenerate with" instruction is correct per artifact. The relationship section
+is emitted only when the model's ref diagram has edges, so a backref-only model
+(forward `walk()` empty) no longer renders a lone-node section.

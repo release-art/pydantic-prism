@@ -59,6 +59,8 @@ ignore = ["N802"]
 ]
 # The codegen CLI legitimately writes progress/errors to stdout/stderr.
 "src/pydantic_prism/_codegen.py" = ["T201"]
+# dev scripts print progress.
+"bin/*.py" = ["T201"]
 # Variables holding derived projection *classes* (UserPublic = User.scope(...))
 # are CamelCase on purpose; examples print — that is their job.
 "tests/**" = ["N806"]
