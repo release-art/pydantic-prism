@@ -210,6 +210,47 @@ def test_with_updates_example() -> None:
     assert acct.name == "ada"  # original unchanged
 
 
+# --- "Naming projections" --------------------------------------------------
+
+
+class Doc(ScopedModel, projection_name_template="{model}_{scope}"):
+    body: Annotated[str, scoped(Public)]
+
+
+def test_naming_projections_example() -> None:
+    assert Doc.scope(Public).__name__ == "Doc_Public"
+    assert Doc.scope(Public | Internal).__name__ == "Doc_InternalOrPublic"
+
+
+# --- "Per-scope schema metadata" -------------------------------------------
+
+
+class Viewer(Scope, description="Public-facing view"): ...
+
+
+class Auditor(Viewer): ...
+
+
+class Person(ScopedModel):
+    email: Annotated[
+        str,
+        scoped(Viewer, description="User contact (public-facing)"),
+        scoped(Auditor, description="User identity, for internal audit"),
+    ]
+
+
+def test_per_scope_schema_example() -> None:
+    viewer = Person.scope(Viewer).model_json_schema()
+    auditor = Person.scope(Auditor).model_json_schema()
+    assert viewer["properties"]["email"]["description"] == (
+        "User contact (public-facing)"
+    )
+    assert auditor["properties"]["email"]["description"] == (
+        "User identity, for internal audit"
+    )
+    assert viewer["description"] == "Public-facing view"  # model-level
+
+
 # --- "Dict-keyed refs" -----------------------------------------------------
 
 

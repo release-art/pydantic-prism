@@ -39,7 +39,11 @@ from pathlib import Path
 from typing import Any, Literal, Union, cast, get_args, get_origin
 
 from ._drift import projection_signature
-from ._model import Projection, ScopedModel
+from ._model import (
+    Projection,
+    ScopedModel,
+    _auto_name,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 from ._scopes import (
     ScopeExpr,
     _Atom,  # pyright: ignore[reportPrivateUsage] — intra-package expr rendering
@@ -473,7 +477,7 @@ def _render_alias(proj: type[Projection], imports: _Imports) -> str:
     source = proj.__prism_source__
     imports.add_runtime(source.__module__, source.__qualname__.split(".")[0])
     expr_src = _render_scope_expr(proj.__prism_scope__, imports)
-    auto_name = f"{source.__name__}{proj.__prism_scope__.token()}"
+    auto_name = _auto_name(source, proj.__prism_scope__)
     if proj.__name__ == auto_name:
         return f"{proj.__name__} = {source.__name__}.scope({expr_src})"
     return (

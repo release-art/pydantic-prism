@@ -8,8 +8,9 @@ constraints).
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from ._scopes import ScopeExpr, ScopeLike, as_expr, union_all
 
@@ -21,9 +22,15 @@ __all__ = ["BackRef", "Ref", "Scoped", "backref", "ref", "scoped"]
 
 @dataclass(frozen=True)
 class Scoped:
-    """Marker produced by :func:`scoped`. Holds the field's scope expression."""
+    """Marker produced by :func:`scoped`. Holds the field's scope expression.
+
+    ``field_schema`` (when present) carries per-scope JSON-schema metadata —
+    ``description`` / ``examples`` / ``json_schema_extra`` keys — that lands on
+    the field in projections selecting this marker's (single) scope.
+    """
 
     expr: ScopeExpr
+    field_schema: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -43,10 +50,28 @@ class BackRef:
     target_field: str = "id"
 
 
-def scoped(*scopes: ScopeLike) -> Scoped:
+def scoped(
+    *scopes: ScopeLike,
+    description: str | None = None,
+    examples: Sequence[Any] | None = None,
+    json_schema_extra: dict[str, Any] | None = None,
+) -> Scoped:
     """Tag a field with the scopes (or scope expression) it belongs to.
 
     Multiple arguments union: ``scoped(A, B)`` is ``scoped(A | B)``.
+
+    Optional ``description`` / ``examples`` / ``json_schema_extra`` attach
+    per-scope JSON-schema metadata to the field: it lands on the field's schema
+    in projections that select this scope, so the same field can read
+    differently per projection. A schema-carrying ``scoped()`` must name exactly
+    one ``Scope`` class (so its metadata keys to a single scope); split membership
+    across markers to attach per-scope schema::
+
+        email: Annotated[
+            str,
+            scoped(Public, description="User contact (public-facing)"),
+            scoped(Internal, description="User identity, for internal audit"),
+        ]
 
     Usage::
 
@@ -56,7 +81,22 @@ def scoped(*scopes: ScopeLike) -> Scoped:
     """
     if not scopes:
         raise TypeError("scoped() requires at least one scope or scope expression")
-    return Scoped(union_all(as_expr(scope) for scope in scopes))
+    expr = union_all(as_expr(scope) for scope in scopes)
+    schema: dict[str, Any] = {}
+    if description is not None:
+        schema["description"] = description
+    if examples is not None:
+        schema["examples"] = list(examples)
+    if json_schema_extra is not None:
+        schema["json_schema_extra"] = dict(json_schema_extra)
+    if schema and len(expr.atoms()) != 1:
+        raise TypeError(
+            "scoped(...) with schema metadata (description/examples/"
+            "json_schema_extra) must reference exactly one scope; split "
+            "membership across separate scoped() markers to attach per-scope "
+            "schema"
+        )
+    return Scoped(expr, field_schema=schema or None)
 
 
 def _check_str(value: object, message: str) -> None:

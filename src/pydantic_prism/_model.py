@@ -128,6 +128,10 @@ class ScopedModel(BaseModel):
     # Model validators declared with @scoped_validator, keyed by validator name,
     # mapped to the scope expression that decides which projections carry them.
     __prism_validator_scopes__: ClassVar[dict[str, ScopeExpr]] = {}
+    # Template for auto-naming projections: format placeholders {model} and
+    # {scope}. None means the built-in "{model}{scope}" form. Inherited down the
+    # MRO; the call-site name= still overrides it.
+    __prism_name_template__: ClassVar[str | None] = None
     __refs__: ClassVar[RefGraph]
     __prism_cache__: ClassVar[dict[_ProjectionKey, type[Projection]]] = {}
     __prism_names__: ClassVar[dict[str, _ProjectionKey]] = {}
@@ -140,6 +144,7 @@ class ScopedModel(BaseModel):
         cls,
         projection_bases: Sequence[type[BaseModel]] | None = None,
         default_scope: ScopeLike | None = _NO_DEFAULT,
+        projection_name_template: str | None = _NO_DEFAULT,
         **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
@@ -155,6 +160,12 @@ class ScopedModel(BaseModel):
             cls.__prism_default_scope__ = (
                 as_expr(default_scope) if default_scope is not None else None
             )
+        if projection_name_template is not _NO_DEFAULT:
+            if projection_name_template is not None:
+                _validate_name_template(
+                    cast("type[ScopedModel]", cls), projection_name_template
+                )
+            cls.__prism_name_template__ = projection_name_template
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -613,7 +624,7 @@ def _project(
         # Cycle: refer to the in-flight class by its reserved namespace name,
         # resolved by the rebuild pass once every class in this context exists.
         return ForwardRef(ctx.pending[key])
-    class_name = name if name is not None else f"{cls.__name__}{expr.token()}"
+    class_name = name if name is not None else _auto_name(cls, expr)
     registered = cls.__prism_names__.get(class_name)
     if registered is not None and registered != cache_key:
         raise ProjectionNameError(
@@ -630,6 +641,7 @@ def _project(
     field_definitions: dict[str, tuple[Any, FieldInfo]] = {}
     for field_name in surviving:
         info = copy.deepcopy(cls.model_fields[field_name])
+        _apply_field_schema(cls, field_name, expr, info)
         info.metadata = [m for m in info.metadata if not isinstance(m, PRISM_MARKERS)]
         info.annotation = _rewrite(info.annotation, expr, ctx)
         if partial:
@@ -640,11 +652,13 @@ def _project(
             info.default_factory = None
         field_definitions[field_name] = (info.annotation, info)
 
+    model_config = copy.deepcopy(cls.model_config)
+    _apply_model_schema(expr, model_config)
     config_base = types.new_class(
         f"_{class_name}Base",
         (*carried, Projection),
         exec_body=lambda ns: ns.update(
-            model_config=copy.deepcopy(cls.model_config),
+            model_config=model_config,
             __module__=cls.__module__,
         ),
     )
@@ -782,6 +796,122 @@ def _collect_validator_scopes(cls: type[ScopedModel]) -> dict[str, ScopeExpr]:
         if tag is not None:
             scopes[dec_name] = tag
     return scopes
+
+
+# --- projection naming -----------------------------------------------------
+
+
+def _validate_name_template(cls: type[ScopedModel], template: str) -> None:
+    """Eagerly reject a ``projection_name_template`` that can't make a name."""
+    try:
+        sample = template.format(model="Model", scope="Scope")
+    except (KeyError, IndexError) as exc:
+        raise TypeError(
+            f"{cls.__name__}: invalid projection_name_template {template!r}; "
+            f"use only the {{model}} and {{scope}} placeholders"
+        ) from exc
+    if not sample.isidentifier():
+        raise TypeError(
+            f"{cls.__name__}: projection_name_template {template!r} must produce a "
+            f"valid Python identifier (a sample model/scope gave {sample!r}); e.g. "
+            f"'{{model}}_{{scope}}'. Non-identifier names break generated stubs "
+            f"and OpenAPI component refs"
+        )
+
+
+def _auto_name(cls: type[ScopedModel], expr: ScopeExpr) -> str:
+    """The auto-generated projection name: class template, or the default form."""
+    template = cls.__prism_name_template__
+    if template is None:
+        return f"{cls.__name__}{expr.token()}"
+    return template.format(model=cls.__name__, scope=expr.token())
+
+
+# --- scope-attached JSON schema --------------------------------------------
+
+
+def _merge_json_schema_extra(original: Any, extra: dict[str, Any]) -> Any:
+    """Merge ``extra`` onto an existing ``json_schema_extra`` (dict or callable)."""
+    if callable(original):
+
+        def merged(*args: Any) -> None:
+            original(*args)
+            args[0].update(extra)  # args[0] is the schema dict in every arity
+
+        return merged
+    base = dict(original or {})
+    base.update(extra)
+    return base
+
+
+def _resolve_field_schema(
+    cls: type[ScopedModel], field_name: str, expr: ScopeExpr
+) -> Mapping[str, Any] | None:
+    """The per-scope field schema that applies in projection ``expr``, if any.
+
+    Markers whose scope ``expr`` selects are candidates; the most-derived scope
+    (a subclass of every other candidate) wins. Candidates with no subclass
+    relation are ambiguous and raise.
+    """
+    candidates: list[tuple[type[Scope], Mapping[str, Any]]] = []
+    for marker in cls.model_fields[field_name].metadata:
+        if (
+            isinstance(marker, Scoped)
+            and marker.field_schema is not None
+            and expr.selects(marker.expr)
+        ):
+            scope = next(iter(marker.expr.atoms()))  # single atom (enforced)
+            candidates.append((scope, marker.field_schema))
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0][1]
+    scopes = [scope for scope, _ in candidates]
+    for scope, schema in candidates:
+        if all(issubclass(scope, other) for other in scopes):
+            return schema
+    names = ", ".join(sorted(scope.__name__ for scope in scopes))
+    raise TypeError(
+        f"{cls.__name__}.{field_name}: ambiguous scoped() schema in projection "
+        f"{expr!r}; scopes {names} all apply and are unrelated — attach the schema "
+        f"to a single common scope or narrow the projection"
+    )
+
+
+def _apply_field_schema(
+    cls: type[ScopedModel], field_name: str, expr: ScopeExpr, info: FieldInfo
+) -> None:
+    """Overlay the resolved per-scope field schema onto a projected ``FieldInfo``."""
+    schema = _resolve_field_schema(cls, field_name, expr)
+    if schema is None:
+        return
+    if "description" in schema:
+        info.description = schema["description"]
+    if "examples" in schema:
+        info.examples = list(schema["examples"])
+    if "json_schema_extra" in schema:
+        info.json_schema_extra = _merge_json_schema_extra(
+            info.json_schema_extra, schema["json_schema_extra"]
+        )
+
+
+def _apply_model_schema(expr: ScopeExpr, model_config: Any) -> None:
+    """Merge the model-level schema of ``expr``'s scopes into ``model_config``."""
+    extra: dict[str, Any] = {}
+    for atom in sorted(expr.atoms(), key=lambda scope: scope.__name__):
+        schema = vars(atom).get("__prism_model_schema__")
+        if not schema:
+            continue
+        if "description" in schema:
+            extra["description"] = schema["description"]
+        if "examples" in schema:
+            extra["examples"] = list(schema["examples"])
+        if "json_schema_extra" in schema:
+            extra.update(schema["json_schema_extra"])
+    if extra:
+        model_config["json_schema_extra"] = _merge_json_schema_extra(
+            model_config.get("json_schema_extra"), extra
+        )
 
 
 def _validation_key(name: str, info: FieldInfo) -> str:

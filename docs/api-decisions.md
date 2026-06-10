@@ -582,3 +582,72 @@ provenance and undercuts the typed-projection story.
 - A subclass instance accepts a base-model projection (`isinstance` is lenient
   by design); the result is validated as the subclass, preserving its own
   fields.
+
+---
+
+# API decision record — round 7 (projection naming + scope schema metadata)
+
+Phase 2 output, 2026-06-10. Two ergonomics: a class-level projection-name
+template, and scope-attached JSON-schema metadata. See docs/design-round-7.md.
+
+## 47. Projection naming → `projection_name_template`, identifier-restricted
+
+`projection_name_template="{model}_{scope}"` (class keyword, inherited down the
+MRO) sets the default auto-name; `{model}` = class name, `{scope}` = the expr
+token. Precedence: call-site `name=` > template > built-in `{model}{scope}`.
+**The templated result must be a valid Python identifier** — verified that a
+non-identifier (`User@Public`) breaks the round-4 `prism gen` codegen
+(`class User@Public(...)` is a syntax error) and gets sanitized in OpenAPI
+`$ref`s; so the feedback's `{model}@{scope}` becomes `{model}_{scope}`.
+Validated eagerly at class definition (sample format + `str.isidentifier()`);
+bad placeholders raise `TypeError`. One name helper now serves both `_project`
+and the codegen alias emitter (which previously hardcoded the formula).
+
+## 48. Scope schema granularity → both model-level and field-level
+
+The literal proposal (scope carries metadata → projected *model* schema) is
+model-level; the motivating email case (same field, different description per
+projection) is field-level. **Both**, sharing one vocabulary:
+- **Model-level:** schema on the `Scope` *class* —
+  `class Public(Scope, description=..., examples=..., json_schema_extra=...)` —
+  merges into the projected model's schema root for projections selecting that
+  scope. Per-class, **not inherited** (a broader subclass does not reuse a
+  narrower scope's prose).
+- **Field-level:** schema on the field's `scoped(...)` tag (decision 49).
+
+## 49. Field-level mechanism → extend `scoped()`, single scope per schema marker
+
+`scoped(Scope, description=..., examples=..., json_schema_extra=...)` rather than
+a new marker — it reuses the existing multi-marker idiom (a field already unions
+membership across several `scoped()` markers, so per-scope schema falls out:
+`scoped(Public, description=...)` + `scoped(Internal, description=...)`). A
+schema-carrying marker must reference **exactly one** scope (one atom), so its
+metadata keys to a single scope for precedence; `scoped(Public, Internal,
+description=...)` raises `TypeError`. `json_schema_extra` is the keyword (matches
+pydantic's `Field`/`ConfigDict`; the feedback's `extra_json_schema` renamed for
+consistency).
+
+## 50. Field-level precedence → most-derived wins; unrelated → error
+
+A `scoped(S, …schema…)` marker applies in projection `E` iff `E.selects(S)` (the
+library-wide membership rule). When several match (a broad projection selecting
+both `Public` and `Internal`), the **most-derived** scope wins — the `S` that is
+a subclass of all other matches (in prism a subclass is broader, so `Internal`
+beats `Public` in Internal/Storage projections, which the email case wants).
+Matches with no subclass relation (e.g. `Public` vs unrelated `Other` in a union
+projection) are ambiguous → `TypeError` at `.scope()`, naming the field and
+rival scopes. "Last-declared wins" would make annotation order silently
+significant; "error on any multiple" would break the common hierarchy case.
+
+## Round-7 decisions made by fiat
+
+- How metadata lands: field-level sets `FieldInfo.description`/`.examples`
+  (replacing the canonical's, in that projection only) and merges
+  `.json_schema_extra`; model-level merges `{description, examples,
+  **json_schema_extra}` into the projection's `model_config["json_schema_extra"]`
+  (multiple annotated atoms merge in sorted order). A pre-existing dict *or
+  callable* `json_schema_extra` is preserved (the callable is wrapped).
+- All of this is schema-only: zero effect on validation, membership, refs, or
+  runtime shape.
+- The scope-class metadata is read via `vars(scope)` so it stays strictly
+  per-class (non-inherited), unlike `partial=` which inherits.

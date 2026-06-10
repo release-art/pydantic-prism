@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 7 (projection naming + scope schema metadata)
+
+- `projection_name_template=` class keyword: set a house style for auto-named
+  projections once (`"{model}_{scope}"` → `User_Public`) instead of threading
+  `name=` through every `.scope()` call — cleaner OpenAPI/swagger component
+  names. Placeholders `{model}`/`{scope}`; inherited down the MRO; call-site
+  `name=` still wins. The result must be a valid Python identifier (validated at
+  class definition — a non-identifier would break `prism gen` and OpenAPI refs).
+- Scope-attached JSON-schema metadata (`description` / `examples` /
+  `json_schema_extra`), so the same field can read differently per projection
+  without parallel classes:
+  - **Field-level** via `scoped(Scope, description=..., ...)` (one scope per
+    schema-bearing marker; split membership across markers). Applies in
+    projections that select the scope; on overlap the most-derived scope wins,
+    unrelated overlaps raise.
+  - **Model-level** via `Scope` class keywords (`class Public(Scope,
+    description=...)`) → merged into the projected model's schema root; per-class
+    (not inherited).
+  - `Model.scope(...)` schema is purely additive: no effect on validation,
+    membership, refs, or runtime shape; a pre-existing `json_schema_extra` (dict
+    or callable) is preserved.
+
 ### Added — round 6 (`with_updates` patch API)
 
 - `instance.with_updates(patch)` on `ScopedModel`: apply a (partial) projection

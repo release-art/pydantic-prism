@@ -12,7 +12,7 @@ arguments to ``Model.scope(...)``.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -124,15 +124,44 @@ class Scope(metaclass=ScopeMeta):
     The flag inherits down the scope graph like any class attribute and may
     be re-declared (``partial=False``) by a subclass.
 
+    A scope may also carry JSON-schema metadata that lands on the *projected
+    model's* schema when a projection selects it::
+
+        class Public(Scope, description="Public-facing view", examples=[...]): ...
+
+    ``description`` / ``examples`` / ``json_schema_extra`` are merged into the
+    schema root of every projection whose expression contains this scope. This
+    metadata is *not* inherited: a broader subclass does not reuse a narrower
+    scope's prose.
+
     Scopes are only ever used as classes and cannot be instantiated.
     """
 
     __prism_partial__: ClassVar[bool] = False
+    # Model-level JSON-schema metadata for projections that select this scope.
+    # Read per-class (via vars()), never inherited.
+    __prism_model_schema__: ClassVar[dict[str, Any]] = {}
 
-    def __init_subclass__(cls, partial: bool | None = None, **kwargs: Any) -> None:
+    def __init_subclass__(
+        cls,
+        partial: bool | None = None,
+        description: str | None = None,
+        examples: Sequence[Any] | None = None,
+        json_schema_extra: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init_subclass__(**kwargs)
         if partial is not None:
             cls.__prism_partial__ = bool(partial)
+        schema: dict[str, Any] = {}
+        if description is not None:
+            schema["description"] = description
+        if examples is not None:
+            schema["examples"] = list(examples)
+        if json_schema_extra is not None:
+            schema["json_schema_extra"] = dict(json_schema_extra)
+        if schema:
+            cls.__prism_model_schema__ = schema
 
     def __new__(cls, *args: object, **kwargs: object) -> Scope:
         raise TypeError(

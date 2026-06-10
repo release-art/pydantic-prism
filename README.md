@@ -517,6 +517,72 @@ forward references at definition time are handled: `.scope()` resolves them
 (or raises pydantic's clear error), and an explicit `model_rebuild()`
 refreshes marker collection too.
 
+## Naming projections
+
+Projection classes are auto-named `f"{Model}{scope-token}"` (`UserPublic`,
+`UserInternalOrPublic`). `Model.scope(..., name="X")` overrides per call. To set
+a house style once — cleaner OpenAPI/swagger component names without threading
+`name=` everywhere — declare a class-level template:
+
+```python
+class User(ScopedModel, projection_name_template="{model}_{scope}"):
+    ...
+
+User.scope(Public).__name__        # "User_Public"
+User.scope(Public | Internal)      # "User_InternalOrPublic"
+```
+
+- Placeholders are `{model}` (the class name) and `{scope}` (the expression
+  token). Precedence: call-site `name=` > class template > the default form.
+- The template is inherited down the MRO (a subclass may re-declare, or pass
+  `projection_name_template=None` to revert to the default).
+- **The result must be a valid Python identifier.** A non-identifier (e.g.
+  `{model}@{scope}`) is rejected at class definition — it would produce invalid
+  generated stubs (`prism gen`) and sanitized/mismatched OpenAPI `$ref`s.
+
+## Per-scope schema metadata
+
+Scope membership filters fields; scopes can also carry JSON-schema metadata so
+the same field reads differently per projection — no parallel classes. Two
+levels, one vocabulary (`description`, `examples`, `json_schema_extra`):
+
+**Field-level** — on the `scoped(...)` tag (one scope per schema-bearing marker;
+split membership across markers):
+
+```python
+class User(ScopedModel):
+    email: Annotated[
+        str,
+        scoped(Public, description="User contact (public-facing)"),
+        scoped(Internal, description="User identity, for internal audit"),
+    ]
+
+User.scope(Public).model_json_schema()["properties"]["email"]["description"]
+# "User contact (public-facing)"
+User.scope(Internal).model_json_schema()["properties"]["email"]["description"]
+# "User identity, for internal audit"
+```
+
+A marker applies in a projection that **selects** its scope (the field-survival
+rule). When several apply — a broad projection selecting both `Public` and
+`Internal` — the **most-derived** scope wins (`Internal` beats `Public`).
+Unrelated matches (`Public` vs an unrelated `Other` in a union projection) are
+ambiguous and raise `TypeError`.
+
+**Model-level** — on the `Scope` class, landing on the projected model's schema:
+
+```python
+class Public(Scope, description="Public-facing view", examples=[{"id": "..."}]): ...
+
+
+User.scope(Public).model_json_schema()["description"]   # "Public-facing view"
+```
+
+Scope-class metadata is **not inherited** (a broader subclass does not reuse a
+narrower scope's prose). Both levels are schema-only — no effect on validation,
+membership, refs, or runtime shape; a pre-existing `json_schema_extra` (dict or
+callable) on the canonical is preserved and merged.
+
 ## FastAPI
 
 ```python
@@ -574,11 +640,11 @@ Everything prism adds, with exact spellings. Markers and functions:
 
 | name | kind | summary |
 |---|---|---|
-| `Scope` | class | Subclass to declare a scope; subclass a scope to broaden it. Root = wildcard. Never instantiated. `class Update(Storage, partial=True)` declares a partial scope. |
+| `Scope` | class | Subclass to declare a scope; subclass a scope to broaden it. Root = wildcard. Never instantiated. Class keywords: `partial=True` (partial scope); `description=`/`examples=`/`json_schema_extra=` (model-level schema for projections selecting it, not inherited). |
 | `ScopeExpr` | class | Scope expression; built with `\|`, `&`, `-`, `~`. Methods: `.matches(scope)`, `.selects(tag)`, `.atoms()`, `.is_partial()`. |
-| `ScopedModel` | class | Base for canonical models. Class keywords: `projection_bases=(...)`, `default_scope=` (the scope untagged fields fall back to). |
+| `ScopedModel` | class | Base for canonical models. Class keywords: `projection_bases=(...)`, `default_scope=` (the scope untagged fields fall back to), `projection_name_template=` (auto-name template, `{model}`/`{scope}`). |
 | `Projection` | class | Base of every derived projection class. |
-| `scoped(*scopes)` | marker | Tags a field with scopes / a scope expression. Varargs union. |
+| `scoped(*scopes, description=, examples=, json_schema_extra=)` | marker | Tags a field with scopes / a scope expression (varargs union). Optional schema kwargs attach per-scope field schema (one scope per schema-bearing marker). |
 | `scoped_validator(*scopes, mode=...)` | decorator | A `@model_validator` that also carries onto projections whose expr selects `scopes`. `mode` required. |
 | `ref(target, *, field="id")` | marker | Forward FK-style reference. `target`: ScopedModel subclass or string. Keyed-dict shape inferred from a `dict[...]` annotation. |
 | `backref(target, *, via, field="id")` | marker | Declared reverse reference; `via` names the forward-ref field on `target`. |
@@ -639,6 +705,7 @@ the combination with a relationship graph does not.
 | all-optional Update views | any scope: `partial=True` | — | fixed `Update`/`UpdateOptional` views |
 | custom pydantic bases on derived models | `projection_bases=`/`bases=`, isinstance-true | — | — |
 | static-typing of derived models | `prism gen` stubs (universal: pyright/Pylance/mypy) + startup drift check | — | — |
+| per-projection schema metadata | per-scope field & model `description`/`examples`/`json_schema_extra` | — | — |
 | validators on derived models | field validators carried; model validators via `@scoped_validator` or carried bases | lost | lost |
 | implicit behavior | none | call-stack sniffing can switch modes; `model_validate` may return a different class | registry monkey-patched onto your class |
 | Python | 3.12+ | 3.9+ (claimed) | 3.13+ |
