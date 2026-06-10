@@ -35,7 +35,12 @@ UserStorage = User.scope(Storage)
 def test_thirty_second_example() -> None:
     assert list(UserPublic.model_fields) == ["id", "display_name"]
     assert list(UserInternal.model_fields) == ["id", "email", "display_name"]
-    assert list(UserStorage.model_fields) == ["id", "email", "password_hash", "display_name"]
+    assert list(UserStorage.model_fields) == [
+        "id",
+        "email",
+        "password_hash",
+        "display_name",
+    ]
     assert UserPublic.__name__ == "UserPublic"
     assert User.scope(Public) is User.scope(Public)
 
@@ -49,13 +54,18 @@ class Llm(Scope): ...
 class Document(ScopedModel):
     body: Annotated[str, scoped(Scope)]  # wildcard: every scope
     owner_email: Annotated[str, scoped(Scope - Llm)]  # everywhere except Llm
-    embedding: Annotated[list[float], scoped(Internal & Llm)]  # only scopes that are both
+    embedding: Annotated[
+        list[float], scoped(Internal & Llm)
+    ]  # only scopes that are both
     note: str = ""  # untagged: no scope, canonical only
 
 
 def test_scope_algebra_example() -> None:
     assert list(Document.scope(Llm).model_fields) == ["body"]
-    assert list(Document.scope(Public | Internal).model_fields) == ["body", "owner_email"]
+    assert list(Document.scope(Public | Internal).model_fields) == [
+        "body",
+        "owner_email",
+    ]
     assert Document.scope(Public | Internal) is Document.scope(Public, Internal)
     assert list(Document.scope(~Llm).model_fields) == ["owner_email", "embedding"]
     for scope in (Public, Internal, Storage, Llm):
@@ -68,7 +78,9 @@ def test_scope_algebra_example() -> None:
 class Customer(ScopedModel):
     id: Annotated[UUID, scoped(Public)]
     name: Annotated[str, scoped(Public)]
-    order_ids: Annotated[list[UUID], backref("Order", via="customer_id"), scoped(Internal)]
+    order_ids: Annotated[
+        list[UUID], backref("Order", via="customer_id"), scoped(Internal)
+    ]
 
 
 class Order(ScopedModel):

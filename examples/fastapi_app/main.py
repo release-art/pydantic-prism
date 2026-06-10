@@ -38,8 +38,18 @@ UserInternal = User.scope(Internal)
 DB: dict[UUID, User] = {
     user.id: user
     for user in (
-        User(id=uuid4(), email="ada@example.com", signup_ip="10.0.0.1", display_name="Ada"),
-        User(id=uuid4(), email="alan@example.com", signup_ip="10.0.0.2", display_name="Alan"),
+        User(
+            id=uuid4(),
+            email="ada@example.com",
+            signup_ip="10.0.0.1",
+            display_name="Ada",
+        ),
+        User(
+            id=uuid4(),
+            email="alan@example.com",
+            signup_ip="10.0.0.2",
+            display_name="Alan",
+        ),
     )
 }
 

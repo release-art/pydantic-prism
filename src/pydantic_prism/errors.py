@@ -8,6 +8,7 @@ that can only be detected once models and scopes are put together.
 __all__ = [
     "EmptyProjectionError",
     "PrismError",
+    "ProjectionBaseError",
     "ProjectionNameError",
     "RefResolutionError",
 ]
@@ -33,6 +34,16 @@ class ProjectionNameError(PrismError, ValueError):
     is already taken by a projection of the same model with a different
     expression (e.g. two scopes that share a bare class name). Pass ``name=``
     to disambiguate.
+    """
+
+
+class ProjectionBaseError(PrismError, ValueError):
+    """A carried base makes the requested projection impossible to honor.
+
+    Raised by ``Model.scope(..., bases=...)`` when a field *declared on a
+    carried base* is tagged with ``scoped(...)`` but the requested expression
+    does not select it: inherited fields cannot be removed from a pydantic
+    subclass, so the narrowing would silently leak the field instead.
     """
 
 

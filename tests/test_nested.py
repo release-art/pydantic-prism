@@ -23,7 +23,9 @@ class Shipment(ScopedModel):
     id: Annotated[UUID, scoped(Public)]
     destination: Annotated[Address | None, scoped(Public)] = None
     waypoints: Annotated[list[Address], scoped(Internal)] = Field(default_factory=list)
-    by_label: Annotated[dict[str, Address], scoped(Internal)] = Field(default_factory=dict)
+    by_label: Annotated[dict[str, Address], scoped(Internal)] = Field(
+        default_factory=dict
+    )
 
 
 def test_nested_annotation_rewritten_to_projection() -> None:
@@ -58,7 +60,9 @@ def test_nested_containers_rewritten() -> None:
 def test_directly_recursive_model() -> None:
     class TreeNode(ScopedModel):
         name: Annotated[str, scoped(Public)]
-        children: Annotated[list["TreeNode"], scoped(Public)] = Field(default_factory=list)
+        children: Annotated[list["TreeNode"], scoped(Public)] = Field(
+            default_factory=list
+        )
 
     TreeNode.model_rebuild()
     TreePublic = TreeNode.scope(Public)
@@ -85,7 +89,9 @@ Ping.model_rebuild()
 
 def test_mutually_recursive_models() -> None:
     PingPublic = Ping.scope(Public)
-    value = PingPublic.model_validate({"name": "a", "pong": {"name": "b", "ping": {"name": "c"}}})
+    value = PingPublic.model_validate(
+        {"name": "a", "pong": {"name": "b", "ping": {"name": "c"}}}
+    )
     assert value.pong is not None and value.pong.ping is not None
     assert value.pong.ping.name == "c"
     assert type(value.pong) is Pong.scope(Public)

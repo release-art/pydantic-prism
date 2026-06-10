@@ -4,7 +4,14 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 import pytest
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from pydantic_prism import Projection, Scope, ScopedModel, scoped
 
@@ -102,7 +109,9 @@ def test_json_schema_of_projection() -> None:
 def test_constraints_survive_projection() -> None:
     class Item(ScopedModel):
         qty: Annotated[int, scoped(Public), Field(gt=0)]
-        note: Annotated[str, Field(max_length=3), scoped(Public)]  # marker order swapped
+        note: Annotated[
+            str, Field(max_length=3), scoped(Public)
+        ]  # marker order swapped
 
     ItemPublic = Item.scope(Public)
     with pytest.raises(ValidationError):

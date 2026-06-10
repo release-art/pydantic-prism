@@ -26,7 +26,9 @@ class Internal(Public): ...
 class Customer(ScopedModel):
     id: Annotated[UUID, scoped(Public)]
     name: Annotated[str, scoped(Public)]
-    order_ids: Annotated[list[UUID], backref("Order", via="customer_id"), scoped(Internal)]
+    order_ids: Annotated[
+        list[UUID], backref("Order", via="customer_id"), scoped(Internal)
+    ]
 
 
 class Product(ScopedModel):
@@ -68,7 +70,9 @@ def demo() -> None:
     # --- a minimal resolver built on RefInfo (storage stays YOUR problem) ---
     ada = Customer(id=uuid4(), name="Ada")
     boots = Product(id=uuid4(), title="Boots", unit_cost=Decimal("80"))
-    order = Order(id=uuid4(), customer_id=ada.id, product_ids=[boots.id], total=Decimal("99.90"))
+    order = Order(
+        id=uuid4(), customer_id=ada.id, product_ids=[boots.id], total=Decimal("99.90")
+    )
     store: dict[type[ScopedModel], dict[UUID, ScopedModel]] = {
         Customer: {ada.id: ada},
         Product: {boots.id: boots},

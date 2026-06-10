@@ -5,6 +5,8 @@ chosen answer, and the reasoning given/implied. Decisions were made by the
 project owner in a structured Q&A; recommendations that were overridden are
 noted, since they mark deliberate departures.
 
+A second round of decisions (adoption feedback) is appended at the end.
+
 ## 1. Marker name → `scoped(...)`
 
 Options: `scoped`, `scopes`, `views`, prism-themed names.
@@ -151,3 +153,136 @@ projection unless explicitly `scoped(...)`.
 - Scope classes are never instantiated; `Scope.__init__` raises.
 - Marker order inside `Annotated` is insignificant; multiple `scoped()`
   markers on one field union together.
+
+---
+
+# API decision record — round 2 (adoption feedback)
+
+Phase 2 output, 2026-06-10. Questions raised by the SiteCompliance adoption
+assessment (see docs/design-round-2.md for the full option analysis).
+
+## 16. Custom-base composition → explicit `bases=`, never implicit
+
+Options: carry the canonical's non-ScopedModel bases by default
+(recommended) / explicit `bases=` kwarg on `.scope()` / class-level opt-in
+with warning.
+**Chosen: explicit `bases=`** (override of recommendation).
+`Row.scope(Storage, bases=(CustomBase,))` builds the projection on
+`(CustomBase, Projection)`, restoring custom `model_dump`/`model_validate`,
+base-declared validators/serializers, and `isinstance(p, CustomBase)`.
+`bases` joins the cache key; same expression with different bases is a
+different (cached) class.
+
+## 17. Default bases → class-level declaration + per-call override
+
+Options: per-call only / class-level default with per-call override
+(recommended).
+**Chosen: class-level default.**
+`class Row(CustomBase, ScopedModel, projection_bases=(CustomBase,))` sets
+the default for every `.scope()` on that model (inherited by subclasses);
+`bases=` at the call site overrides, `bases=()` opts out. Spelling is a
+class keyword (next to the inheritance it mirrors), not a dunder ClassVar.
+
+## 18. Dropped-behavior signal → warn once per model
+
+Options: warn once (recommended) / silent / error.
+**Chosen: warn once per canonical model.** When `.scope()` runs without
+carried bases on a model whose non-ScopedModel ancestry defines droppable
+pydantic behavior (overridden `model_dump`/`model_validate`, model
+validators/serializers), a `UserWarning` names the base and suggests
+`bases=`/`projection_bases=`. Emitted once per canonical model.
+
+## 19. Base-declared fields under carried bases → present, loudly documented
+
+Fields declared on a carried base are inherited by every projection and
+cannot be removed (pydantic cannot unset inherited fields). Rule: (a) they
+are documented as infrastructure fields, present whenever the base is
+carried; (b) if a base-declared field carries a `scoped()` tag that the
+requested expression does **not** select, `.scope()` raises (a narrowing
+prism cannot honor fails instead of leaking).
+
+## 20. Dict-keyed refs → one `ref()`, annotation-driven
+
+Options: one `ref()` inspecting the annotation (recommended) / distinct
+`dict_ref()` marker.
+**Chosen: one `ref()`.** `Annotated[dict[UUID, Highlight], ref(Highlight)]`:
+a `Mapping` origin makes the ref keyed-dict-shaped — the dict key IS the
+foreign id. Key type is recorded and checked lazily against the target id
+field's type (`RefResolutionError` on mismatch, at `__refs__` access,
+consistent with decision 13). Values need not be the target model
+(`dict[UUID, AnyPayload]` is legal: keys are ids, value is opaque payload).
+
+## 21. Ref shape introspection → `RefShape` StrEnum
+
+Options: `RefShape` StrEnum (recommended) / `Literal` strings.
+**Chosen: StrEnum.** `RefInfo.shape` is
+`RefShape.SCALAR | COLLECTION | KEYED_DICT` (StrEnum, so string comparison
+also works), plus `RefInfo.key_type` for keyed dicts. `RefInfo.many`
+survives as a derived property (`shape is not SCALAR`) for v0.1 compat.
+
+## 22. Embedded ref-records → auto-registered, distinct `kind="embedded"`
+
+Options: auto with `kind="ref"` / auto with distinct kind (recommended) /
+explicit no-arg `ref()`.
+**Chosen: auto, distinct kind.** A field typed with a `Projection` class
+(under `list`/`dict`/`Optional`/etc.) registers an edge to its
+`__prism_source__` automatically — no marker. The edge has
+`kind="embedded"` and `RefInfo.scope` records the carrier's scope
+expression. `.outgoing` keeps meaning id-style FK edges; a new `.embedded`
+accessor exposes carrier edges; `targets()`/`walk()` see both.
+
+## 23. Embedded composition → uniform: canonical nesting registers too
+
+Options: projections only (recommended) / uniform.
+**Chosen: uniform** (override of recommendation). Plain canonical nesting
+(`Address` inside `Shipment`) also auto-registers a `kind="embedded"` edge,
+with `scope=None` meaning "reshapes with the outer projection". The whole
+containment graph is introspectable through `__refs__`; behavior change for
+v0.1 models that nest ScopedModels (noted in CHANGELOG). Key types of
+keyed-dict *embedded* edges are recorded but never validated against the
+target id (composition keys are arbitrary; only explicit `ref()` keyed
+dicts validate).
+
+## 24. Optional-on-projection → `partial=True` scope keyword
+
+Options: call-site flag / model-level set / per-field `optional_in=` /
+scope-class property (recommended).
+**Chosen: scope-class property.** `class Update(Storage, partial=True)` —
+optionality is a property of the scope itself, declared once where the
+scope graph lives. The flag inherits down the scope graph unless
+re-declared. An expression is partial iff **all** its atoms are partial
+(conservative; mixing partial and regular scopes yields a regular
+projection). Keyword is `partial` (TS `Partial<T>` precedent), not
+`optional`.
+
+## 25. Partial defaults → force `None` everywhere
+
+Options: force `None` on every surviving field (recommended) / keep
+canonical defaults where present.
+**Chosen: force `None`.** Every surviving field becomes `T | None` with
+`default=None`; canonical defaults are dropped. True PATCH semantics:
+absent means "don't touch" — a surviving canonical default would be
+silently written back on every sparse update. JSON schema (nothing
+required, fields nullable) falls out.
+
+## 26. `Model.scopes()` → returns scope classes
+
+Options: scope classes (recommended) / scope names.
+**Chosen: classes.** `frozenset[type[Scope]]` of the atom scopes appearing
+in the model's field tags — scopes are classes everywhere else in the API,
+and the result can be fed back into `.scope()`. Error messages format the
+names themselves.
+
+## Round-2 decisions made by fiat during implementation
+
+- `from_canonical` forwards `mode`, `by_alias` (default `True`, as before),
+  `context`, `exclude_none`, `exclude_unset`, `exclude_defaults` to
+  `model_dump`.
+- `from_canonical` narrowing is auto-detected: when the instance's class
+  overrides `model_dump`, the dump is passed to the projection verbatim
+  (prism cannot understand a custom wire shape; the user's own
+  validators do); standard dumps are narrowed as in v0.1. A `narrow:
+  bool | None = None` kwarg overrides the auto-detection in both directions.
+- `bases=` entries must be classes the canonical model actually inherits
+  from (`TypeError` otherwise) — carrying a base the canonical does not
+  have would make the projection behaviorally unrelated to its source.

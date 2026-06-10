@@ -6,12 +6,15 @@ import copy
 import inspect
 import threading
 import types
-from collections.abc import Callable, Mapping
+import warnings
+from collections.abc import Callable, Mapping, Sequence
 from typing import (
     Annotated,
     Any,
     ClassVar,
     ForwardRef,
+    Literal,
+    Optional,
     Self,
     Union,
     cast,
@@ -23,11 +26,15 @@ from pydantic import BaseModel, create_model, field_validator
 from pydantic.fields import FieldInfo
 
 from ._markers import PRISM_MARKERS, BackRef, Ref, Scoped
-from ._refs import RefGraph, cardinality
-from ._scopes import ScopeExpr, ScopeLike, as_expr, union_all
-from .errors import EmptyProjectionError, ProjectionNameError
+from ._refs import Embedded, RawEdge, RefGraph, RefShape, shape_of
+from ._scopes import Scope, ScopeExpr, ScopeLike, as_expr, union_all
+from .errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameError
 
 __all__ = ["Projection", "ScopedModel"]
+
+# Cache key of one derived projection class: (expression, name override,
+# carried bases). All three participate — changing any yields a new class.
+type _ProjectionKey = tuple[ScopeExpr, str | None, tuple[type[BaseModel], ...]]
 
 
 class Projection(BaseModel):
@@ -35,24 +42,58 @@ class Projection(BaseModel):
 
     Projections are real pydantic models — validation, serialization, JSON
     schema, and FastAPI integration all work normally. They additionally
-    carry where they came from (``__prism_source__``, ``__prism_scope__``)
-    and the surviving slice of the relationship graph (``__refs__``).
+    carry where they came from (``__prism_source__``, ``__prism_scope__``,
+    ``__prism_bases__``) and the surviving slice of the relationship graph
+    (``__refs__``).
     """
 
     __prism_source__: ClassVar[type[ScopedModel]]
     __prism_scope__: ClassVar[ScopeExpr]
+    __prism_bases__: ClassVar[tuple[type[BaseModel], ...]] = ()
     __refs__: ClassVar[RefGraph]
 
     @classmethod
-    def from_canonical(cls, instance: BaseModel) -> Self:
+    def from_canonical(
+        cls,
+        instance: BaseModel,
+        *,
+        mode: Literal["python", "json"] | str = "python",
+        by_alias: bool = True,
+        context: Any | None = None,
+        exclude_none: bool = False,
+        exclude_unset: bool = False,
+        exclude_defaults: bool = False,
+        narrow: bool | None = None,
+    ) -> Self:
         """Build a projected instance from a canonical (or wider) instance.
 
-        The instance is dumped with aliases and recursively narrowed to this
-        projection's fields, so canonical-only fields are dropped at every
-        nesting level (safe under ``extra="forbid"``) and alias generators
-        are honored.
+        The instance is dumped via its own ``model_dump`` — the keyword
+        arguments above are forwarded verbatim, with the same defaults pydantic
+        uses except ``by_alias=True`` (so alias generators are honored on the
+        round trip). ``context`` is also forwarded to ``model_validate``.
+
+        Narrowing: when the dump has pydantic's standard shape, it is
+        recursively narrowed to this projection's fields, so canonical-only
+        fields are dropped at every nesting level (safe under
+        ``extra="forbid"``). When the instance's class *overrides*
+        ``model_dump`` (custom envelopes and the like), the dump is passed to
+        ``model_validate`` verbatim — prism cannot understand a custom wire
+        shape, but the validators carried from your base can. Pass ``narrow=``
+        to override this auto-detection in either direction.
         """
-        return cls.model_validate(_narrow(cls, instance.model_dump(by_alias=True)))
+        data: Any = instance.model_dump(
+            mode=mode,
+            by_alias=by_alias,
+            context=context,
+            exclude_none=exclude_none,
+            exclude_unset=exclude_unset,
+            exclude_defaults=exclude_defaults,
+        )
+        if narrow is None:
+            narrow = type(instance).model_dump is BaseModel.model_dump
+        if narrow and isinstance(data, Mapping):
+            data = _narrow(cls, cast(Mapping[str, Any], data))
+        return cls.model_validate(data, context=context)
 
 
 class ScopedModel(BaseModel):
@@ -61,12 +102,33 @@ class ScopedModel(BaseModel):
     Tag fields with ``scoped(...)`` (and optionally ``ref(...)`` /
     ``backref(...)``) inside ``Annotated`` metadata, then derive narrowed,
     fully functional model classes with :meth:`scope`.
+
+    A model with a custom (non-``ScopedModel``) pydantic base can declare it
+    as a *projection base* so projections inherit its behavior::
+
+        class Row(AzureTableBase, ScopedModel, projection_bases=(AzureTableBase,)):
+            ...
+
+    See :meth:`scope` (``bases=``) for the per-call form.
     """
 
     __field_scopes__: ClassVar[dict[str, ScopeExpr]] = {}
     __refs__: ClassVar[RefGraph]
-    __prism_cache__: ClassVar[dict[tuple[ScopeExpr, str | None], type[Projection]]] = {}
-    __prism_names__: ClassVar[dict[str, tuple[ScopeExpr, str | None]]] = {}
+    __prism_cache__: ClassVar[dict[_ProjectionKey, type[Projection]]] = {}
+    __prism_names__: ClassVar[dict[str, _ProjectionKey]] = {}
+    # None means "never declared" (inherited declarations stay visible);
+    # an explicit empty tuple is a declaration and silences the drop warning.
+    __prism_projection_bases__: ClassVar[tuple[type[BaseModel], ...] | None] = None
+    __prism_base_warned__: ClassVar[bool] = False
+
+    def __init_subclass__(
+        cls, projection_bases: Sequence[type[BaseModel]] | None = None, **kwargs: Any
+    ) -> None:
+        super().__init_subclass__(**kwargs)
+        if projection_bases is not None:
+            cls.__prism_projection_bases__ = _check_bases(
+                cast("type[ScopedModel]", cls), projection_bases
+            )
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -102,36 +164,64 @@ class ScopedModel(BaseModel):
         return result
 
     @classmethod
-    def scope(cls, *scopes: ScopeLike, name: str | None = None) -> type[Projection]:
+    def scopes(cls) -> frozenset[type[Scope]]:
+        """The Scope classes appearing in this model's field tags."""
+        out: set[type[Scope]] = set()
+        for expr in cls.__field_scopes__.values():
+            out |= expr.atoms()
+        return frozenset(out)
+
+    @classmethod
+    def scope(
+        cls,
+        *scopes: ScopeLike,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+    ) -> type[Projection]:
         """Derive (or fetch from cache) the projection for a scope expression.
 
         Multiple arguments union: ``Model.scope(A, B)`` is ``Model.scope(A | B)``.
         The same expression always returns the same class object. ``name=``
         overrides the auto-generated class name and is part of the cache key.
+
+        ``bases=`` lists non-``ScopedModel`` ancestors of this model to carry
+        onto the projection (restoring their custom ``model_dump``/
+        ``model_validate``, model validators/serializers, methods, and
+        ``isinstance`` identity). It defaults to the class-level
+        ``projection_bases=`` declaration and participates in the cache key;
+        ``bases=()`` opts out explicitly. Fields *declared on a carried base*
+        are inherited by every projection (pydantic cannot remove inherited
+        fields) — tagging such a field with a scope the projection does not
+        select raises :class:`ProjectionBaseError`.
         """
         if not scopes:
             raise TypeError("scope() requires at least one scope or scope expression")
         expr = union_all(as_expr(scope) for scope in scopes)
-        cached = cls.__prism_cache__.get((expr, name))
+        checked = _check_bases(cls, bases) if bases is not None else None
+        carried = (
+            checked if checked is not None else (cls.__prism_projection_bases__ or ())
+        )
+        cached = cls.__prism_cache__.get((expr, name, carried))
         if cached is not None:
             return cached
         # Build under a lock so concurrent first calls (free-threaded Python,
         # threaded servers) cannot produce two classes for one expression.
         with _build_lock:
-            cached = cls.__prism_cache__.get((expr, name))
+            cached = cls.__prism_cache__.get((expr, name, carried))
             if cached is not None:
                 return cached
             ctx = _BuildContext()
-            projection = _project(cls, expr, name, ctx)
+            projection = _project(cls, expr, name, checked, ctx)
             assert isinstance(projection, type)  # top-level call is never pending
             # Resolve cycle ForwardRefs first, commit second: the caches only
             # ever hold fully built classes (which keeps the lock-free fast
             # path above safe), and a failed build commits nothing.
             for built in ctx.built.values():
                 built.model_rebuild(_types_namespace=ctx.namespace)
-            for (owner, owner_expr, owner_name), built in ctx.built.items():
-                owner.__prism_cache__[(owner_expr, owner_name)] = built
-                owner.__prism_names__[built.__name__] = (owner_expr, owner_name)
+            for (owner, *owner_key), built in ctx.built.items():
+                key = cast(_ProjectionKey, tuple(owner_key))
+                owner.__prism_cache__[key] = built
+                owner.__prism_names__[built.__name__] = key
             return projection
 
     @classmethod
@@ -153,6 +243,81 @@ ScopedModel.__refs__ = RefGraph(ScopedModel, {})
 # RLock: _project recurses for nested models within one build.
 _build_lock = threading.RLock()
 
+# Pydantic I/O entry points whose base-class overrides projections would
+# silently drop without carried bases.
+_MODEL_IO_METHODS = (
+    "model_dump",
+    "model_dump_json",
+    "model_validate",
+    "model_validate_json",
+)
+
+
+def _check_bases(
+    cls: type[ScopedModel], bases: Sequence[type[BaseModel]]
+) -> tuple[type[BaseModel], ...]:
+    """Validate a projection-bases declaration (class-level or per-call)."""
+    checked: list[type[BaseModel]] = []
+    for base in bases:
+        if not (isinstance(base, type) and issubclass(base, BaseModel)):
+            raise TypeError(
+                f"{cls.__name__}: projection base {base!r} is not a pydantic "
+                f"BaseModel subclass"
+            )
+        if issubclass(base, ScopedModel):
+            raise TypeError(
+                f"{cls.__name__}: projection base {base.__name__} is a ScopedModel; "
+                f"only plain pydantic bases can be carried onto projections "
+                f"(scoped ancestry is rebuilt by the projection itself)"
+            )
+        if not issubclass(cls, base):
+            raise TypeError(
+                f"{cls.__name__}: projection base {base.__name__} is not an ancestor "
+                f"of {cls.__name__}; projections may only carry bases their "
+                f"canonical model inherits from"
+            )
+        checked.append(base)
+    return tuple(checked)
+
+
+def _droppable_behavior(cls: type[ScopedModel]) -> str | None:
+    """Describe base-class pydantic behavior projections would drop, if any."""
+    for base in cls.__mro__[1:]:
+        if (
+            not issubclass(base, BaseModel)
+            or base is BaseModel
+            or issubclass(base, ScopedModel)
+        ):
+            continue
+        dropped: list[str] = []
+        overridden = [m for m in _MODEL_IO_METHODS if m in vars(base)]
+        if overridden:
+            dropped.append("overridden " + "/".join(overridden))
+        decorators = base.__pydantic_decorators__
+        if decorators.model_validators:
+            dropped.append("model validators")
+        if decorators.model_serializers:
+            dropped.append("model serializers")
+        if dropped:
+            return (
+                f"projections of {cls.__name__} do not inherit "
+                f"{' and '.join(dropped)} from base {base.__name__}; pass "
+                f"bases=({base.__name__},) to .scope(), or declare "
+                f"projection_bases=({base.__name__},) on the class, to carry the "
+                f"base — or declare projection_bases=() to silence this warning"
+            )
+    return None
+
+
+def _warn_dropped_behavior(cls: type[ScopedModel]) -> None:
+    """Warn (once per canonical model) about base behavior being dropped."""
+    if cls.__dict__.get("__prism_base_warned__"):
+        return
+    cls.__prism_base_warned__ = True
+    message = _droppable_behavior(cls)
+    if message is not None:
+        warnings.warn(message, UserWarning, stacklevel=2)
+
 
 def _initialize(cls: type[ScopedModel]) -> None:
     """Class-definition setup: collect markers, imply backref defaults."""
@@ -169,7 +334,7 @@ def _collect(cls: type[ScopedModel]) -> None:
     rebuild resolves them.
     """
     field_scopes: dict[str, ScopeExpr] = {}
-    raw_refs: dict[str, tuple[Ref | BackRef, bool, bool]] = {}
+    raw_refs: dict[str, RawEdge] = {}
     for field_name, info in cls.model_fields.items():
         if isinstance(info.default, PRISM_MARKERS):
             raise TypeError(
@@ -188,8 +353,13 @@ def _collect(cls: type[ScopedModel]) -> None:
                 f"is allowed per field"
             )
         if ref_markers:
-            many, optional = cardinality(info.annotation)
-            raw_refs[field_name] = (ref_markers[0], many, optional)
+            shape, optional, key_type = shape_of(info.annotation)
+            raw_refs[field_name] = RawEdge(ref_markers[0], shape, optional, key_type)
+        else:
+            embedded = _detect_embedded(info.annotation)
+            if embedded is not None:
+                shape, optional, key_type = shape_of(info.annotation)
+                raw_refs[field_name] = RawEdge(embedded, shape, optional, key_type)
     cls.__field_scopes__ = field_scopes
     existing = cls.__dict__.get("__refs__")
     if isinstance(existing, RefGraph):
@@ -199,7 +369,47 @@ def _collect(cls: type[ScopedModel]) -> None:
         cls.__refs__ = RefGraph(cls, raw_refs)
 
 
-def _reject_nested_markers(cls: type[ScopedModel], field_name: str, annotation: Any) -> None:
+def _detect_embedded(annotation: Any) -> Embedded | None:
+    """The auto-detected embedded edge of a field annotation, if unambiguous.
+
+    A field embedding exactly one model — a canonical ``ScopedModel``
+    (composition: reshapes with the outer projection) or a ``Projection``
+    class (a fixed carrier record with provenance) — registers an
+    ``embedded`` edge. Annotations mixing several distinct models register
+    nothing.
+    """
+    found: set[tuple[type[ScopedModel], ScopeExpr | None]] = set()
+    _find_embedded_models(annotation, found)
+    if len(found) != 1:
+        return None
+    target, scope = next(iter(found))
+    return Embedded(target, scope)
+
+
+def _find_embedded_models(
+    annotation: Any, found: set[tuple[type[ScopedModel], ScopeExpr | None]]
+) -> None:
+    while hasattr(annotation, "__metadata__"):
+        annotation = get_args(annotation)[0]
+    if isinstance(annotation, type):
+        if issubclass(annotation, ScopedModel) and annotation is not ScopedModel:
+            found.add((annotation, None))
+        elif issubclass(annotation, Projection) and annotation is not Projection:
+            source = getattr(annotation, "__prism_source__", None)
+            if source is not None:
+                found.add((source, annotation.__prism_scope__))
+        return
+    for arg in get_args(annotation):
+        if isinstance(arg, list):  # Callable parameter lists
+            for item in cast(list[Any], arg):
+                _find_embedded_models(item, found)
+        else:
+            _find_embedded_models(arg, found)
+
+
+def _reject_nested_markers(
+    cls: type[ScopedModel], field_name: str, annotation: Any
+) -> None:
     """Refuse prism markers below the field's top-level ``Annotated``.
 
     Pydantic only lifts top-level metadata into ``FieldInfo.metadata``;
@@ -227,8 +437,8 @@ def _imply_backref_defaults(cls: type[ScopedModel]) -> bool:
         marker = next((m for m in info.metadata if isinstance(m, BackRef)), None)
         if marker is None or not info.is_required():
             continue
-        many, optional = cardinality(info.annotation)
-        if many:
+        shape, optional, _ = shape_of(info.annotation)
+        if shape is not RefShape.SCALAR:
             factory = _variable_container(info.annotation)
             if factory is not None:  # fixed-size tuples stay required
                 info.default_factory = factory
@@ -244,7 +454,7 @@ def _variable_container(annotation: Any) -> type[Any] | None:
     while hasattr(annotation, "__metadata__"):
         annotation = get_args(annotation)[0]
     origin = get_origin(annotation)
-    if origin in (list, set, frozenset):
+    if origin in (list, set, frozenset, dict):
         return cast(type[Any], origin)
     if origin is tuple:
         args = get_args(annotation)
@@ -258,9 +468,9 @@ class _BuildContext:
 
     def __init__(self) -> None:
         # key -> ForwardRef/namespace name, while the class is being built
-        self.pending: dict[tuple[type[ScopedModel], ScopeExpr, str | None], str] = {}
+        self.pending: dict[tuple[type[ScopedModel], Any, Any, Any], str] = {}
         # key -> finished (but not yet rebuilt/committed) class
-        self.built: dict[tuple[type[ScopedModel], ScopeExpr, str | None], type[Projection]] = {}
+        self.built: dict[tuple[type[ScopedModel], Any, Any, Any], type[Projection]] = {}
         # ForwardRef name -> class; names are unique even when class names collide
         self.namespace: dict[str, type[Projection]] = {}
 
@@ -277,6 +487,7 @@ def _project(
     cls: type[ScopedModel],
     expr: ScopeExpr,
     name: str | None,
+    bases: tuple[type[BaseModel], ...] | None,
     ctx: _BuildContext,
 ) -> type[Projection] | ForwardRef:
     if not cls.__pydantic_complete__:
@@ -285,10 +496,20 @@ def _project(
         # error if names are genuinely missing) and refresh marker collection
         # via the model_rebuild override.
         cls.model_rebuild()
-    cached = cls.__prism_cache__.get((expr, name))
+    if bases is None:
+        # No per-call bases: fall back to the class-level declaration; warn
+        # (once per model) when there is none and behavior would be dropped.
+        declared = cls.__prism_projection_bases__
+        carried = declared if declared is not None else ()
+        if declared is None:
+            _warn_dropped_behavior(cls)
+    else:
+        carried = bases
+    cache_key: _ProjectionKey = (expr, name, carried)
+    cached = cls.__prism_cache__.get(cache_key)
     if cached is not None:
         return cached
-    key = (cls, expr, name)
+    key = (cls, expr, name, carried)
     if key in ctx.built:
         return ctx.built[key]
     if key in ctx.pending:
@@ -297,7 +518,7 @@ def _project(
         return ForwardRef(ctx.pending[key])
     class_name = name if name is not None else f"{cls.__name__}{expr.token()}"
     registered = cls.__prism_names__.get(class_name)
-    if registered is not None and registered != (expr, name):
+    if registered is not None and registered != cache_key:
         raise ProjectionNameError(
             f"{cls.__name__} already has a projection named {class_name!r} for a "
             f"different scope expression; pass name= to disambiguate"
@@ -308,23 +529,39 @@ def _project(
     surviving = [
         field_name
         for field_name in cls.model_fields
-        if field_name in cls.__field_scopes__ and expr.selects(cls.__field_scopes__[field_name])
+        if field_name in cls.__field_scopes__
+        and expr.selects(cls.__field_scopes__[field_name])
     ]
     if not surviving:
-        raise EmptyProjectionError(
-            f"{cls.__name__}.scope({expr!r}) selects no fields; untagged fields belong to no scope"
+        defined = sorted(scope.__name__ for scope in cls.scopes())
+        detail = (
+            f"; {cls.__name__} defines scopes: {', '.join(defined)}"
+            if defined
+            else f"; no fields of {cls.__name__} are tagged with scoped(...)"
         )
+        raise EmptyProjectionError(
+            f"{cls.__name__}.scope({expr!r}) selects no fields; untagged fields "
+            f"belong to no scope{detail}"
+        )
+    _check_base_fields(cls, expr, carried, set(surviving))
 
+    partial = expr.is_partial()
     field_definitions: dict[str, tuple[Any, FieldInfo]] = {}
     for field_name in surviving:
         info = copy.deepcopy(cls.model_fields[field_name])
         info.metadata = [m for m in info.metadata if not isinstance(m, PRISM_MARKERS)]
         info.annotation = _rewrite(info.annotation, expr, ctx)
+        if partial:
+            # Partial scope: every field optional, default None, canonical
+            # defaults dropped (PATCH semantics: absent means "don't touch").
+            info.annotation = cast(Any, Optional[info.annotation])  # noqa: UP045 — runtime types
+            info.default = None
+            info.default_factory = None
         field_definitions[field_name] = (info.annotation, info)
 
     config_base = types.new_class(
         f"_{class_name}Base",
-        (Projection,),
+        (*carried, Projection),
         exec_body=lambda ns: ns.update(
             model_config=copy.deepcopy(cls.model_config),
             __module__=cls.__module__,
@@ -340,11 +577,36 @@ def _project(
     )
     projection.__prism_source__ = cls
     projection.__prism_scope__ = expr
+    projection.__prism_bases__ = carried
     projection.__refs__ = cls.__refs__.filtered(surviving)
     del ctx.pending[key]
     ctx.built[key] = projection
     ctx.namespace[ref_name] = projection
     return projection
+
+
+def _check_base_fields(
+    cls: type[ScopedModel],
+    expr: ScopeExpr,
+    carried: tuple[type[BaseModel], ...],
+    surviving: set[str],
+) -> None:
+    """Refuse projections that cannot honor a carried base field's scope tag.
+
+    Fields declared on a carried base are inherited by the projection and
+    cannot be removed; a ``scoped()`` tag the expression does not select
+    would silently leak — fail loudly instead.
+    """
+    for base in carried:
+        for field_name in base.model_fields:
+            if field_name in cls.__field_scopes__ and field_name not in surviving:
+                raise ProjectionBaseError(
+                    f"{cls.__name__}.scope({expr!r}): field {field_name!r} is declared "
+                    f"on carried base {base.__name__} and tagged scoped(...), but the "
+                    f"expression does not select it; inherited fields cannot be removed "
+                    f"from a projection — widen the expression, drop the base from "
+                    f"bases=, or move the field onto {cls.__name__}"
+                )
 
 
 def _is_scoped_model_class(obj: Any) -> bool:
@@ -354,7 +616,7 @@ def _is_scoped_model_class(obj: Any) -> bool:
 def _rewrite(annotation: Any, expr: ScopeExpr, ctx: _BuildContext) -> Any:
     """Propagate the scope into nested ScopedModel annotations, strip markers."""
     if _is_scoped_model_class(annotation):
-        return _project(cast("type[ScopedModel]", annotation), expr, None, ctx)
+        return _project(cast("type[ScopedModel]", annotation), expr, None, None, ctx)
     metadata = getattr(annotation, "__metadata__", None)
     if metadata is not None:
         inner = _rewrite(get_args(annotation)[0], expr, ctx)
@@ -381,11 +643,14 @@ def _rewrite(annotation: Any, expr: ScopeExpr, ctx: _BuildContext) -> Any:
     return origin[new_args]
 
 
-def _carry_validators(cls: type[ScopedModel], surviving: set[str]) -> dict[str, Any] | None:
+def _carry_validators(
+    cls: type[ScopedModel], surviving: set[str]
+) -> dict[str, Any] | None:
     """Re-target the canonical model's field validators onto surviving fields.
 
     Model validators are intentionally not carried over: they assume the full
-    canonical field set.
+    canonical field set. (Model validators declared on *carried bases* are
+    inherited by the projection through the base itself.)
     """
     carried: dict[str, Any] = {}
     for dec_name, decorator in cls.__pydantic_decorators__.field_validators.items():
@@ -403,9 +668,9 @@ def _carry_validators(cls: type[ScopedModel], surviving: set[str]) -> dict[str, 
             # method is mis-inspected on some Python versions, e.g. 3.12).
             func = classmethod(func.__func__)
         make = cast(Callable[..., Callable[[Any], Any]], field_validator)
-        carried[dec_name] = make(kept[0], *kept[1:], mode=decorator.info.mode, check_fields=False)(
-            func
-        )
+        carried[dec_name] = make(
+            kept[0], *kept[1:], mode=decorator.info.mode, check_fields=False
+        )(func)
     return carried or None
 
 
@@ -453,11 +718,17 @@ def _narrow_value(annotation: Any, value: Any) -> Any:
             items = cast(Mapping[Any, Any], value)
             return {k: _narrow_value(args[1], v) for k, v in items.items()}
         return value
-    if origin in (list, set, frozenset) and args and isinstance(value, (list, set, frozenset)):
+    if (
+        origin in (list, set, frozenset)
+        and args
+        and isinstance(value, (list, set, frozenset))
+    ):
         return [_narrow_value(args[0], item) for item in cast(list[Any], value)]
     if origin is tuple and args and isinstance(value, (list, tuple)):
         items = list(cast(list[Any], value))
         if len(args) == 2 and args[1] is Ellipsis:
             return [_narrow_value(args[0], item) for item in items]
-        return [_narrow_value(arg, item) for arg, item in zip(args, items, strict=False)]
+        return [
+            _narrow_value(arg, item) for arg, item in zip(args, items, strict=False)
+        ]
     return value

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any, ClassVar
 
 __all__ = ["Scope", "ScopeExpr", "ScopeLike", "as_expr", "union_all"]
 
@@ -34,6 +35,19 @@ class ScopeExpr:
 
     def selects(self, tag: ScopeExpr) -> bool:
         raise NotImplementedError
+
+    def atoms(self) -> frozenset[type[Scope]]:
+        """Every concrete Scope class appearing anywhere in this expression."""
+        raise NotImplementedError
+
+    def is_partial(self) -> bool:
+        """Whether projections to this expression make every field optional.
+
+        An expression is partial iff *all* of its atoms are partial scopes —
+        the conservative rule: mixing a partial scope with a regular one
+        yields a regular projection.
+        """
+        return all(scope.__prism_partial__ for scope in self.atoms())
 
     def token(self) -> str:
         """CamelCase fragment used to auto-name derived classes."""
@@ -101,8 +115,24 @@ class Scope(metaclass=ScopeMeta):
     ``Scope`` itself is the root: a field tagged ``scoped(Scope)`` belongs to
     every scope (the wildcard), since every scope subclasses the root.
 
+    Declaring ``partial=True`` makes the scope *partial*: every projection to
+    it gets all surviving fields as ``T | None`` with ``default=None`` (the
+    PATCH/Update-model shape)::
+
+        class Update(Storage, partial=True): ...
+
+    The flag inherits down the scope graph like any class attribute and may
+    be re-declared (``partial=False``) by a subclass.
+
     Scopes are only ever used as classes and cannot be instantiated.
     """
+
+    __prism_partial__: ClassVar[bool] = False
+
+    def __init_subclass__(cls, partial: bool | None = None, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if partial is not None:
+            cls.__prism_partial__ = bool(partial)
 
     def __new__(cls, *args: object, **kwargs: object) -> Scope:
         raise TypeError(
@@ -133,6 +163,9 @@ class _Atom(ScopeExpr):
     def selects(self, tag: ScopeExpr) -> bool:
         return tag.matches(self.scope)
 
+    def atoms(self) -> frozenset[type[Scope]]:
+        return frozenset((self.scope,))
+
     def token(self) -> str:
         return self.scope.__name__
 
@@ -153,6 +186,9 @@ class _Union(ScopeExpr):
     def selects(self, tag: ScopeExpr) -> bool:
         return any(operand.selects(tag) for operand in self.operands)
 
+    def atoms(self) -> frozenset[type[Scope]]:
+        return frozenset().union(*(operand.atoms() for operand in self.operands))
+
     def token(self) -> str:
         return "Or".join(operand.token() for operand in self.operands)
 
@@ -172,6 +208,9 @@ class _Intersection(ScopeExpr):
 
     def selects(self, tag: ScopeExpr) -> bool:
         return all(operand.selects(tag) for operand in self.operands)
+
+    def atoms(self) -> frozenset[type[Scope]]:
+        return frozenset().union(*(operand.atoms() for operand in self.operands))
 
     def token(self) -> str:
         return "And".join(operand.token() for operand in self.operands)
@@ -194,6 +233,9 @@ class _Difference(ScopeExpr):
     def selects(self, tag: ScopeExpr) -> bool:
         return self.left.selects(tag) and not self.right.selects(tag)
 
+    def atoms(self) -> frozenset[type[Scope]]:
+        return self.left.atoms() | self.right.atoms()
+
     def token(self) -> str:
         return f"{self.left.token()}Not{self.right.token()}"
 
@@ -213,6 +255,9 @@ class _Complement(ScopeExpr):
 
     def selects(self, tag: ScopeExpr) -> bool:
         return not self.operand.selects(tag)
+
+    def atoms(self) -> frozenset[type[Scope]]:
+        return self.operand.atoms()
 
     def token(self) -> str:
         return f"Not{self.operand.token()}"

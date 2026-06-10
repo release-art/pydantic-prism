@@ -26,7 +26,9 @@ class Internal(Public): ...
 class Customer(ScopedModel):
     id: Annotated[UUID, scoped(Public)]
     name: Annotated[str, scoped(Public)]
-    order_ids: Annotated[list[UUID], backref("Order", via="customer_id"), scoped(Internal)]
+    order_ids: Annotated[
+        list[UUID], backref("Order", via="customer_id"), scoped(Internal)
+    ]
 
 
 class Order(ScopedModel):
@@ -91,7 +93,8 @@ def test_graph_views() -> None:
 
 def test_walk_is_bfs_and_terminates_on_cycles() -> None:
     edges = [
-        (src.__name__, info.field_name, info.target.__name__) for src, info in NodeA.__refs__.walk()
+        (src.__name__, info.field_name, info.target.__name__)
+        for src, info in NodeA.__refs__.walk()
     ]
     assert edges == [("NodeA", "b_id", "NodeB"), ("NodeB", "a_id", "NodeA")]
 
@@ -122,7 +125,9 @@ def test_backref_via_missing_field() -> None:
 
 def test_backref_via_points_at_wrong_model() -> None:
     class NotTheCustomer(ScopedModel):
-        order_ids: Annotated[list[UUID], backref(Order, via="customer_id"), scoped(Public)]
+        order_ids: Annotated[
+            list[UUID], backref(Order, via="customer_id"), scoped(Public)
+        ]
 
     with pytest.raises(RefResolutionError, match="references Customer"):
         NotTheCustomer.__refs__["order_ids"]

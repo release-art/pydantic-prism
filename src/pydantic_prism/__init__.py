@@ -7,11 +7,12 @@ relationships introspectable across projections.
 
 from ._markers import BackRef, Ref, Scoped, backref, ref, scoped
 from ._model import Projection, ScopedModel
-from ._refs import RefGraph, RefInfo
+from ._refs import RefGraph, RefInfo, RefShape
 from ._scopes import Scope, ScopeExpr
 from .errors import (
     EmptyProjectionError,
     PrismError,
+    ProjectionBaseError,
     ProjectionNameError,
     RefResolutionError,
 )
@@ -21,11 +22,13 @@ __all__ = [
     "EmptyProjectionError",
     "PrismError",
     "Projection",
+    "ProjectionBaseError",
     "ProjectionNameError",
     "Ref",
     "RefGraph",
     "RefInfo",
     "RefResolutionError",
+    "RefShape",
     "Scope",
     "ScopeExpr",
     "Scoped",
