@@ -41,14 +41,14 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| url | str |  |
+| id | UUID | Row identifier. |
+| url | str | Site URL. |
 
 ### SiteRowStorage — scope `Storage`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| url | str |  |
-| status | str |  |
-| api_key | str |  |
+| id | UUID | Row identifier. |
+| url | str | Site URL. |
+| status | str | Lifecycle status (storage-only). |
+| api_key | str | Secret API key (storage-only). |

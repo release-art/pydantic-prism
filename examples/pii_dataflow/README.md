@@ -50,24 +50,24 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| city | str |  |
-| line1 | str |  |
-| postcode | str |  |
+| id | UUID | Address identifier. |
+| city | str | City (non-PII). |
+| line1 | str | Street address (PII). |
+| postcode | str | Postal code (PII). |
 
 ### AddressPii — scope `Pii`
 
 | field | type | description |
 |---|---|---|
-| line1 | str |  |
-| postcode | str |  |
+| line1 | str | Street address (PII). |
+| postcode | str | Postal code (PII). |
 
 ### AddressPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| city | str |  |
+| id | UUID | Address identifier. |
+| city | str | City (non-PII). |
 
 ## Order
 
@@ -105,25 +105,25 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| user_id | UUID |  |
-| ship_to_id | UUID |  |
-| card_last4 | str |  |
-| total | Decimal |  |
+| id | UUID | Order identifier. |
+| user_id | UUID | Who placed the order. |
+| ship_to_id | UUID | Shipping address ref. |
+| card_last4 | str | Card last 4 digits (PII). |
+| total | Decimal | Order total (internal). |
 
 ### OrderPii — scope `Pii`
 
 | field | type | description |
 |---|---|---|
-| card_last4 | str |  |
+| card_last4 | str | Card last 4 digits (PII). |
 
 ### OrderPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| user_id | UUID |  |
-| ship_to_id | UUID |  |
+| id | UUID | Order identifier. |
+| user_id | UUID | Who placed the order. |
+| ship_to_id | UUID | Shipping address ref. |
 
 ### Order relationships
 
@@ -207,43 +207,43 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| display_name | str |  |
-| email | str |  |
-| phone | str |  |
-| address_id | UUID |  |
+| id | UUID | User identifier. |
+| display_name | str | Public display name. |
+| email | str | Contact email — public-facing, still PII. |
+| phone | str | Phone number (PII). |
+| address_id | UUID | Home address ref. |
 
 ### UserPii — scope `Pii`
 
 | field | type | description |
 |---|---|---|
-| email | str |  |
-| phone | str |  |
+| email | str | Contact email — public-facing, still PII. |
+| phone | str | Phone number (PII). |
 
 ### UserPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| display_name | str |  |
-| email | str |  |
+| id | UUID | User identifier. |
+| display_name | str | Public display name. |
+| email | str | Contact email — public-facing, still PII. |
 
 ### UserSecret — scope `Secret`
 
 | field | type | description |
 |---|---|---|
-| password_hash | str |  |
+| password_hash | str | Password hash (secret, storage-only). |
 
 ### UserStorage — scope `Storage`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| display_name | str |  |
-| email | str |  |
-| phone | str |  |
-| password_hash | str |  |
-| address_id | UUID |  |
+| id | UUID | User identifier. |
+| display_name | str | Public display name. |
+| email | str | Contact email — public-facing, still PII. |
+| phone | str | Phone number (PII). |
+| password_hash | str | Password hash (secret, storage-only). |
+| address_id | UUID | Home address ref. |
 
 ### User relationships
 

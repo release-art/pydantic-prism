@@ -15,6 +15,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException
+from pydantic import Field
 
 from pydantic_prism import Scope, ScopedModel, scoped
 
@@ -26,10 +27,16 @@ class Internal(Public): ...  # Internal sees everything Public sees
 
 
 class User(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    email: Annotated[str, scoped(Internal)]
-    signup_ip: Annotated[str, scoped(Internal)]
-    display_name: Annotated[str, scoped(Public)]
+    id: Annotated[UUID, scoped(Public), Field(description="User identifier.")]
+    email: Annotated[
+        str, scoped(Internal), Field(description="Contact email (internal-only).")
+    ]
+    signup_ip: Annotated[
+        str, scoped(Internal), Field(description="IP at signup (internal-only).")
+    ]
+    display_name: Annotated[
+        str, scoped(Public), Field(description="Public-facing display name.")
+    ]
 
 
 UserPublic = User.scope(Public)

@@ -28,16 +28,25 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
 
+from pydantic import Field
+
 from pydantic_prism import Scope, ScopedModel, ref, scoped
+
 
 # --- visibility ladder (inheritance = "broader") ---------------------------
 class Public(Scope): ...
+
+
 class Internal(Public): ...
+
+
 class Storage(Internal): ...
 
 
 # --- classification dimension (orthogonal: a field can be Public AND Pii) ---
 class Pii(Scope): ...
+
+
 class Secret(Scope): ...
 
 
@@ -50,27 +59,58 @@ AUDIT_SAFE = Internal - Pii - Secret
 
 # --- domain -----------------------------------------------------------------
 class Address(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    city: Annotated[str, scoped(Public)]
-    line1: Annotated[str, scoped(Internal), scoped(Pii)]
-    postcode: Annotated[str, scoped(Internal), scoped(Pii)]
+    id: Annotated[UUID, scoped(Public), Field(description="Address identifier.")]
+    city: Annotated[str, scoped(Public), Field(description="City (non-PII).")]
+    line1: Annotated[
+        str, scoped(Internal), scoped(Pii), Field(description="Street address (PII).")
+    ]
+    postcode: Annotated[
+        str, scoped(Internal), scoped(Pii), Field(description="Postal code (PII).")
+    ]
 
 
 class User(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    display_name: Annotated[str, scoped(Public)]
-    email: Annotated[str, scoped(Public), scoped(Pii)]  # public-facing, still PII
-    phone: Annotated[str, scoped(Internal), scoped(Pii)]
-    password_hash: Annotated[str, scoped(Storage), scoped(Secret)]
-    address_id: Annotated[UUID, ref(Address), scoped(Internal)]
+    id: Annotated[UUID, scoped(Public), Field(description="User identifier.")]
+    display_name: Annotated[
+        str, scoped(Public), Field(description="Public display name.")
+    ]
+    email: Annotated[
+        str,
+        scoped(Public),
+        scoped(Pii),
+        Field(description="Contact email — public-facing, still PII."),
+    ]
+    phone: Annotated[
+        str, scoped(Internal), scoped(Pii), Field(description="Phone number (PII).")
+    ]
+    password_hash: Annotated[
+        str,
+        scoped(Storage),
+        scoped(Secret),
+        Field(description="Password hash (secret, storage-only)."),
+    ]
+    address_id: Annotated[
+        UUID, ref(Address), scoped(Internal), Field(description="Home address ref.")
+    ]
 
 
 class Order(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    user_id: Annotated[UUID, ref(User), scoped(Public)]
-    ship_to_id: Annotated[UUID, ref(Address), scoped(Public)]
-    card_last4: Annotated[str, scoped(Internal), scoped(Pii)]
-    total: Annotated[Decimal, scoped(Internal)]
+    id: Annotated[UUID, scoped(Public), Field(description="Order identifier.")]
+    user_id: Annotated[
+        UUID, ref(User), scoped(Public), Field(description="Who placed the order.")
+    ]
+    ship_to_id: Annotated[
+        UUID, ref(Address), scoped(Public), Field(description="Shipping address ref.")
+    ]
+    card_last4: Annotated[
+        str,
+        scoped(Internal),
+        scoped(Pii),
+        Field(description="Card last 4 digits (PII)."),
+    ]
+    total: Annotated[
+        Decimal, scoped(Internal), Field(description="Order total (internal).")
+    ]
 
 
 # --- the governance layer (candidate library API) ---------------------------
@@ -91,7 +131,9 @@ def pii_inventory(model: type[ScopedModel]) -> dict[str, frozenset[type[Scope]]]
     }
 
 
-def dataflow_report(root: type[ScopedModel]) -> Mapping[type[ScopedModel], dict[str, frozenset[type[Scope]]]]:
+def dataflow_report(
+    root: type[ScopedModel],
+) -> Mapping[type[ScopedModel], dict[str, frozenset[type[Scope]]]]:
     """Trace classified data reachable from `root` across the ref graph.
 
     Walks forward refs/embeds (BFS, cycle-safe) and reports the classified
@@ -141,7 +183,9 @@ def demo() -> None:
         downstream = pii_inventory(edge.target)
         hits = ", ".join(f"{f} [{_names(t)}]" for f, t in downstream.items())
         marker = f"  ⮑ {hits}" if hits else ""
-        print(f"  {source.__name__}.{edge.field_name} -> {edge.target.__name__}{marker}")
+        print(
+            f"  {source.__name__}.{edge.field_name} -> {edge.target.__name__}{marker}"
+        )
 
     print("\nGovernance report — classified data reachable from Order:")
     for model, inventory in dataflow_report(Order).items():

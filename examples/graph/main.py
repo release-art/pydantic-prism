@@ -14,6 +14,8 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID, uuid4
 
+from pydantic import Field
+
 from pydantic_prism import Scope, ScopedModel, backref, ref, scoped
 
 
@@ -24,24 +26,35 @@ class Internal(Public): ...
 
 
 class Customer(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    name: Annotated[str, scoped(Public)]
+    id: Annotated[UUID, scoped(Public), Field(description="Customer identifier.")]
+    name: Annotated[str, scoped(Public), Field(description="Customer display name.")]
     order_ids: Annotated[
-        list[UUID], backref("Order", via="customer_id"), scoped(Internal)
+        list[UUID],
+        backref("Order", via="customer_id"),
+        scoped(Internal),
+        Field(description="Ids of this customer's orders (reverse ref)."),
     ]
 
 
 class Product(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    title: Annotated[str, scoped(Public)]
-    unit_cost: Annotated[Decimal, scoped(Internal)]
+    id: Annotated[UUID, scoped(Public), Field(description="Product identifier.")]
+    title: Annotated[str, scoped(Public), Field(description="Product title.")]
+    unit_cost: Annotated[
+        Decimal, scoped(Internal), Field(description="Wholesale cost per unit.")
+    ]
 
 
 class Order(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    customer_id: Annotated[UUID, ref(Customer), scoped(Public)]
-    product_ids: Annotated[list[UUID], ref(Product), scoped(Public)]
-    total: Annotated[Decimal, scoped(Internal)]
+    id: Annotated[UUID, scoped(Public), Field(description="Order identifier.")]
+    customer_id: Annotated[
+        UUID, ref(Customer), scoped(Public), Field(description="Who placed the order.")
+    ]
+    product_ids: Annotated[
+        list[UUID], ref(Product), scoped(Public), Field(description="Products ordered.")
+    ]
+    total: Annotated[
+        Decimal, scoped(Internal), Field(description="Order total (internal-only).")
+    ]
 
 
 def demo() -> None:

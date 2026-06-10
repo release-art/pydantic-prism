@@ -13,7 +13,7 @@ keep working on derived classes.
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from pydantic_prism import Scope, ScopedModel, scoped
 
@@ -39,9 +39,11 @@ class TableRowBase(BaseModel):
 
 
 class SiteRow(TableRowBase, ScopedModel, projection_bases=(TableRowBase,)):
-    id: Annotated[UUID, scoped(Public)]
-    url: Annotated[str, scoped(Public)]
-    api_key: Annotated[str, scoped(Storage)]
+    id: Annotated[UUID, scoped(Public), Field(description="Row identifier.")]
+    url: Annotated[str, scoped(Public), Field(description="Public site URL.")]
+    api_key: Annotated[
+        str, scoped(Storage), Field(description="Secret API key (storage-only).")
+    ]
 
 
 def demo() -> None:

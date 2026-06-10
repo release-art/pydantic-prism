@@ -39,16 +39,16 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| name | str |  |
-| order_ids | list[UUID] |  |
+| id | UUID | Customer identifier. |
+| name | str | Customer display name. |
+| order_ids | list[UUID] | Ids of this customer's orders (reverse ref). |
 
 ### CustomerPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| name | str |  |
+| id | UUID | Customer identifier. |
+| name | str | Customer display name. |
 
 ## Order
 
@@ -80,18 +80,18 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| customer_id | UUID |  |
-| product_ids | list[UUID] |  |
-| total | Decimal |  |
+| id | UUID | Order identifier. |
+| customer_id | UUID | Who placed the order. |
+| product_ids | list[UUID] | Products ordered. |
+| total | Decimal | Order total (internal-only). |
 
 ### OrderPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| customer_id | UUID |  |
-| product_ids | list[UUID] |  |
+| id | UUID | Order identifier. |
+| customer_id | UUID | Who placed the order. |
+| product_ids | list[UUID] | Products ordered. |
 
 ### Order relationships
 
@@ -145,13 +145,13 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| title | str |  |
-| unit_cost | Decimal |  |
+| id | UUID | Product identifier. |
+| title | str | Product title. |
+| unit_cost | Decimal | Wholesale cost per unit. |
 
 ### ProductPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| title | str |  |
+| id | UUID | Product identifier. |
+| title | str | Product title. |

@@ -12,6 +12,8 @@ dropped (absent means "don't touch"), JSON schema with nothing required.
 from typing import Annotated
 from uuid import UUID, uuid4
 
+from pydantic import Field
+
 from pydantic_prism import Scope, ScopedModel, scoped
 
 
@@ -25,10 +27,14 @@ class Update(Storage, partial=True): ...
 
 
 class SiteRow(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    url: Annotated[str, scoped(Public)]
-    status: Annotated[str, scoped(Storage)] = "active"
-    api_key: Annotated[str, scoped(Storage)]
+    id: Annotated[UUID, scoped(Public), Field(description="Row identifier.")]
+    url: Annotated[str, scoped(Public), Field(description="Site URL.")]
+    status: Annotated[
+        str, scoped(Storage), Field(description="Lifecycle status (storage-only).")
+    ] = "active"
+    api_key: Annotated[
+        str, scoped(Storage), Field(description="Secret API key (storage-only).")
+    ]
 
 
 def demo() -> None:

@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Diagram` edges gained a `relation` field (`"inheritance"` / `"association"`),
     exposed in `as_dict()`. Example READMEs regenerated.
 
+### Changed
+
+- Example models now carry `Field(description=...)` on every field, so the
+  generated `examples/*/README.md` tables have a populated description column
+  (no empty cells). READMEs regenerated.
+
 ### Added — round 13 (auto-generated example READMEs)
 
 - Every example under `examples/<name>/` now ships an auto-generated

@@ -34,9 +34,9 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| expected | dict[UUID, ExpectedHighlightPublic] |  |
-| found | dict[UUID, FoundHighlightPublic] |  |
+| id | UUID | Audit identifier. |
+| expected | dict[UUID, ExpectedHighlightPublic] | Expected highlights, keyed by their id. |
+| found | dict[UUID, FoundHighlightPublic] | Found highlights, keyed by their id. |
 
 ### ComplianceAudit relationships
 
@@ -83,8 +83,8 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| quote | str |  |
+| id | UUID | Highlight identifier. |
+| quote | str | The text to disclose. |
 
 ## FoundHighlight
 
@@ -116,18 +116,18 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| expected_id | UUID |  |
-| snippet | str |  |
-| score | float |  |
+| id | UUID | Match identifier. |
+| expected_id | UUID | The expected highlight this matched. |
+| snippet | str | Matched text snippet. |
+| score | float | Match confidence (internal). |
 
 ### FoundHighlightPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| expected_id | UUID |  |
-| snippet | str |  |
+| id | UUID | Match identifier. |
+| expected_id | UUID | The expected highlight this matched. |
+| snippet | str | Matched text snippet. |
 
 ### FoundHighlight relationships
 

@@ -40,17 +40,17 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| taken_at | str |  |
+| id | UUID | Snapshot identifier. |
+| taken_at | str | When the snapshot was taken. |
 
 ### LlmSnapshotPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| taken_at | str |  |
-| prompt | str |  |
-| raw_response | str |  |
+| id | UUID | Snapshot identifier. |
+| taken_at | str | When the snapshot was taken. |
+| prompt | str | Prompt sent to the LLM. |
+| raw_response | str | Raw model response. |
 
 ## PageCheck
 
@@ -76,10 +76,10 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| url | str |  |
-| snapshots | list[LlmSnapshotCarrier] |  |
-| latest_by_model | dict[str, LlmSnapshotCarrier] |  |
+| id | UUID | Page-check identifier. |
+| url | str | Checked page URL. |
+| snapshots | list[LlmSnapshotCarrier] | Snapshot carrier records ({id, taken_at}). |
+| latest_by_model | dict[str, LlmSnapshotCarrier] | Latest snapshot per model name. |
 
 ### PageCheck relationships
 

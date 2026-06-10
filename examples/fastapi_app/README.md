@@ -41,14 +41,14 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| email | str |  |
-| signup_ip | str |  |
-| display_name | str |  |
+| id | UUID | User identifier. |
+| email | str | Contact email (internal-only). |
+| signup_ip | str | IP at signup (internal-only). |
+| display_name | str | Public-facing display name. |
 
 ### UserPublic — scope `Public`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| display_name | str |  |
+| id | UUID | User identifier. |
+| display_name | str | Public-facing display name. |

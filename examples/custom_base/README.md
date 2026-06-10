@@ -39,13 +39,13 @@ classDiagram
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| url | str |  |
+| id | UUID | Row identifier. |
+| url | str | Public site URL. |
 
 ### SiteRowStorage — scope `Storage`
 
 | field | type | description |
 |---|---|---|
-| id | UUID |  |
-| url | str |  |
-| api_key | str |  |
+| id | UUID | Row identifier. |
+| url | str | Public site URL. |
+| api_key | str | Secret API key (storage-only). |

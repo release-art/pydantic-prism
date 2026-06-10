@@ -13,6 +13,8 @@ marker needed.
 from typing import Annotated
 from uuid import UUID, uuid4
 
+from pydantic import Field
+
 from pydantic_prism import Scope, ScopedModel, scoped
 
 
@@ -23,20 +25,34 @@ class Carrier(Scope): ...
 
 
 class LlmSnapshot(ScopedModel):
-    id: Annotated[UUID, scoped(Public, Carrier)]
-    taken_at: Annotated[str, scoped(Public, Carrier)]
-    prompt: Annotated[str, scoped(Public)]
-    raw_response: Annotated[str, scoped(Public)]
+    id: Annotated[
+        UUID, scoped(Public, Carrier), Field(description="Snapshot identifier.")
+    ]
+    taken_at: Annotated[
+        str, scoped(Public, Carrier), Field(description="When the snapshot was taken.")
+    ]
+    prompt: Annotated[str, scoped(Public), Field(description="Prompt sent to the LLM.")]
+    raw_response: Annotated[
+        str, scoped(Public), Field(description="Raw model response.")
+    ]
 
 
 LlmSnapshotRef = LlmSnapshot.scope(Carrier)  # the {id, taken_at} mini-model
 
 
 class PageCheck(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    url: Annotated[str, scoped(Public)]
-    snapshots: Annotated[list[LlmSnapshotRef], scoped(Public)] = []  # type: ignore[valid-type]
-    latest_by_model: Annotated[dict[str, LlmSnapshotRef], scoped(Public)] = {}  # type: ignore[valid-type]
+    id: Annotated[UUID, scoped(Public), Field(description="Page-check identifier.")]
+    url: Annotated[str, scoped(Public), Field(description="Checked page URL.")]
+    snapshots: Annotated[
+        list[LlmSnapshotRef],
+        scoped(Public),
+        Field(description="Snapshot carrier records ({id, taken_at})."),
+    ] = []  # type: ignore[valid-type]
+    latest_by_model: Annotated[
+        dict[str, LlmSnapshotRef],
+        scoped(Public),
+        Field(description="Latest snapshot per model name."),
+    ] = {}  # type: ignore[valid-type]
 
 
 def demo() -> None:

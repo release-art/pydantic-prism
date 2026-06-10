@@ -12,6 +12,8 @@ and the refs surviving projection.
 from typing import Annotated
 from uuid import UUID, uuid4
 
+from pydantic import Field
+
 from pydantic_prism import Scope, ScopedModel, ref, scoped
 
 
@@ -22,23 +24,38 @@ class Internal(Public): ...
 
 
 class ExpectedHighlight(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    quote: Annotated[str, scoped(Public)]
+    id: Annotated[UUID, scoped(Public), Field(description="Highlight identifier.")]
+    quote: Annotated[str, scoped(Public), Field(description="The text to disclose.")]
 
 
 class FoundHighlight(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
-    expected_id: Annotated[UUID, ref(ExpectedHighlight), scoped(Public)]
-    snippet: Annotated[str, scoped(Public)]
-    score: Annotated[float, scoped(Internal)] = 0.0
+    id: Annotated[UUID, scoped(Public), Field(description="Match identifier.")]
+    expected_id: Annotated[
+        UUID,
+        ref(ExpectedHighlight),
+        scoped(Public),
+        Field(description="The expected highlight this matched."),
+    ]
+    snippet: Annotated[str, scoped(Public), Field(description="Matched text snippet.")]
+    score: Annotated[
+        float, scoped(Internal), Field(description="Match confidence (internal).")
+    ] = 0.0
 
 
 class ComplianceAudit(ScopedModel):
-    id: Annotated[UUID, scoped(Public)]
+    id: Annotated[UUID, scoped(Public), Field(description="Audit identifier.")]
     expected: Annotated[
-        dict[UUID, ExpectedHighlight], ref(ExpectedHighlight), scoped(Public)
+        dict[UUID, ExpectedHighlight],
+        ref(ExpectedHighlight),
+        scoped(Public),
+        Field(description="Expected highlights, keyed by their id."),
     ]
-    found: Annotated[dict[UUID, FoundHighlight], ref(FoundHighlight), scoped(Public)]
+    found: Annotated[
+        dict[UUID, FoundHighlight],
+        ref(FoundHighlight),
+        scoped(Public),
+        Field(description="Found highlights, keyed by their id."),
+    ]
 
 
 def demo() -> None:
