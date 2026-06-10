@@ -173,6 +173,17 @@ def test_scoped_model_inheritance() -> None:
     assert "admin_level" not in User.scope(Internal).model_fields
 
 
+def test_concurrent_scope_calls_share_one_class() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    class Fresh(ScopedModel):
+        x: Annotated[int, scoped(Public)]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        classes = list(pool.map(lambda _: Fresh.scope(Public), range(32)))
+    assert len({id(c) for c in classes}) == 1
+
+
 def test_defaults_survive_projection() -> None:
     class WithDefault(ScopedModel):
         x: Annotated[int, scoped(Public)] = 7

@@ -107,7 +107,7 @@ class Scope(metaclass=ScopeMeta):
         )
 
 
-ScopeLike: TypeAlias = "type[Scope] | ScopeExpr"
+type ScopeLike = type[Scope] | ScopeExpr
 
 
 def as_expr(value: object) -> ScopeExpr:

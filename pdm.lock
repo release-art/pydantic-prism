@@ -5,10 +5,10 @@
 groups = ["default", "dev"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:05f1d5b51843e4c9c1ad45fb04c9c6609c962e73a6e71b11cce042835e312d7f"
+content_hash = "sha256:46fc9e18b60ecb2bcb71c786eb2279ea994326704a44d385a49d2899c34d3c34"
 
 [[metadata.targets]]
-requires_python = ">=3.11"
+requires_python = ">=3.12"
 
 [[package]]
 name = "annotated-doc"

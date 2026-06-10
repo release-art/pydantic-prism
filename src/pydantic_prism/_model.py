@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import threading
 import types
 from collections.abc import Callable
 from typing import (
@@ -83,13 +84,19 @@ class ScopedModel(BaseModel):
         if not scopes:
             raise TypeError("scope() requires at least one scope or scope expression")
         expr = union_all(as_expr(scope) for scope in scopes)
-        ctx = _BuildContext()
-        projection = _project(cls, expr, name, ctx)
-        assert isinstance(projection, type)  # top-level call is never pending
-        namespace = cast(dict[str, Any], dict(ctx.created))
-        for built in ctx.created.values():
-            built.model_rebuild(raise_errors=False, _types_namespace=namespace)
-        return projection
+        cached = cls.__prism_cache__.get((expr, name))
+        if cached is not None:
+            return cached
+        # Build under a lock so concurrent first calls (free-threaded Python,
+        # threaded servers) cannot produce two classes for one expression.
+        with _build_lock:
+            ctx = _BuildContext()
+            projection = _project(cls, expr, name, ctx)
+            assert isinstance(projection, type)  # top-level call is never pending
+            namespace = cast(dict[str, Any], dict(ctx.created))
+            for built in ctx.created.values():
+                built.model_rebuild(raise_errors=False, _types_namespace=namespace)
+            return projection
 
     @classmethod
     def from_projection(cls, projection: BaseModel, /, **extra: Any) -> Self:
@@ -102,6 +109,9 @@ class ScopedModel(BaseModel):
 
 
 ScopedModel.__refs__ = RefGraph(ScopedModel, {})
+
+# RLock: _project recurses for nested models within one build.
+_build_lock = threading.RLock()
 
 
 def _initialize(cls: type[ScopedModel]) -> None:
