@@ -263,6 +263,38 @@ class ScopedModel(BaseModel):
             data[_validation_key(key, info) if info else key] = value
         return cls.model_validate(data)
 
+    def with_updates(self, patch: Projection, /) -> Self:
+        """Apply a (partial) projection's set fields onto a copy of this instance.
+
+        The PATCH counterpart to ``from_canonical``: takes the fields explicitly
+        set on ``patch`` (``model_dump(exclude_unset=True)`` — absent means
+        "don't touch", an explicit ``None`` clears the field) and returns a new,
+        **re-validated** instance with them overlaid. Re-validation reconstructs
+        nested models and runs the canonical model's validators, so the result
+        is a valid instance — unlike a bare ``model_copy(update=...)``, which
+        would leave nested fields as raw dicts.
+
+        ``patch`` must be a projection of this model (any scope, though partial
+        Update projections are the usual source); a projection of a different
+        model raises :class:`TypeError`. ``self`` is left unchanged.
+        """
+        source = getattr(patch, "__prism_source__", None)
+        if not (isinstance(source, type) and isinstance(self, source)):
+            raise TypeError(
+                f"{type(self).__name__}.with_updates() expects a projection of "
+                f"{type(self).__name__}; got {type(patch).__name__}"
+                + (
+                    f" (a projection of {source.__name__})"
+                    if isinstance(source, type)
+                    else ""
+                )
+            )
+        merged = {
+            **self.model_dump(by_alias=True),
+            **patch.model_dump(by_alias=True, exclude_unset=True),
+        }
+        return type(self).model_validate(merged)
+
 
 ScopedModel.__refs__ = RefGraph(ScopedModel, {})
 

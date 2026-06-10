@@ -528,3 +528,57 @@ answerable without reading internals.
   `__prism_validator_scopes__`. Inherited automatically — a `scoped_validator`
   on a base `ScopedModel` keys by the same function and carries to subclass
   projections.
+
+---
+
+# API decision record — round 6 (`with_updates` patch API)
+
+Phase 2 output, 2026-06-10. Partial projections are PATCH-shaped, but applying
+one back onto a canonical instance was unhelped boilerplate
+(`model_copy(update=patch.model_dump(exclude_unset=True))`). See
+docs/design-round-6.md. `canonical.with_updates(patch)` completes the partial
+story.
+
+## 44. Validation → always re-validate (never raw `model_copy`)
+
+Options: always re-validate (recommended) / re-validate with a `validate=False`
+escape / `model_copy` (no validation).
+**Chosen: always re-validate.** `with_updates` merges the canonical's current
+data with the patch's set fields and calls `model_validate`. This is strictly
+more correct than the boilerplate it replaces: `model_copy(update=model_dump())`
+leaves nested models as **raw dicts** (verified) and skips coercion and
+validators. Re-validation reconstructs nested models and runs field /
+`@scoped_validator` validators, yielding a genuinely valid instance. No
+`validate=False` escape — baking the footgun in behind a flag is not worth it;
+the manual one-liner remains for anyone who truly wants a raw copy.
+
+## 45. Applied fields → explicitly-set only (`exclude_unset`)
+
+Options: `exclude_unset` (recommended) / all non-`None`.
+**Chosen: `exclude_unset`.** The PATCH contract: absent means "don't touch," and
+an explicitly-set `None` *is* an update (clearing an optional field).
+`exclude_none` would forbid patching to `None` and would write back every
+defaulted field the caller never set.
+
+## 46. Accepted input → a `Projection` of this model, provenance-checked
+
+Options: provenance-checked projection (recommended) / also a `Mapping` / any
+`BaseModel`.
+**Chosen: a projection of this model.** `isinstance(self, patch.__prism_source__)`
+or `TypeError` — patching with another model's projection is a mistake that
+would otherwise merge mismatched keys. Any scope is accepted (not only partial);
+`exclude_unset` generalizes, and partial Update projections are just the typical
+source. A raw-`Mapping` escape can be added later if demanded, but it skips
+provenance and undercuts the typed-projection story.
+
+## Round-6 notes
+
+- Both dumps use `by_alias=True` so keys share one space and `model_validate`
+  accepts them (mirrors `from_projection`). `self` is left unchanged; a new
+  instance is returned.
+- A patched field must satisfy the **canonical's** validation — patching a
+  nested field with a narrower projected value that omits a required canonical
+  subfield raises `ValidationError` (inherent to PATCH-with-less-data).
+- A subclass instance accepts a base-model projection (`isinstance` is lenient
+  by design); the result is validated as the subclass, preserving its own
+  fields.
