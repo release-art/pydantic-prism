@@ -423,6 +423,7 @@ fix is generated, checker-readable declarations. Run `prism gen`:
 [tool.pydantic-prism]
 output = "myapp/_prism.py"          # where to write the stub module
 modules = ["myapp.models"]          # scan these for ScopedModels
+readme = "myapp/MODELS.md"          # optional: also emit a GitHub doc (see Diagrams)
 
 [[tool.pydantic-prism.projections]] # optional: projections beyond per-atom
 model = "myapp.models:Document"
@@ -630,6 +631,28 @@ User.__refs__.diagram().to_d2()           # the cross-model ref/backref/embedded
 scope_diagram().as_dict()                 # no args: every declared scope, as JSON-able data
 ```
 
+…or from the shell, via the `prism diagram` subcommand:
+
+```console
+$ prism diagram scope                                   # all scopes -> Mermaid (stdout)
+$ prism diagram projection myapp.models:User --format dot --output user.dot
+$ prism diagram refs myapp.models:Order --format json
+```
+
+`prism diagram {scope|projection|refs} [module:Name ...]` with `--format
+{mermaid,dot,d2,json}` (default `mermaid`), `--output FILE` (default stdout), and
+`--direction {TD,LR}`. `scope` takes optional scope paths (none = all);
+`projection`/`refs` take one model path.
+
+### Shipping diagrams with generated models
+
+Set `readme = "MODELS.md"` in `[tool.pydantic-prism]` (or `prism gen --readme
+PATH`) and `prism gen` writes a **GitHub-flavoured markdown** doc beside the
+stub — scope hierarchy, per-model projection fan-out, and relationship diagrams
+as ```mermaid blocks (rendered inline by GitHub), plus per-projection field
+tables (name / type / description, including per-scope descriptions). `prism
+check` verifies it's current, so a stale doc fails CI like a stale stub.
+
 - **`scope_diagram(*scopes)`** — the inheritance graph (`Derived --extends-->
   Base`); ancestors are pulled in so it's connected, partial scopes are styled.
   No args = every declared `Scope`. For a model's scopes, `scope_diagram(*User.scopes())`.
@@ -756,9 +779,10 @@ Static-typing CLI (see "Static types for projections"):
 
 | name | kind | summary |
 |---|---|---|
-| `prism gen` | command | Generate the stub module from `[tool.pydantic-prism]`. Also `python -m pydantic_prism gen`. |
-| `prism check` | command | Exit non-zero if the stub module is out of date (CI gate). |
-| `[tool.pydantic-prism]` | config | `output` (path), `modules` (scan per-atom), optional `projections` list (`model`, `scopes`, `name`). |
+| `prism gen` | command | Generate the stub module (and README, if configured) from `[tool.pydantic-prism]`. `--readme PATH` overrides. Also `python -m pydantic_prism gen`. |
+| `prism check` | command | Exit non-zero if the stub module (or configured README) is out of date (CI gate). |
+| `prism diagram {scope\|projection\|refs} [PATH...]` | command | Render a diagram to `--format {mermaid,dot,d2,json}` / `--output FILE` / `--direction {TD,LR}`. |
+| `[tool.pydantic-prism]` | config | `output` (path), `modules` (scan per-atom), optional `projections` list (`model`, `scopes`, `name`), optional `readme` (GitHub doc path). |
 | `StaleProjectionStubError` | exception | Raised at import of a stale generated module; subclasses `PrismError`/`RuntimeError`. |
 
 ## vs. prior art

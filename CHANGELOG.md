@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 12 (diagram CLI + generated README)
+
+- `prism diagram {scope|projection|refs} [module:Name ...]` renders the diagram
+  builders from the shell: `--format {mermaid,dot,d2,json}` (default mermaid),
+  `--output FILE` (default stdout), `--direction {TD,LR}`. `scope` takes optional
+  scope paths (none = all declared); `projection`/`refs` take one model path.
+- `prism gen` can also emit a GitHub-flavoured `README.md` documenting the
+  generated models — set `readme = "MODELS.md"` in `[tool.pydantic-prism]` (or
+  pass `prism gen --readme PATH`). It embeds scope / projection / relationship
+  diagrams as ```mermaid blocks (rendered inline by GitHub) plus per-projection
+  field tables (name / type / description). `prism check` verifies the README is
+  current too, so a stale doc fails CI like a stale stub.
+
 ### Changed — round 11 (preserve field metadata in derived objects)
 
 - Diagram nodes preserve field metadata instead of bare names. `Node.fields` is

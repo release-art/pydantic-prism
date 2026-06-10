@@ -829,3 +829,44 @@ each generated projection shows its scope-appropriate doc for free.
   projections (deep-copy `FieldInfo`) and `RefInfo`/`RefGraph` (structured).
 - `_type_label` strips module paths for readable diagram labels
   (`list[uuid.UUID]` → `list[UUID]`); best-effort, display-only.
+
+---
+
+# API decision record — round 12 (diagram CLI + generated README)
+
+Phase 2 output, 2026-06-10. See docs/design-round-12.md.
+
+## 61. `prism diagram` → one verb, kind argument
+
+`prism diagram {scope|projection|refs} [module:Name ...]
+--format {mermaid,dot,d2,json} --output FILE --direction {TD,LR}`. `scope` takes
+optional scope paths (none = all declared); `projection`/`refs` take exactly one
+model path. Defaults: `mermaid`, stdout (`--output` writes a file), `TD`. `json`
+emits the lossless `as_dict()` IR. Wrong-kind paths (a Scope where a model is
+wanted, or vice versa) and a bad path-count raise `CodegenError` (exit 2). The
+cwd is pushed onto `sys.path` so the target package imports under a console
+script (which, unlike `python -m`, doesn't add cwd).
+
+## 62. Generated README → config `readme=` + `--readme`, verified by `check`
+
+`[tool.pydantic-prism] readme = "GENERATED.md"` (and/or `prism gen --readme PATH`
+override) makes `gen` write a GitHub-flavoured markdown doc beside the stub, and
+`prism check` verifies its freshness too — a stale README fails CI, mirroring the
+stub's drift discipline exactly. No README is written unless configured.
+
+## 63. README content → diagrams + field/description tables, by source
+
+The README documents the generated workset grouped by `__prism_source__`: a
+top-level scope-hierarchy Mermaid diagram, then per source model a
+projection-fan-out Mermaid diagram, per-projection field tables
+(name / type / description), and a relationship Mermaid diagram when the model
+has edges. Diagrams are **Mermaid only** — the one format GitHub renders inline;
+the round-11 `NodeField` metadata feeds both the diagrams and the tables (so
+per-scope `scoped(..., description=...)` docs appear per projection).
+
+## Round-12 notes
+
+- `generate_readme(config)` recomputes the workset (cached projections, cheap)
+  rather than threading it out of `generate()`; keeps stub and README rendering
+  independent.
+- Both new outputs carry do-not-edit banners; README cells escape `|`/newlines.

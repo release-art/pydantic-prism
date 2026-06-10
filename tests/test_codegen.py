@@ -331,7 +331,8 @@ def test_diagram_to_stdout(
 
 def test_diagram_to_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     out = tmp_path / "d.mmd"
-    assert main(["diagram", "projection", f"{_FX}:Screenshot", "--output", str(out)]) == 0
+    argv = ["diagram", "projection", f"{_FX}:Screenshot", "--output", str(out)]
+    assert main(argv) == 0
     assert "graph TD" in out.read_text()
     assert "wrote mermaid diagram" in capsys.readouterr().out
 
