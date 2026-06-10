@@ -11,6 +11,7 @@ __all__ = [
     "ProjectionBaseError",
     "ProjectionNameError",
     "RefResolutionError",
+    "StaleProjectionStubError",
 ]
 
 
@@ -54,4 +55,15 @@ class RefResolutionError(PrismError, ValueError):
     name a ``ScopedModel`` in the owning model's module, or when a
     ``backref(..., via=...)`` does not line up with a forward ``ref`` on the
     target model.
+    """
+
+
+class StaleProjectionStubError(PrismError, RuntimeError):
+    """A generated projection stub no longer matches its canonical model.
+
+    Raised at import of a ``prism gen``-generated module (i.e. application
+    startup) when a projection's live shape no longer matches the signature
+    recorded when the stub was generated — the model changed but the stub was
+    not regenerated, so the static types it declares are lying. Re-run
+    ``prism gen``. ``prism check`` surfaces the same drift as a CI gate.
     """

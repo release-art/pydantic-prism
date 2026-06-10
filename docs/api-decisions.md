@@ -384,3 +384,83 @@ that API misuse is `TypeError`, not a `PrismError`. No new error class.
 - The default is resolved into `__field_scopes__` at collection time, fully
   upstream of projection — it is *not* part of the `.scope()` cache key and
   needs no change to the projection engine, naming, or refs.
+
+---
+
+# API decision record — round 4 (static-type visibility for projections)
+
+Phase 2 output, 2026-06-10. The biggest adoption blocker: in a pyright/Pylance
+(VSCode) or mypy codebase, `Model.scope(...)` is `type[Projection]` with opaque
+fields. See docs/design-round-4.md for the full analysis; the load-bearing
+constraint is that scope selection runs the algebra at *runtime* and pyright has
+no third-party plugin API, so the only **universal** fix is ordinary type
+declarations every tool already reads. Direction taken: generate real classes
+with a CLI; verify freshness at startup.
+
+## 35. Mechanism → CLI-generated stubs, not a plugin
+
+Options: pyright/mypy plugin / generated declarations.
+**Chosen: code generation.** A plugin cannot be universal — Pylance (VSCode) has
+no plugin API, and a mypy plugin never reaches a VSCode hover. `prism gen` emits
+a real module of concrete classes the whole toolchain reads with zero config.
+
+## 36. Generated-class realness → typed shim over the genuine projection
+
+Options: typed shim + runtime alias (recommended) / fully materialized classes.
+**Chosen: shim.** Per projection, `if TYPE_CHECKING: class ScreenshotRef(
+Projection): ...` / `else: ScreenshotRef = Screenshot.scope(Ref)`. The checker
+reads the class; the runtime object is the authentic `.scope()` result, so
+validators, refs, carried bases, partial defaults and FastAPI all work for free
+and `ScreenshotRef is Screenshot.scope(Ref)`. `_project` stays the single source
+of runtime truth — the generator never reproduces behavior, only field
+declarations. Residual: the `Model.scope(Ref)` *call site* still types as
+`type[Projection]`; you get types by referencing the generated name (exact
+parity with the hand-written class this replaces, minus the hand-writing).
+
+## 37. Drift → per-projection signature, raise at import (startup)
+
+Options: raise (recommended) / warn.
+**Chosen: raise `StaleProjectionStubError`.** A stub that silently lies after a
+model changes is worse than none. `prism gen` stamps each projection with a
+signature (field names, annotation strings, required-ness, carried-base names);
+`assert_fresh`, called once per projection at import of the generated module,
+recomputes and compares, raising on mismatch. Per-projection direct-field
+signatures suffice even for nested models: every referenced projection is itself
+generated and asserted, so a nested change trips *its* guard. `prism check`
+compares freshly generated output to the file on disk as a non-importing CI gate
+(exit 1 on drift).
+
+## 38. Discovery → per-atom auto + opt-in `projections` list
+
+Options: auto per-atom + opt-in extras (recommended) / fully explicit list.
+**Chosen: auto + opt-in.** For each module listed in `[tool.pydantic-prism]`,
+generate one projection per scope in `Model.scopes()` (the atoms a model
+actually uses — zero enumeration for the common case). A `[[…projections]]` list
+adds non-atom unions and `name=` overrides; scopes in an entry union together
+(like `scoped(A, B)`). Nested projections reachable from any planned one are
+discovered transitively and emitted too.
+
+## 39. Scope of slice → everything at once
+
+Options: core + drift + flat models first / everything.
+**Chosen: everything** — nested projections (referencing sibling generated
+names), partial scopes (`T | None = None`), and carried bases (in the shim's
+base list) all land in this round.
+
+## Round-4 decisions made by fiat during implementation
+
+- CLI is a `prism` console script (`[project.scripts]`) with
+  `python -m pydantic_prism` equivalent; `gen` and `check` subcommands;
+  `--config` defaults to `pyproject.toml`. Bad config/input → exit 2; drift →
+  exit 1.
+- Generated file carries `# ruff: noqa` and a do-not-edit banner; `from
+  __future__ import annotations` makes all field annotations strings, so
+  forward references to sibling stub classes need no ordering.
+- Field defaults in the shim are rendered only when type-correct (`None`, simple
+  literals, and the builtin `default_factory` set); any other default leaves the
+  field looking required (conservative — the runtime object is authoritative, so
+  the stub's constructor is never *wrong*, only occasionally over-strict).
+- Annotation rendering supports concrete types, unions/`Optional`, `Literal`,
+  and standard containers; `Annotated` metadata is dropped (typing-irrelevant).
+  Anything else raises `CodegenError` at gen time rather than emitting broken
+  source.

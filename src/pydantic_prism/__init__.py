@@ -15,6 +15,7 @@ from .errors import (
     ProjectionBaseError,
     ProjectionNameError,
     RefResolutionError,
+    StaleProjectionStubError,
 )
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "ScopeExpr",
     "Scoped",
     "ScopedModel",
+    "StaleProjectionStubError",
     "backref",
     "ref",
     "scoped",

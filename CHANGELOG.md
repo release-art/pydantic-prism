@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 4 (static-type visibility for projections)
+
+- `prism gen` / `prism check` CLI (also `python -m pydantic_prism`): generates a
+  module of checker-readable projection classes so pyright/Pylance (VSCode) and
+  mypy see a projection's fields — `from myapp._prism import ScreenshotRef` is
+  fully typed. Each projection is emitted as a `TYPE_CHECKING` shim class over
+  the genuine `else: ScreenshotRef = Screenshot.scope(Ref)`, so the runtime
+  object is the authentic cached projection (`ScreenshotRef is
+  Screenshot.scope(Ref)`; validators, refs, carried bases, partial defaults,
+  FastAPI all unchanged). Nested projections, partial scopes, and carried bases
+  all render. Configured via `[tool.pydantic-prism]` (`output`, `modules` for
+  per-atom discovery, optional `projections` list for unions / `name=`).
+- Drift safety: every generated stub records a signature; `assert_fresh` (run at
+  import of the generated module) raises the new `StaleProjectionStubError` if a
+  model changed without regenerating, and `prism check` is a non-importing CI
+  gate (exit 1 on drift).
+
 ### Added — round 3 (class-level default scope)
 
 - Class-level default scope: `class Row(ScopedModel, default_scope=Storage)`

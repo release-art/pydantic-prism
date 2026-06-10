@@ -357,6 +357,61 @@ RowUpdate(name="new").model_dump(exclude_none=True)   # {"name": "new"}
 - Scope propagation applies: nested models inside a partial projection are
   partial too.
 
+## Static types for projections
+
+`Screenshot.scope(Ref)` is `type[Projection]` to a type checker — it cannot
+evaluate the scope algebra, so the projection's fields are invisible in your
+editor. Pyright/Pylance (and thus VSCode) has no plugin API, so the universal
+fix is generated, checker-readable declarations. Run `prism gen`:
+
+```toml
+# pyproject.toml
+[tool.pydantic-prism]
+output = "myapp/_prism.py"          # where to write the stub module
+modules = ["myapp.models"]          # scan these for ScopedModels
+
+[[tool.pydantic-prism.projections]] # optional: projections beyond per-atom
+model = "myapp.models:Document"
+scopes = ["myapp.models:Public", "myapp.models:Internal"]  # union
+name = "DocumentPublicView"         # optional name override
+```
+
+```python
+from myapp._prism import ScreenshotRef   # generated, fully typed
+
+def handler(shot: ScreenshotRef) -> None:
+    shot.timestamp     # datetime — autocompletes, type-checks
+    shot.nonexistent   # pyright/mypy error
+```
+
+What the generator emits per projection:
+
+```python
+if TYPE_CHECKING:
+    class ScreenshotRef(Projection):       # the checker reads this
+        id: UUID
+        timestamp: datetime
+else:
+    ScreenshotRef = Screenshot.scope(Ref)  # the genuine cached projection
+
+assert_fresh(ScreenshotRef, "…")           # startup drift guard
+```
+
+- The `TYPE_CHECKING` class is the typing surface; the runtime object is the
+  authentic `.scope()` result, so `ScreenshotRef is Screenshot.scope(Ref)` and
+  validators, refs, carried bases, partial `None`-defaults, and FastAPI
+  `response_model=ScreenshotRef` all just work. Nested projections, partial
+  scopes, and carried bases all render correctly.
+- **`prism gen`** writes the module; **`prism check`** verifies it is current
+  (exit 1 otherwise — wire it into CI). Both are also available as
+  `python -m pydantic_prism gen|check`.
+- **Drift is caught.** Each stub records a signature; at import (app startup)
+  `assert_fresh` re-checks it and raises `StaleProjectionStubError` if the model
+  changed without a regenerate. The generated file carries `# ruff: noqa` and a
+  do-not-edit banner — regenerate it, don't hand-edit.
+- Per-atom by default (one projection per scope in `Model.scopes()`); the
+  `projections` list adds unions and `name=` overrides.
+
 ## Validators
 
 `@field_validator`s carry over to projections for the fields that survive
@@ -387,9 +442,11 @@ will fail at validation time.
 | string target doesn't resolve (or model is function-local) | `RefResolutionError` | `__refs__` access |
 | `backref(via=...)` doesn't match a forward ref | `RefResolutionError` | `__refs__` access |
 | keyed-dict `ref()` key type doesn't match the target id type | `RefResolutionError` | `__refs__` access |
+| a generated stub no longer matches its model | `StaleProjectionStubError` | import of the generated module (startup) |
 
 `EmptyProjectionError`, `ProjectionNameError`, `ProjectionBaseError` and
-`RefResolutionError` subclass `PrismError` (and `ValueError`). Models whose annotations were
+`RefResolutionError` subclass `PrismError` (and `ValueError`);
+`StaleProjectionStubError` subclasses `PrismError` (and `RuntimeError`). Models whose annotations were
 forward references at definition time are handled: `.scope()` resolves them
 (or raises pydantic's clear error), and an explicit `model_rebuild()`
 refreshes marker collection too.
@@ -488,6 +545,15 @@ The relationship graph:
 | `RefGraph` | class | `Mapping[str, RefInfo]` keyed by field name; `.owner`, `.outgoing`, `.incoming`, `.embedded`, `.targets()`, `.walk()`. |
 | `RefInfo` | dataclass | `.field_name`, `.target`, `.target_field`, `.shape`, `.optional`, `.kind` (`"ref" \| "backref" \| "embedded"`), `.via`, `.key_type`, `.scope`, `.many` (derived). |
 
+Static-typing CLI (see "Static types for projections"):
+
+| name | kind | summary |
+|---|---|---|
+| `prism gen` | command | Generate the stub module from `[tool.pydantic-prism]`. Also `python -m pydantic_prism gen`. |
+| `prism check` | command | Exit non-zero if the stub module is out of date (CI gate). |
+| `[tool.pydantic-prism]` | config | `output` (path), `modules` (scan per-atom), optional `projections` list (`model`, `scopes`, `name`). |
+| `StaleProjectionStubError` | exception | Raised at import of a stale generated module; subclasses `PrismError`/`RuntimeError`. |
+
 ## vs. prior art
 
 Honest overlap: the projection half of this library has real precedent;
@@ -503,6 +569,7 @@ the combination with a relationship graph does not.
 | embedded "ref record" projections | auto-registered `embedded` edges with provenance | — | — |
 | all-optional Update views | any scope: `partial=True` | — | fixed `Update`/`UpdateOptional` views |
 | custom pydantic bases on derived models | `projection_bases=`/`bases=`, isinstance-true | — | — |
+| static-typing of derived models | `prism gen` stubs (universal: pyright/Pylance/mypy) + startup drift check | — | — |
 | validators on derived models | field validators carried; carried bases keep model validators | lost | lost |
 | implicit behavior | none | call-stack sniffing can switch modes; `model_validate` may return a different class | registry monkey-patched onto your class |
 | Python | 3.12+ | 3.9+ (claimed) | 3.13+ |
@@ -520,12 +587,11 @@ the combination with a relationship graph does not.
   dropped fields; not copied.
 - **`@model_validator` carryover from the canonical's own body** — see
   Validators above (model validators on *carried bases* do carry).
-- **Static type-checker visibility of derived models.** `User.scope(Public)`
-  is opaque to mypy/pyright (they cannot see its fields) — the same
-  limitation pydantic core cited when declining to build Pick/Omit into
-  pydantic itself. Runtime, JSON schema, and FastAPI behavior are fully
-  correct; IDE completion on projected *instances* is not. If you need a
-  statically-typed shape, hand-write that one class.
+- **Typing the `Model.scope(...)` call site itself.** `prism gen` (see "Static
+  types for projections") gives every editor/checker the projection's fields by
+  generating a referenceable class; it does not retrofit a precise return type
+  onto the dynamic `.scope()` call. Reference the generated name where you want
+  static types.
 
 ## Install & develop
 
