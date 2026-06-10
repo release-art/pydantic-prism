@@ -16,11 +16,41 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  # Static checks run once — they don't depend on the Python/pydantic version,
+  # so there's no reason to repeat them across the test matrix.
+  checks:
+    name: Lint, format & types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PDM
+        uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: pdm install
+      - name: Lint (ruff check)
+        run: pdm run ruff check ./src ./tests ./examples
+      - name: Format check (ruff format)
+        run: pdm run ruff format --check ./src ./tests ./examples
+      - name: Type check (pyright)
+        run: pdm run pyright
+
+  # The unit-test matrix: every supported Python against each supported pydantic
+  # line (floor + current). Lint/format/types are NOT repeated here.
+  test:
+    name: Test (py${{ matrix.python-version }}, pydantic ${{ matrix.pydantic-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.12', '3.13', '3.14']
+        pydantic-version: ['2.12.*', '2.13.*']
+        exclude:
+          # The pydantic floor is exercised on the stable interpreters; older
+          # pydantic lines may lack wheels for the newest Python.
+          - python-version: '3.14'
+            pydantic-version: '2.12.*'
     steps:
       - uses: actions/checkout@v4
       - name: Setup PDM
@@ -29,11 +59,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: pdm install
-      - name: Lint (ruff check)
-        run: pdm run ruff check ./src ./tests
-      - name: Format check (ruff format)
-        run: pdm run ruff format --check ./src ./tests
-      - name: Type check (pyright)
-        run: pdm run pyright
+      - name: Pin pydantic ${{ matrix.pydantic-version }}
+        run: pdm run python -m pip install "pydantic==${{ matrix.pydantic-version }}"
+      - name: Show resolved pydantic
+        run: pdm run python -c "import pydantic; print('pydantic', pydantic.VERSION)"
       - name: Test Python code
         run: pdm run pytest
