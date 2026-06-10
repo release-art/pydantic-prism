@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import threading
 import types
 from collections.abc import Callable, Mapping
@@ -394,9 +395,16 @@ def _carry_validators(cls: type[ScopedModel], surviving: set[str]) -> dict[str, 
             kept = [f for f in decorator.info.fields if f in surviving]
         if not kept:
             continue
+        func: Any = decorator.func
+        if inspect.ismethod(func):
+            # decorator.func is the classmethod bound to the canonical class;
+            # re-wrap the raw function as a fresh classmethod so pydantic's
+            # signature inspection sees the canonical class-body form (a bound
+            # method is mis-inspected on some Python versions, e.g. 3.12).
+            func = classmethod(func.__func__)
         make = cast(Callable[..., Callable[[Any], Any]], field_validator)
         carried[dec_name] = make(kept[0], *kept[1:], mode=decorator.info.mode, check_fields=False)(
-            decorator.func
+            func
         )
     return carried or None
 
