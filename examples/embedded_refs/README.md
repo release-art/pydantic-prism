@@ -18,8 +18,8 @@ graph TD
     LlmSnapshot["LlmSnapshot<br/>id: UUID<br/>taken_at: str<br/>prompt: str<br/>raw_response: str"]
     LlmSnapshotCarrier["LlmSnapshotCarrier<br/>id: UUID<br/>taken_at: str"]
     LlmSnapshotPublic["LlmSnapshotPublic<br/>id: UUID<br/>taken_at: str<br/>prompt: str<br/>raw_response: str"]
-    LlmSnapshot -->|Carrier| LlmSnapshotCarrier
-    LlmSnapshot -->|Public| LlmSnapshotPublic
+    LlmSnapshot -->|"Carrier"| LlmSnapshotCarrier
+    LlmSnapshot -->|"Public"| LlmSnapshotPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -45,7 +45,7 @@ graph TD
 graph TD
     PageCheck["PageCheck<br/>id: UUID<br/>url: str<br/>snapshots: list[LlmSnapshotCarrier]<br/>latest_by_model: dict[str, LlmSnapshotCarrier]"]
     PageCheckPublic["PageCheckPublic<br/>id: UUID<br/>url: str<br/>snapshots: list[LlmSnapshotCarrier]<br/>latest_by_model: dict[str, LlmSnapshotCarrier]"]
-    PageCheck -->|Public| PageCheckPublic
+    PageCheck -->|"Public"| PageCheckPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -64,7 +64,7 @@ graph TD
 graph TD
     LlmSnapshot["LlmSnapshot<br/>id: UUID<br/>taken_at: str<br/>prompt: str<br/>raw_response: str"]
     PageCheck["PageCheck<br/>id: UUID<br/>url: str<br/>snapshots: list[LlmSnapshotCarrier]<br/>latest_by_model: dict[str, LlmSnapshotCarrier]"]
-    PageCheck -->|snapshots (embedded)| LlmSnapshot
-    PageCheck -->|latest_by_model (embedded)| LlmSnapshot
+    PageCheck -->|"snapshots (embedded)"| LlmSnapshot
+    PageCheck -->|"latest_by_model (embedded)"| LlmSnapshot
     classDef partial stroke-dasharray: 5 5;
 ```

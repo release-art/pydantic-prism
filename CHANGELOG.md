@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Mermaid edge labels are now quoted (`-->|"id (ref)"|`). GitHub's Mermaid
+  parser rejects bare parentheses/special characters in an edge label, so
+  relationship diagrams (whose labels read `field (kind)`) failed to render on
+  GitHub. Node labels were already quoted. Example READMEs regenerated.
+
 ### Added — round 13 (auto-generated example READMEs)
 
 - Every example under `examples/<name>/` now ships an auto-generated

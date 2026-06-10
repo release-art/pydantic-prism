@@ -11,8 +11,8 @@ graph TD
     Public["Public"]
     Secret["Secret"]
     Storage["Storage"]
-    Internal -->|extends| Public
-    Storage -->|extends| Internal
+    Internal -->|"extends"| Public
+    Storage -->|"extends"| Internal
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -24,9 +24,9 @@ graph TD
     AddressInternal["AddressInternal<br/>id: UUID<br/>city: str<br/>line1: str<br/>postcode: str"]
     AddressPii["AddressPii<br/>line1: str<br/>postcode: str"]
     AddressPublic["AddressPublic<br/>id: UUID<br/>city: str"]
-    Address -->|Internal| AddressInternal
-    Address -->|Pii| AddressPii
-    Address -->|Public| AddressPublic
+    Address -->|"Internal"| AddressInternal
+    Address -->|"Pii"| AddressPii
+    Address -->|"Public"| AddressPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -61,9 +61,9 @@ graph TD
     OrderInternal["OrderInternal<br/>id: UUID<br/>user_id: UUID<br/>ship_to_id: UUID<br/>card_last4: str<br/>total: Decimal"]
     OrderPii["OrderPii<br/>card_last4: str"]
     OrderPublic["OrderPublic<br/>id: UUID<br/>user_id: UUID<br/>ship_to_id: UUID"]
-    Order -->|Internal| OrderInternal
-    Order -->|Pii| OrderPii
-    Order -->|Public| OrderPublic
+    Order -->|"Internal"| OrderInternal
+    Order -->|"Pii"| OrderPii
+    Order -->|"Public"| OrderPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -98,9 +98,9 @@ graph TD
     Address["Address<br/>id: UUID<br/>city: str<br/>line1: str<br/>postcode: str"]
     Order["Order<br/>id: UUID<br/>user_id: UUID<br/>ship_to_id: UUID<br/>card_last4: str<br/>total: Decimal"]
     User["User<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>password_hash: str<br/>address_id: UUID"]
-    Order -->|user_id (ref)| User
-    Order -->|ship_to_id (ref)| Address
-    User -->|address_id (ref)| Address
+    Order -->|"user_id (ref)"| User
+    Order -->|"ship_to_id (ref)"| Address
+    User -->|"address_id (ref)"| Address
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -114,11 +114,11 @@ graph TD
     UserPublic["UserPublic<br/>id: UUID<br/>display_name: str<br/>email: str"]
     UserSecret["UserSecret<br/>password_hash: str"]
     UserStorage["UserStorage<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>password_hash: str<br/>address_id: UUID"]
-    User -->|Internal| UserInternal
-    User -->|Pii| UserPii
-    User -->|Public| UserPublic
-    User -->|Secret| UserSecret
-    User -->|Storage| UserStorage
+    User -->|"Internal"| UserInternal
+    User -->|"Pii"| UserPii
+    User -->|"Public"| UserPublic
+    User -->|"Secret"| UserSecret
+    User -->|"Storage"| UserStorage
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -170,6 +170,6 @@ graph TD
 graph TD
     Address["Address<br/>id: UUID<br/>city: str<br/>line1: str<br/>postcode: str"]
     User["User<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>password_hash: str<br/>address_id: UUID"]
-    User -->|address_id (ref)| Address
+    User -->|"address_id (ref)"| Address
     classDef partial stroke-dasharray: 5 5;
 ```

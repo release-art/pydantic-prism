@@ -8,7 +8,7 @@
 graph TD
     Internal["Internal"]
     Public["Public"]
-    Internal -->|extends| Public
+    Internal -->|"extends"| Public
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -19,8 +19,8 @@ graph TD
     Customer["Customer<br/>id: UUID<br/>name: str<br/>order_ids: list[UUID]"]
     CustomerInternal["CustomerInternal<br/>id: UUID<br/>name: str<br/>order_ids: list[UUID]"]
     CustomerPublic["CustomerPublic<br/>id: UUID<br/>name: str"]
-    Customer -->|Internal| CustomerInternal
-    Customer -->|Public| CustomerPublic
+    Customer -->|"Internal"| CustomerInternal
+    Customer -->|"Public"| CustomerPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -46,8 +46,8 @@ graph TD
     Order["Order<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]<br/>total: Decimal"]
     OrderInternal["OrderInternal<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]<br/>total: Decimal"]
     OrderPublic["OrderPublic<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]"]
-    Order -->|Internal| OrderInternal
-    Order -->|Public| OrderPublic
+    Order -->|"Internal"| OrderInternal
+    Order -->|"Public"| OrderPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -75,8 +75,8 @@ graph TD
     Customer["Customer<br/>id: UUID<br/>name: str<br/>order_ids: list[UUID]"]
     Order["Order<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]<br/>total: Decimal"]
     Product["Product<br/>id: UUID<br/>title: str<br/>unit_cost: Decimal"]
-    Order -->|customer_id (ref)| Customer
-    Order -->|product_ids (ref)| Product
+    Order -->|"customer_id (ref)"| Customer
+    Order -->|"product_ids (ref)"| Product
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -87,8 +87,8 @@ graph TD
     Product["Product<br/>id: UUID<br/>title: str<br/>unit_cost: Decimal"]
     ProductInternal["ProductInternal<br/>id: UUID<br/>title: str<br/>unit_cost: Decimal"]
     ProductPublic["ProductPublic<br/>id: UUID<br/>title: str"]
-    Product -->|Internal| ProductInternal
-    Product -->|Public| ProductPublic
+    Product -->|"Internal"| ProductInternal
+    Product -->|"Public"| ProductPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 

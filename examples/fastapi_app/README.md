@@ -8,7 +8,7 @@
 graph TD
     Internal["Internal"]
     Public["Public"]
-    Internal -->|extends| Public
+    Internal -->|"extends"| Public
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -19,8 +19,8 @@ graph TD
     User["User<br/>id: UUID<br/>email: str<br/>signup_ip: str<br/>display_name: str"]
     UserInternal["UserInternal<br/>id: UUID<br/>email: str<br/>signup_ip: str<br/>display_name: str"]
     UserPublic["UserPublic<br/>id: UUID<br/>display_name: str"]
-    User -->|Internal| UserInternal
-    User -->|Public| UserPublic
+    User -->|"Internal"| UserInternal
+    User -->|"Public"| UserPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 

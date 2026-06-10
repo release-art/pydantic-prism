@@ -8,7 +8,7 @@
 graph TD
     Public["Public"]
     Storage["Storage"]
-    Storage -->|extends| Public
+    Storage -->|"extends"| Public
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -19,8 +19,8 @@ graph TD
     SiteRow["SiteRow<br/>id: UUID<br/>url: str<br/>api_key: str"]
     SiteRowPublic["SiteRowPublic<br/>id: UUID<br/>url: str"]
     SiteRowStorage["SiteRowStorage<br/>id: UUID<br/>url: str<br/>api_key: str"]
-    SiteRow -->|Public| SiteRowPublic
-    SiteRow -->|Storage| SiteRowStorage
+    SiteRow -->|"Public"| SiteRowPublic
+    SiteRow -->|"Storage"| SiteRowStorage
     classDef partial stroke-dasharray: 5 5;
 ```
 

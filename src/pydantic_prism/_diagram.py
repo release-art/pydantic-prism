@@ -118,7 +118,9 @@ class Diagram:
             lines.append(f'    {node.id}["{text}"]{suffix}')
         for edge in self.edges:
             if edge.label:
-                lines.append(f"    {edge.src} -->|{_mermaid(edge.label)}| {edge.dst}")
+                # quote the label: GitHub's Mermaid parser breaks on bare
+                # parentheses/specials in an edge label (e.g. "id (ref)")
+                lines.append(f'    {edge.src} -->|"{_mermaid(edge.label)}"| {edge.dst}')
             else:
                 lines.append(f"    {edge.src} --> {edge.dst}")
         lines.append("    classDef partial stroke-dasharray: 5 5;")

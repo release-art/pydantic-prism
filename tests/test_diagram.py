@@ -70,7 +70,7 @@ def test_scope_diagram_mermaid_marks_partial() -> None:
     out = scope_diagram(Update).to_mermaid()
     assert "Update" in out
     assert ":::partial" in out
-    assert "-->|extends|" in out
+    assert '-->|"extends"|' in out  # edge labels are quoted (GitHub Mermaid)
 
 
 def test_scope_diagram_d2_partial_node_without_fields() -> None:
@@ -119,6 +119,14 @@ def test_ref_diagram_models_fields_and_kind_labels() -> None:
 
 
 # --- renderers --------------------------------------------------------------
+
+
+def test_mermaid_edge_labels_are_quoted() -> None:
+    # ref edge labels contain parens ("customer_id (ref)") which GitHub's
+    # Mermaid parser rejects unless the whole label is quoted.
+    out = Order.__refs__.diagram().to_mermaid()
+    assert '-->|"customer_id (ref)"|' in out
+    assert "-->|customer_id (ref)|" not in out  # never the bare form
 
 
 def test_dot_record_nodes_and_edges() -> None:

@@ -8,7 +8,7 @@
 graph TD
     Internal["Internal"]
     Public["Public"]
-    Internal -->|extends| Public
+    Internal -->|"extends"| Public
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -18,7 +18,7 @@ graph TD
 graph TD
     ComplianceAudit["ComplianceAudit<br/>id: UUID<br/>expected: dict[UUID, ExpectedHighlight]<br/>found: dict[UUID, FoundHighlight]"]
     ComplianceAuditPublic["ComplianceAuditPublic<br/>id: UUID<br/>expected: dict[UUID, ExpectedHighlightPublic]<br/>found: dict[UUID, FoundHighlightPublic]"]
-    ComplianceAudit -->|Public| ComplianceAuditPublic
+    ComplianceAudit -->|"Public"| ComplianceAuditPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -37,9 +37,9 @@ graph TD
     ComplianceAudit["ComplianceAudit<br/>id: UUID<br/>expected: dict[UUID, ExpectedHighlight]<br/>found: dict[UUID, FoundHighlight]"]
     ExpectedHighlight["ExpectedHighlight<br/>id: UUID<br/>quote: str"]
     FoundHighlight["FoundHighlight<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
-    ComplianceAudit -->|expected (ref)| ExpectedHighlight
-    ComplianceAudit -->|found (ref)| FoundHighlight
-    FoundHighlight -->|expected_id (ref)| ExpectedHighlight
+    ComplianceAudit -->|"expected (ref)"| ExpectedHighlight
+    ComplianceAudit -->|"found (ref)"| FoundHighlight
+    FoundHighlight -->|"expected_id (ref)"| ExpectedHighlight
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -49,7 +49,7 @@ graph TD
 graph TD
     ExpectedHighlight["ExpectedHighlight<br/>id: UUID<br/>quote: str"]
     ExpectedHighlightPublic["ExpectedHighlightPublic<br/>id: UUID<br/>quote: str"]
-    ExpectedHighlight -->|Public| ExpectedHighlightPublic
+    ExpectedHighlight -->|"Public"| ExpectedHighlightPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -67,8 +67,8 @@ graph TD
     FoundHighlight["FoundHighlight<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
     FoundHighlightInternal["FoundHighlightInternal<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
     FoundHighlightPublic["FoundHighlightPublic<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str"]
-    FoundHighlight -->|Internal| FoundHighlightInternal
-    FoundHighlight -->|Public| FoundHighlightPublic
+    FoundHighlight -->|"Internal"| FoundHighlightInternal
+    FoundHighlight -->|"Public"| FoundHighlightPublic
     classDef partial stroke-dasharray: 5 5;
 ```
 
@@ -95,6 +95,6 @@ graph TD
 graph TD
     ExpectedHighlight["ExpectedHighlight<br/>id: UUID<br/>quote: str"]
     FoundHighlight["FoundHighlight<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
-    FoundHighlight -->|expected_id (ref)| ExpectedHighlight
+    FoundHighlight -->|"expected_id (ref)"| ExpectedHighlight
     classDef partial stroke-dasharray: 5 5;
 ```
