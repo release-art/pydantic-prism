@@ -7,12 +7,15 @@
 ```mermaid
 classDiagram
     direction TB
+    class Classification
     class Internal
     class Pii
     class Public
     class Secret
     class Storage
     Public <|-- Internal
+    Classification <|-- Pii
+    Classification <|-- Secret
     Internal <|-- Storage
 ```
 

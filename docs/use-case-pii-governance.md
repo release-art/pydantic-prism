@@ -41,18 +41,22 @@ The entire governance layer is ~40 lines on top of the **unmodified** public API
 (see the prototype). That is the proof: the wedge is real; only ergonomics are
 missing.
 
-## Candidate library surface (to promote into core, with tests)
+## Candidate library surface — **shipped in round 16**
 
-| prototype shim | proposed API | rationale |
+Promoted into core with tests (decisions #68–#72, `docs/design-round-16.md`):
+
+| prototype shim | shipped API | notes |
 |---|---|---|
-| `class Pii(Scope)` ad hoc | a `Classification` marker distinct from visibility `Scope` | keeps the two axes explicit; today nothing stops `scope(Pii)` being used as a visibility level, and it lets `prism gen` name views sanely |
-| `Model.scope(Internal - Pii - Secret)` | `Model.redacted(strip=..., visible=...)` | the common "audit/log view" shouldn't require knowing the algebra |
-| `dataflow_report(Order)` | `Model.classified_flow()` / CLI `prism flow` | emit JSON/Mermaid for compliance review |
+| `class Pii(Scope)` ad hoc | `Classification` base (a `Scope` subclass) | a classification *is* a scope, so the algebra is reused; the distinct base partitions the two axes |
+| `pii_inventory` / `classifications_of` | `Model.classifications()` / `Model.classified_fields()` | read the classification atoms off each field's tag |
+| `Model.scope(Internal - Pii - Secret)` | `Model.redacted(Internal)` | `strip=` defaults to *all* classifications on the model — new PII auto-redacts |
+| `dataflow_report(Order)` | `Model.classified_flow()` → `FlowReport` + CLI `prism flow` | `.as_dict()` (JSON) / `.to_mermaid()` for compliance review |
 
-Open design question: classification and visibility currently share one scope
-lattice, so a careless `scope(Pii)` returns "all PII fields" — useful but it
-blurs the axes. A dedicated `Classification` type (still backed by the same
-expression engine) would keep them honest.
+The open question — classification vs visibility sharing one lattice — was
+resolved by **decision #68**: `Classification(Scope)` keeps the axes honest by
+*type* (so prism can auto-derive redaction and reports) while still reusing the
+one expression engine. `scope(Pii)` stays legal ("all PII fields"); the
+governance helpers are the ergonomic path.
 
 ## Adjacent Tier-1 bets from the same dive
 

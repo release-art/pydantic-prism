@@ -70,6 +70,34 @@ def _run_diagram(args: argparse.Namespace) -> int:
     return 0
 
 
+# --- flow subcommand -------------------------------------------------------
+
+
+def _run_flow(args: argparse.Namespace) -> int:
+    from .._model import ScopedModel
+
+    # console scripts don't put the cwd on the path the way `python` does
+    sys.path.insert(0, str(Path.cwd()))
+    try:
+        model = _resolve_kind(args.path, ScopedModel, "ScopedModel subclass")
+    except CodegenError as exc:
+        print(f"prism: {exc}", file=sys.stderr)
+        return 2
+    report = model.classified_flow()
+    if args.format == "mermaid":
+        rendered = report.to_mermaid(direction=args.direction)
+    else:
+        import json
+
+        rendered = json.dumps(report.as_dict(), indent=2) + "\n"
+    if args.output:
+        Path(args.output).write_text(rendered, encoding="utf-8")
+        print(f"prism: wrote {args.format} flow report to {args.output}")
+    else:
+        print(rendered, end="")
+    return 0
+
+
 # --- gen / check -----------------------------------------------------------
 
 
@@ -103,10 +131,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     diagram_parser.add_argument("--output", default=None, help="write to FILE")
     diagram_parser.add_argument("--direction", choices=("TD", "LR"), default="TD")
+    flow_parser = sub.add_parser(
+        "flow", help="trace where classified (PII/Secret) data flows from a model"
+    )
+    flow_parser.add_argument("path", help="module:Model entry point")
+    flow_parser.add_argument("--format", choices=("json", "mermaid"), default="json")
+    flow_parser.add_argument("--output", default=None, help="write to FILE")
+    flow_parser.add_argument("--direction", choices=("TD", "LR"), default="TD")
     args = parser.parse_args(argv)
 
     if args.command == "diagram":
         return _run_diagram(args)
+
+    if args.command == "flow":
+        return _run_flow(args)
 
     try:
         config = load_config(Path(args.config))

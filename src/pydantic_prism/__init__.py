@@ -8,6 +8,13 @@ relationships introspectable across projections.
 from pydantic.experimental.missing_sentinel import MISSING
 
 from ._diagram import Diagram, projection_diagram, scope_diagram
+from ._flow import (
+    ClassifiedField,
+    FlowEdge,
+    FlowNode,
+    FlowReport,
+    build_flow_report,
+)
 from ._markers import BackRef, Ref, Scoped, backref, ref, scoped
 from ._model import Projection, ScopedModel
 from ._refs import (
@@ -18,7 +25,7 @@ from ._refs import (
     RefInfo,
     RefShape,
 )
-from ._scopes import Scope, ScopeExpr
+from ._scopes import Classification, Scope, ScopeExpr
 from ._validators import scoped_validator
 from .errors import (
     EmptyProjectionError,
@@ -33,9 +40,14 @@ __all__ = [
     "MISSING",
     "BackRef",
     "BackRefInfo",
+    "Classification",
+    "ClassifiedField",
     "Diagram",
     "EmbeddedRefInfo",
     "EmptyProjectionError",
+    "FlowEdge",
+    "FlowNode",
+    "FlowReport",
     "IdRefInfo",
     "PrismError",
     "Projection",
@@ -52,6 +64,7 @@ __all__ = [
     "ScopedModel",
     "StaleProjectionStubError",
     "backref",
+    "build_flow_report",
     "projection_diagram",
     "ref",
     "scope_diagram",

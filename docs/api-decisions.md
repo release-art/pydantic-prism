@@ -938,3 +938,77 @@ gen` for stubs, `python bin/gen_example_readmes.py` for examples — so the
 "regenerate with" instruction is correct per artifact. The relationship section
 is emitted only when the model's ref diagram has edges, so a backref-only model
 (forward `walk()` empty) no longer renders a lone-node section.
+
+## 68. Classification is a distinct axis — `Classification(Scope)` (round 16)
+
+The PII-governance wedge (`docs/use-case-pii-governance.md`,
+`examples/pii_dataflow`) needs prism to tell *visibility* (`Public < Internal <
+Storage`) apart from *data classification* (`Pii`, `Secret`). Options: keep
+classifications as plain `Scope`s + helper functions (blurred axes); a wholly
+separate `Classification` type with its own algebra (doubles the engine, breaks
+`Internal - Pii`); or **(chosen) a `Classification` base that subclasses
+`Scope`.** A classification *is* a scope — it composes in the same expression
+algebra, tags fields through the same `scoped(...)`, and obeys the same
+`matches`/`selects` — so 100% of the engine is reused. The distinct base is the
+only new machinery: `issubclass(atom, Classification)` partitions a field's
+expression atoms by axis, which is what drives the inventory, redaction, and
+flow report. `Model.scope(Pii)` stays *legal* ("every PII field" is useful); the
+governance helpers are the ergonomic path that keeps the axes explicit. prism
+ships **only the base**, not a `Pii`/`Secret` taxonomy — naming a canonical
+PII set is a compliance-regime decision, not a library one.
+
+## 69. Inventory introspection — `classifications()` / `classified_fields()`
+
+Two read-only classmethods on `ScopedModel`, mirroring `scopes()`:
+`classifications()` returns the `Classification` atoms in the model's tags (the
+classification slice of `scopes()`); `classified_fields()` returns
+`{field: frozenset[Classification]}` for every field carrying ≥1 classification.
+Both read the classification atoms **directly off each field's expression**
+(`expr.atoms()` filtered by the base), not via `matches()` — so a field tagged
+`scoped(Pii)` reports exactly `{Pii}`, never a narrower subclass that happens to
+`issubclass`. Untagged and visibility-only fields are omitted.
+
+## 70. Redaction ergonomics — `Model.redacted(*visible, strip=None)`
+
+Redaction is set difference, but the common "audit/log view" shouldn't require
+writing the algebra. `Model.redacted(Internal)` returns
+`scope(Internal - <all classifications>)` — `strip` **defaults to the union of
+every classification declared on the model**, so a classification added later is
+auto-redacted (the safe direction). `strip=` takes any scope expression
+(`Secret`, `Pii | Secret`) to override. On a model with no classifications,
+`strip` resolves to `None` and `redacted(X)` is exactly `scope(X)` (same cached
+class). `name=`/`bases=` forward to `scope()`. No visibility scope → `TypeError`.
+
+## 71. Data-flow report — `Model.classified_flow()` → `FlowReport` (`_flow.py`)
+
+The compliance artifact: *given this entry point, where does classified data
+live, via which references?* `classified_flow()` walks forward `ref`/`embedded`
+edges (BFS, cycle-safe — reusing `RefGraph.walk()`) and returns a frozen
+`FlowReport(root, nodes, edges)`. `nodes` are the reachable models carrying
+classified fields (`FlowNode`/`ClassifiedField`, root-first BFS order); `edges`
+are every walked forward edge (`FlowEdge`), so the path to each classified model
+is visible. `__bool__` is true iff any classified data is reachable. Two
+renderings, matching the `Diagram` story: `as_dict()` (JSON compliance export)
+and `to_mermaid()` — the latter **reuses the `Diagram` IR/renderer** rather than
+duplicating escaping, building model nodes (classified ones annotated with
+`Pii+Secret`-style labels) and field-labelled edges. Exported alongside
+`build_flow_report`.
+
+## 72. CLI `prism flow module:Model [--format json|mermaid]`
+
+A `flow` subcommand beside `diagram`, reusing the `_resolve_kind` plumbing and
+cwd-on-path shim. Default format is **json** (the artifact); `mermaid` for
+review; `--output FILE`/`--direction` as on `diagram`. A non-model path exits 2
+("not a ScopedModel"). Kept distinct from `diagram` because governance flow is a
+different question from structure.
+
+## Round-16 notes
+
+- New module `_flow.py` (FlowReport IR + `build_flow_report`); `Classification`
+  added to `_scopes.py`; four classmethods (`classifications`,
+  `classified_fields`, `classified_flow`, `redacted`) on `ScopedModel`. All
+  **additive** — no behavior change to existing projections.
+- `examples/pii_dataflow/main.py` rewritten onto the first-class API (its
+  prototype shims — `pii_inventory`, `dataflow_report`, ad-hoc `Pii(Scope)` —
+  deleted); README regenerated. Tests in `test_classification.py` +
+  `_flow_fixtures.py` (a diamond graph exercising the re-reached-node branches).

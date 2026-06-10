@@ -9,12 +9,22 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Mapping, Sequence
-from typing import Any, ClassVar, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel
 
 from .._refs import RefGraph
-from .._scopes import Scope, ScopeExpr, ScopeLike, as_expr, union_all
+from .._scopes import (
+    Classification,
+    Scope,
+    ScopeExpr,
+    ScopeLike,
+    as_expr,
+    union_all,
+)
+
+if TYPE_CHECKING:
+    from .._flow import FlowReport
 
 __all__ = ["Projection", "ScopedModel"]
 
@@ -202,6 +212,80 @@ class ScopedModel(BaseModel):
         for expr in cls.__field_scopes__.values():
             out |= expr.atoms()
         return frozenset(out)
+
+    @classmethod
+    def classifications(cls) -> frozenset[type[Classification]]:
+        """The :class:`Classification` atoms appearing in this model's field tags.
+
+        The classification slice of :meth:`scopes` — visibility scopes excluded.
+        """
+        return frozenset(s for s in cls.scopes() if issubclass(s, Classification))
+
+    @classmethod
+    def classified_fields(cls) -> dict[str, frozenset[type[Classification]]]:
+        """Per-field classification inventory: field name → classifications carried.
+
+        Only fields tagged with at least one :class:`Classification` appear. The
+        classifications are read directly off each field's tag (its expression
+        atoms); visibility scopes and untagged fields are omitted.
+        """
+        out: dict[str, frozenset[type[Classification]]] = {}
+        for field_name, expr in cls.__field_scopes__.items():
+            tags = frozenset(a for a in expr.atoms() if issubclass(a, Classification))
+            if tags:
+                out[field_name] = tags
+        return out
+
+    @classmethod
+    def classified_flow(cls) -> FlowReport:
+        """Trace classified data reachable from this model across the ref graph.
+
+        Walks forward ``ref`` / ``embedded`` edges (BFS, cycle-safe) and reports
+        the classified fields of every model personal data can reach — the
+        compliance artifact: *given this entry point, where does classified data
+        live, via which references?* Render the returned :class:`.FlowReport`
+        with ``.as_dict()`` (JSON) or ``.to_mermaid()``.
+        """
+        from .._flow import build_flow_report
+
+        return build_flow_report(cls)
+
+    @classmethod
+    def redacted(
+        cls,
+        *visible: ScopeLike,
+        strip: ScopeLike | None = None,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+    ) -> type[Projection]:
+        """Derive an audit-safe projection: the ``visible`` view, classified out.
+
+        Redaction is set difference. ``Model.redacted(Internal)`` is the
+        ``Internal`` projection with **every classification stripped** — by
+        default ``strip`` is the union of all classifications declared on the
+        model, so a classification added later is auto-redacted. Pass ``strip=``
+        (any scope expression, e.g. ``Secret`` or ``Pii | Secret``) to choose
+        which classifications to remove instead. Refs survive, so the
+        relationship graph stays intact.
+
+        ``name`` / ``bases`` forward to :meth:`scope`.
+        """
+        if not visible:
+            raise TypeError(
+                "redacted() requires at least one visibility scope or expression"
+            )
+        visible_expr = union_all(as_expr(scope) for scope in visible)
+        if strip is not None:
+            strip_expr: ScopeExpr | None = as_expr(strip)
+        else:
+            classifications = cls.classifications()
+            strip_expr = (
+                union_all(as_expr(c) for c in classifications)
+                if classifications
+                else None
+            )
+        expr = visible_expr if strip_expr is None else visible_expr - strip_expr
+        return cls.scope(expr, name=name, bases=bases)
 
     @classmethod
     def scope(

@@ -16,7 +16,14 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-__all__ = ["Scope", "ScopeExpr", "ScopeLike", "as_expr", "union_all"]
+__all__ = [
+    "Classification",
+    "Scope",
+    "ScopeExpr",
+    "ScopeLike",
+    "as_expr",
+    "union_all",
+]
 
 
 class ScopeExpr:
@@ -168,6 +175,30 @@ class Scope(metaclass=ScopeMeta):
             f"{cls.__name__} is a scope and is used as a class, never instantiated; "
             f"write scoped({cls.__name__}), not scoped({cls.__name__}())"
         )
+
+
+class Classification(Scope):
+    """Base for data-classification tags — an axis orthogonal to visibility.
+
+    A classification *is* a :class:`Scope`: it composes in the same expression
+    algebra (``Internal - Pii``), tags fields through the same ``scoped(...)``
+    marker, and is selected by the same ``matches`` / ``selects`` rules. The
+    distinct base is what lets prism tell the two axes apart — enumerate a
+    model's classifications (:meth:`ScopedModel.classifications`), auto-derive
+    audit-safe views (:meth:`ScopedModel.redacted`), and trace where classified
+    data flows (:meth:`ScopedModel.classified_flow`).
+
+    Declare concrete tags by subclassing::
+
+        class Pii(Classification): ...
+        class Secret(Classification): ...
+
+    prism ships only this base, not a fixed taxonomy — name the classes that fit
+    your compliance regime. Because a classification is an ordinary scope, it may
+    still be requested directly (``Model.scope(Pii)`` is "every PII field"); the
+    governance helpers above are the ergonomic path that keeps the two axes
+    explicit.
+    """
 
 
 type ScopeLike = type[Scope] | ScopeExpr
