@@ -5,11 +5,18 @@ description = "Derive filtered subsets of pydantic models by tagging fields with
 authors = [
     {name = "Ilja Orlovs",email = "IljaOrlovs@users.noreply.github.com"},
 ]
-dependencies = []
+dependencies = ["pydantic>=2.13.4"]
 requires-python = ">=3.10"
 readme = "README.md"
 license = {text = "MIT"}
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.15.16",
+    "pyright>=1.1.410",
+]
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
