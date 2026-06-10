@@ -67,7 +67,9 @@ def test_key_type_mismatch_raises_lazily() -> None:
 def test_missing_target_field_raises() -> None:
     class NoSuchField(ScopedModel):
         id: Annotated[UUID, scoped(Public)]
-        highlights: Annotated[dict[UUID, Highlight], ref(Highlight, field="nope"), scoped(Public)]
+        highlights: Annotated[
+            dict[UUID, Highlight], ref(Highlight, field="nope"), scoped(Public)
+        ]
 
     with pytest.raises(RefResolutionError, match="no field named 'nope'"):
         NoSuchField.__refs__["highlights"]
@@ -88,7 +90,9 @@ def test_value_type_need_not_be_the_target() -> None:
 def test_optional_keyed_dict() -> None:
     class MaybePage(ScopedModel):
         id: Annotated[UUID, scoped(Public)]
-        highlights: Annotated[dict[UUID, Highlight] | None, ref(Highlight), scoped(Public)] = None
+        highlights: Annotated[
+            dict[UUID, Highlight] | None, ref(Highlight), scoped(Public)
+        ] = None
 
     info = MaybePage.__refs__["highlights"]
     assert info.shape is RefShape.KEYED_DICT
@@ -113,12 +117,16 @@ def test_realistic_expected_found_shape() -> None:
         expected: Annotated[
             dict[UUID, ExpectedHighlight], ref(ExpectedHighlight), scoped(Public)
         ]
-        found: Annotated[dict[UUID, FoundHighlight], ref(FoundHighlight), scoped(Public)]
+        found: Annotated[
+            dict[UUID, FoundHighlight], ref(FoundHighlight), scoped(Public)
+        ]
 
     assert Audit.__refs__["expected"].shape is RefShape.KEYED_DICT
     assert Audit.__refs__["found"].target is FoundHighlight
     assert FoundHighlight.__refs__["expected_id"].target is ExpectedHighlight
-    edges = {(source.__name__, info.field_name) for source, info in Audit.__refs__.walk()}
+    edges = {
+        (source.__name__, info.field_name) for source, info in Audit.__refs__.walk()
+    }
     assert ("Audit", "expected") in edges
     assert ("Audit", "found") in edges
     assert ("FoundHighlight", "expected_id") in edges

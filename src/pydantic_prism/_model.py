@@ -258,7 +258,9 @@ def _check_bases(
 ) -> tuple[type[BaseModel], ...]:
     """Validate a projection-bases declaration (class-level or per-call)."""
     checked: list[type[BaseModel]] = []
-    for base in bases:
+    for raw_base in bases:
+        # runtime guard: annotations don't stop untyped callers
+        base = cast(Any, raw_base)
         if not (isinstance(base, type) and issubclass(base, BaseModel)):
             raise TypeError(
                 f"{cls.__name__}: projection base {base!r} is not a pydantic "
@@ -483,6 +485,45 @@ class _BuildContext:
         return candidate
 
 
+def _resolve_carried(
+    cls: type[ScopedModel], bases: tuple[type[BaseModel], ...] | None
+) -> tuple[type[BaseModel], ...]:
+    """The bases a projection of ``cls`` carries (per-call > class > none).
+
+    Falling through to "none" — no per-call ``bases=``, no class-level
+    ``projection_bases=`` — warns once per model if base behavior is dropped.
+    """
+    if bases is not None:
+        return bases
+    declared = cls.__prism_projection_bases__
+    if declared is None:
+        _warn_dropped_behavior(cls)
+        return ()
+    return declared
+
+
+def _surviving_fields(cls: type[ScopedModel], expr: ScopeExpr) -> list[str]:
+    """The model's fields selected by ``expr``; empty selections raise."""
+    surviving = [
+        field_name
+        for field_name in cls.model_fields
+        if field_name in cls.__field_scopes__
+        and expr.selects(cls.__field_scopes__[field_name])
+    ]
+    if not surviving:
+        defined = sorted(scope.__name__ for scope in cls.scopes())
+        detail = (
+            f"; {cls.__name__} defines scopes: {', '.join(defined)}"
+            if defined
+            else f"; no fields of {cls.__name__} are tagged with scoped(...)"
+        )
+        raise EmptyProjectionError(
+            f"{cls.__name__}.scope({expr!r}) selects no fields; untagged fields "
+            f"belong to no scope{detail}"
+        )
+    return surviving
+
+
 def _project(
     cls: type[ScopedModel],
     expr: ScopeExpr,
@@ -496,15 +537,7 @@ def _project(
         # error if names are genuinely missing) and refresh marker collection
         # via the model_rebuild override.
         cls.model_rebuild()
-    if bases is None:
-        # No per-call bases: fall back to the class-level declaration; warn
-        # (once per model) when there is none and behavior would be dropped.
-        declared = cls.__prism_projection_bases__
-        carried = declared if declared is not None else ()
-        if declared is None:
-            _warn_dropped_behavior(cls)
-    else:
-        carried = bases
+    carried = _resolve_carried(cls, bases)
     cache_key: _ProjectionKey = (expr, name, carried)
     cached = cls.__prism_cache__.get(cache_key)
     if cached is not None:
@@ -526,23 +559,7 @@ def _project(
     ref_name = ctx.reserve_name(class_name)
     ctx.pending[key] = ref_name
 
-    surviving = [
-        field_name
-        for field_name in cls.model_fields
-        if field_name in cls.__field_scopes__
-        and expr.selects(cls.__field_scopes__[field_name])
-    ]
-    if not surviving:
-        defined = sorted(scope.__name__ for scope in cls.scopes())
-        detail = (
-            f"; {cls.__name__} defines scopes: {', '.join(defined)}"
-            if defined
-            else f"; no fields of {cls.__name__} are tagged with scoped(...)"
-        )
-        raise EmptyProjectionError(
-            f"{cls.__name__}.scope({expr!r}) selects no fields; untagged fields "
-            f"belong to no scope{detail}"
-        )
+    surviving = _surviving_fields(cls, expr)
     _check_base_fields(cls, expr, carried, set(surviving))
 
     partial = expr.is_partial()
@@ -601,11 +618,12 @@ def _check_base_fields(
         for field_name in base.model_fields:
             if field_name in cls.__field_scopes__ and field_name not in surviving:
                 raise ProjectionBaseError(
-                    f"{cls.__name__}.scope({expr!r}): field {field_name!r} is declared "
-                    f"on carried base {base.__name__} and tagged scoped(...), but the "
-                    f"expression does not select it; inherited fields cannot be removed "
-                    f"from a projection — widen the expression, drop the base from "
-                    f"bases=, or move the field onto {cls.__name__}"
+                    f"{cls.__name__}.scope({expr!r}): field {field_name!r} is "
+                    f"declared on carried base {base.__name__} and tagged "
+                    f"scoped(...), but the expression does not select it; "
+                    f"inherited fields cannot be removed from a projection — "
+                    f"widen the expression, drop the base from bases=, or move "
+                    f"the field onto {cls.__name__}"
                 )
 
 
@@ -619,11 +637,10 @@ def _rewrite(annotation: Any, expr: ScopeExpr, ctx: _BuildContext) -> Any:
         return _project(cast("type[ScopedModel]", annotation), expr, None, None, ctx)
     metadata = getattr(annotation, "__metadata__", None)
     if metadata is not None:
+        # nested Annotated cannot hold prism markers (rejected at collection
+        # time), so the metadata survives verbatim
         inner = _rewrite(get_args(annotation)[0], expr, ctx)
-        kept = [m for m in metadata if not isinstance(m, PRISM_MARKERS)]
-        if not kept:
-            return inner
-        return Annotated[inner, *kept]
+        return Annotated[inner, *metadata]
     origin = get_origin(annotation)
     if origin is None:
         return annotation
@@ -674,10 +691,8 @@ def _carry_validators(
     return carried or None
 
 
-def _validation_key(name: str, info: FieldInfo | None) -> str:
+def _validation_key(name: str, info: FieldInfo) -> str:
     """The key a field expects in validation input (alias-aware)."""
-    if info is None:
-        return name
     if isinstance(info.validation_alias, str):
         return info.validation_alias
     if isinstance(info.alias, str):
@@ -709,10 +724,7 @@ def _narrow_value(annotation: Any, value: Any) -> Any:
         return value
     args = get_args(annotation)
     if origin in (Union, types.UnionType):
-        models = [a for a in args if isinstance(a, type) and issubclass(a, BaseModel)]
-        if len(models) == 1 and isinstance(value, Mapping):
-            return _narrow(models[0], cast(Mapping[str, Any], value))
-        return value
+        return _narrow_union(args, value)
     if isinstance(origin, type) and issubclass(origin, Mapping):
         if len(args) == 2 and isinstance(value, Mapping):
             items = cast(Mapping[Any, Any], value)
@@ -725,10 +737,18 @@ def _narrow_value(annotation: Any, value: Any) -> Any:
     ):
         return [_narrow_value(args[0], item) for item in cast(list[Any], value)]
     if origin is tuple and args and isinstance(value, (list, tuple)):
-        items = list(cast(list[Any], value))
-        if len(args) == 2 and args[1] is Ellipsis:
-            return [_narrow_value(args[0], item) for item in items]
-        return [
-            _narrow_value(arg, item) for arg, item in zip(args, items, strict=False)
-        ]
+        return _narrow_tuple(args, list(cast(list[Any], value)))
     return value
+
+
+def _narrow_union(args: tuple[Any, ...], value: Any) -> Any:
+    models = [a for a in args if isinstance(a, type) and issubclass(a, BaseModel)]
+    if len(models) == 1 and isinstance(value, Mapping):
+        return _narrow(models[0], cast(Mapping[str, Any], value))
+    return value
+
+
+def _narrow_tuple(args: tuple[Any, ...], items: list[Any]) -> list[Any]:
+    if len(args) == 2 and args[1] is Ellipsis:
+        return [_narrow_value(args[0], item) for item in items]
+    return [_narrow_value(arg, item) for arg, item in zip(args, items, strict=False)]

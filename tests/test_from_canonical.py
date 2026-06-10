@@ -84,6 +84,22 @@ def test_custom_dump_skips_narrowing_automatically() -> None:
         WireRow.scope(Public).from_canonical(row, narrow=True)
 
 
+def test_aliases_are_honored_in_both_dump_modes() -> None:
+    from pydantic import Field
+
+    class Aliased(ScopedModel):
+        id: Annotated[UUID, scoped(Public)]
+        full_name: Annotated[str, scoped(Public), Field(alias="fullName")]
+
+    canonical = Aliased.model_validate({"id": str(uuid4()), "fullName": "Ada L"})
+    projection = Aliased.scope(Public)
+    by_alias = projection.from_canonical(canonical)
+    assert by_alias.full_name == "Ada L"  # type: ignore[attr-defined]
+    # python-name dumps are matched by the field-name fallback
+    by_name = projection.from_canonical(canonical, by_alias=False)
+    assert by_name.full_name == "Ada L"  # type: ignore[attr-defined]
+
+
 def test_narrow_false_passes_dump_verbatim() -> None:
     event = Event(id=uuid4(), title="t", payload={"a": 1})
     # default config ignores extras, so the unnarrowed canonical dump validates

@@ -6,7 +6,9 @@ The FastAPI section is covered verbatim by tests/test_fastapi.py.
 from typing import Annotated, Optional
 from uuid import UUID
 
-from pydantic_prism import Scope, ScopedModel, backref, ref, scoped
+from pydantic import BaseModel
+
+from pydantic_prism import RefShape, Scope, ScopedModel, backref, ref, scoped
 
 # --- "30 seconds" ----------------------------------------------------------
 
@@ -146,3 +148,92 @@ def test_round_trips_example() -> None:
     back = User.from_projection(pub, email="ada@example.com", password_hash="hash")
     assert isinstance(back, User)
     assert back.email == "ada@example.com"
+
+
+# --- "Dict-keyed refs" -----------------------------------------------------
+
+
+class Highlight(ScopedModel):
+    id: Annotated[UUID, scoped(Public)]
+    text: Annotated[str, scoped(Public)]
+
+
+class Page(ScopedModel):
+    id: Annotated[UUID, scoped(Public)]
+    highlights: Annotated[dict[UUID, Highlight], ref(Highlight), scoped(Public)]
+
+
+def test_dict_keyed_refs_example() -> None:
+    info = Page.__refs__["highlights"]
+    assert info.shape is RefShape.KEYED_DICT
+    assert info.key_type is UUID
+    assert info.target is Highlight
+
+
+# --- "Embedded models and carrier records" ---------------------------------
+
+
+class CarrierScope(Scope): ...
+
+
+class Snapshot(ScopedModel):
+    id: Annotated[UUID, scoped(Public, CarrierScope)]
+    taken_at: Annotated[str, scoped(Public, CarrierScope)]
+    blob: Annotated[str, scoped(Public)] = ""
+
+
+SnapshotRef = Snapshot.scope(CarrierScope)
+
+
+class SnapshotOwner(ScopedModel):
+    id: Annotated[UUID, scoped(Public)]
+    history: Annotated[list[SnapshotRef], scoped(Public)] = []  # type: ignore[valid-type]
+    by_id: Annotated[dict[UUID, SnapshotRef], scoped(Public)] = {}  # type: ignore[valid-type]
+
+
+def test_embedded_carrier_example() -> None:
+    info = SnapshotOwner.__refs__["history"]
+    assert info.kind == "embedded"
+    assert info.target is Snapshot
+    assert info.scope == SnapshotRef.__prism_scope__
+    assert info.shape is RefShape.COLLECTION
+    assert "history" in SnapshotOwner.__refs__.embedded
+    assert "history" not in SnapshotOwner.__refs__.outgoing
+
+
+# --- "Custom pydantic bases" -----------------------------------------------
+
+
+class AzureTableBase(BaseModel):
+    def table_name(self) -> str:
+        return type(self).__name__.lower()
+
+
+class Row(AzureTableBase, ScopedModel, projection_bases=(AzureTableBase,)):
+    id: Annotated[UUID, scoped(Public)]
+
+
+def test_custom_bases_example() -> None:
+    RowPublic = Row.scope(Public)
+    instance = RowPublic(id="00000000-0000-0000-0000-000000000001")  # type: ignore[arg-type]
+    assert isinstance(instance, AzureTableBase)
+    assert instance.table_name() == "rowpublic"
+
+
+# --- "Partial scopes — the Update model" -----------------------------------
+
+
+class Update(Storage, partial=True): ...
+
+
+class CanonicalRow(ScopedModel):
+    id: Annotated[UUID, scoped(Public)]
+    name: Annotated[str, scoped(Public)]
+    status: Annotated[str, scoped(Storage)] = "active"
+
+
+def test_partial_scope_example() -> None:
+    RowUpdate = CanonicalRow.scope(Update)
+    assert RowUpdate().model_dump(exclude_none=True) == {}
+    assert RowUpdate(name="new").model_dump(exclude_none=True) == {"name": "new"}
+    assert "required" not in RowUpdate.model_json_schema()

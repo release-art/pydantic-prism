@@ -81,7 +81,9 @@ def test_embedded_edges_survive_projection_and_walk() -> None:
     projected = Document.scope(Public)
     assert set(projected.__refs__.embedded) == {"latest", "history", "by_id"}
     assert projected.__refs__["history"].target is Snapshot
-    edges = {(source.__name__, info.field_name) for source, info in Document.__refs__.walk()}
+    edges = {
+        (source.__name__, info.field_name) for source, info in Document.__refs__.walk()
+    }
     assert ("Document", "history") in edges
 
 

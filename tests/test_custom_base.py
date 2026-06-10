@@ -98,6 +98,22 @@ def test_dropped_behavior_warns_once_per_model() -> None:
     assert not [w for w in record if issubclass(w.category, UserWarning)]
 
 
+def test_base_model_serializer_is_reported_in_warning() -> None:
+    from pydantic import model_serializer
+
+    class SerializerBase(BaseModel):
+        @model_serializer(mode="wrap")
+        def _wrap(self, handler: Any) -> Any:
+            return handler(self)
+
+    class Quiet(SerializerBase, ScopedModel):
+        id: Annotated[UUID, scoped(Public)]
+
+    with pytest.warns(UserWarning, match="model serializers"):
+        Quiet.scope(Public)
+    assert "id" in Quiet(id=uuid4()).model_dump()
+
+
 def test_explicit_empty_projection_bases_silences_warning(
     recwarn: pytest.WarningsRecorder,
 ) -> None:
@@ -144,7 +160,9 @@ def test_tagged_base_field_not_selected_raises() -> None:
 
 def test_base_model_validator_runs_on_projection_input() -> None:
     public = Row.scope(Public)
-    via_envelope = public.model_validate({"__envelope__": {"id": str(uuid4()), "name": "e"}})
+    via_envelope = public.model_validate(
+        {"__envelope__": {"id": str(uuid4()), "name": "e"}}
+    )
     assert via_envelope.name == "e"  # type: ignore[attr-defined]
 
 

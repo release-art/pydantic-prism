@@ -54,10 +54,14 @@ ignore = ["N802"]
     "F401",
     "E402",
 ]
+# Variables holding derived projection *classes* (UserPublic = User.scope(...))
+# are CamelCase on purpose; examples print — that is their job.
+"tests/**" = ["N806"]
+"examples/**" = ["N806", "T201"]
 
 [tool.ruff.lint.isort]
 order-by-type = true
-known-first-party = ["async_timer", "mock_async_timer"]
+known-first-party = ["pydantic_prism"]
 forced-separate = ["tests"]
 
 [tool.ruff.format]
@@ -69,6 +73,12 @@ typeCheckingMode = "strict"
 pythonVersion = "3.12"
 venvPath = "."
 venv = ".venv"
+
+[tool.coverage.report]
+exclude_also = [
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
 
 [tool.pytest.ini_options]
 minversion = "8.4"

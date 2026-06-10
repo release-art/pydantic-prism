@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 2 (adoption feedback)
+
+- Custom-base composition: `class Row(CustomBase, ScopedModel,
+  projection_bases=(CustomBase,))` carries the base onto every projection —
+  custom `model_dump`/`model_validate`, base-declared model
+  validators/serializers, methods, and `isinstance` identity all work on
+  derived classes. Per-call override via `Model.scope(..., bases=(...))`
+  (part of the cache key); calling `.scope()` without a declaration on a
+  model whose base defines such behavior warns once per model
+  (`projection_bases=()` silences). Carried-base fields that a scope tag
+  cannot honor raise the new `ProjectionBaseError`.
+- Dict-keyed refs: `Annotated[dict[UUID, Embedded], ref(Target)]` —
+  the dict key is the foreign id. New `RefShape` StrEnum
+  (`SCALAR | COLLECTION | KEYED_DICT`) on `RefInfo.shape` with
+  `RefInfo.key_type`; key types are checked against the target id field at
+  resolution time. `RefInfo.many` remains as a derived property.
+- Embedded-model edges: fields typed as a projection
+  (`list[Snapshot.scope(Carrier)]`) or a nested canonical model register
+  `kind="embedded"` edges automatically — `RefInfo.target` resolves to the
+  canonical, `RefInfo.scope` records the carrier's scope (`None` =
+  reshapes with the outer projection). New `RefGraph.embedded` accessor;
+  `targets()`/`walk()` include embedded edges.
+- Partial scopes: `class Update(Storage, partial=True)` makes every
+  projection to it all-optional with `None` defaults (canonical defaults
+  dropped — PATCH semantics). An expression is partial iff all its atoms
+  are; the flag inherits down the scope graph.
+- `from_canonical` forwards `mode`, `by_alias`, `context`, `exclude_none`,
+  `exclude_unset`, `exclude_defaults` to `model_dump`, and skips narrowing
+  automatically when the instance's class overrides `model_dump`
+  (`narrow=` overrides the auto-detection).
+- `Model.scopes()` classmethod: the set of `Scope` classes used in field
+  tags. `EmptyProjectionError` messages now list them.
+- `ScopeExpr.atoms()` and `ScopeExpr.is_partial()`.
+- Examples: custom-base composition, dict-keyed refs, embedded ref-records,
+  partial Update models.
+
+### Changed — round 2
+
+- `__refs__` now includes auto-detected `embedded` edges for nested
+  `ScopedModel`/projection fields; v0.1 models that nest models will see
+  additional entries (`.outgoing`/`.incoming` are unaffected).
+- `RefInfo` constructor signature changed: `many: bool` was replaced by
+  `shape: RefShape` (+ `key_type`, `scope`); `info.many` still works as a
+  read-only property.
+- `dict[K, V]`-annotated ref fields now infer `KEYED_DICT` (v0.1 inferred
+  `many=False`, which was quietly wrong).
+
 ### Added
 
 - `ScopedModel` base class: tag fields on one canonical pydantic model with

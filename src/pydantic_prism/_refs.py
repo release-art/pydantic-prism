@@ -107,9 +107,8 @@ def shape_of(annotation: Any) -> tuple[RefShape, bool, Any]:
     if origin in (Union, types.UnionType):
         args = get_args(ann)
         optional = type(None) in args
+        # a union always keeps >= 1 non-None member (X | X collapses to X)
         rest = [arg for arg in args if arg is not type(None)]
-        if not rest:
-            return RefShape.SCALAR, optional, None
         shapes = [shape_of(arg) for arg in rest]
         first_shape, _, first_key = shapes[0]
         # a non-scalar shape only when every union member agrees on it

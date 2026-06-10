@@ -187,7 +187,9 @@ class _Union(ScopeExpr):
         return any(operand.selects(tag) for operand in self.operands)
 
     def atoms(self) -> frozenset[type[Scope]]:
-        return frozenset().union(*(operand.atoms() for operand in self.operands))
+        return frozenset(
+            scope for operand in self.operands for scope in operand.atoms()
+        )
 
     def token(self) -> str:
         return "Or".join(operand.token() for operand in self.operands)
@@ -210,7 +212,9 @@ class _Intersection(ScopeExpr):
         return all(operand.selects(tag) for operand in self.operands)
 
     def atoms(self) -> frozenset[type[Scope]]:
-        return frozenset().union(*(operand.atoms() for operand in self.operands))
+        return frozenset(
+            scope for operand in self.operands for scope in operand.atoms()
+        )
 
     def token(self) -> str:
         return "And".join(operand.token() for operand in self.operands)

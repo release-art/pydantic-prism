@@ -87,7 +87,8 @@ def demo() -> None:
     (customer,) = resolve(order, "customer_id")
     (product,) = resolve(order, "product_ids")
     print(
-        f"\nresolved: order {order.id} -> customer {customer.name!r}, products [{product.title!r}]"
+        f"\nresolved: order {order.id} -> customer {customer.name!r}, "
+        f"products [{product.title!r}]"
     )
 
 

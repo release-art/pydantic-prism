@@ -150,6 +150,7 @@ def test_model_validators_do_not_carry_over() -> None:
 
     with pytest.raises(ValidationError):
         Pair(a=1, b=2)
+    assert Pair(a=1, b=1).a == 1
     # the projection drops b; the model validator would be unsatisfiable
     assert Pair.scope(Public)(a=1).a == 1
 
