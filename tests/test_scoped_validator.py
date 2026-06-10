@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError, model_validator
 
 from pydantic_prism import (
+    MISSING,
     Scope,
     ScopedModel,
     ScopeExpr,
@@ -44,9 +45,9 @@ class M(ScopedModel):
 
     @scoped_validator(Storage, mode="after")
     def set_n(self) -> "M":
-        # guard against None: this carries to partial Update too (Update selects
-        # Storage), where surviving fields may be absent.
-        if self.a is not None:
+        # guard against MISSING: this carries to the partial Update projection
+        # too (Update selects Storage), where surviving fields may be absent.
+        if self.a is not MISSING:
             object.__setattr__(self, "n", len(self.a))
         return self
 

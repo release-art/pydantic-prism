@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Union, cast, get_args, get_origin
 
+from pydantic.experimental.missing_sentinel import MISSING
+
 from ._drift import projection_signature
 from ._model import (
     Projection,
@@ -331,6 +333,10 @@ def _render_bare(annotation: Any, imports: _Imports) -> str:
     if annotation is Any:
         imports.add_typing("typing", "Any")
         return "Any"
+    if annotation is MISSING:
+        # the partial-scope optional marker (pydantic 2.12 sentinel)
+        imports.add_typing("pydantic.experimental.missing_sentinel", "MISSING")
+        return "MISSING"
     if isinstance(annotation, type):
         return _render_type_ref(annotation, imports)
     raise CodegenError(
@@ -407,6 +413,9 @@ def _field_suffix(info: Any, imports: _Imports) -> str:
     """
     if info.is_required():
         return ""
+    if info.default is MISSING:  # partial-scope field
+        imports.add_typing("pydantic.experimental.missing_sentinel", "MISSING")
+        return " = MISSING"
     if info.default_factory is not None:
         for factory in _FACTORIES:
             if info.default_factory is factory:

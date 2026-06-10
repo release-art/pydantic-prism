@@ -16,8 +16,11 @@ A ``Diagram`` renders to ``.to_mermaid()`` / ``.to_dot()`` / ``.to_d2()`` or
 from __future__ import annotations
 
 import re
+import types
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Union, cast, get_args, get_origin
+
+from pydantic.experimental.missing_sentinel import MISSING
 
 if TYPE_CHECKING:
     from ._refs import RefGraph
@@ -258,7 +261,15 @@ def _d2_row(node_field: NodeField) -> str:
 
 
 def _type_label(annotation: Any) -> str:
-    """A concise display label for a field's annotation (module paths stripped)."""
+    """A concise display label for a field's annotation (module paths stripped).
+
+    The partial-scope ``MISSING`` optional-marker is stripped — a partial field
+    displays its underlying type (e.g. ``int``, not ``int | MISSING``).
+    """
+    if get_origin(annotation) in (Union, types.UnionType):
+        members = [a for a in get_args(annotation) if a is not MISSING]
+        if len(members) < len(get_args(annotation)):  # had MISSING
+            annotation = members[0] if len(members) == 1 else Union[tuple(members)]
     if annotation is None:
         return "None"
     if isinstance(annotation, type):

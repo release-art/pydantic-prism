@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — partial scopes use the `MISSING` sentinel (BREAKING)
+
+- A `partial=True` projection now makes each field `T | MISSING` with
+  `default=MISSING` (pydantic 2.12's missing sentinel), instead of `T | None`
+  with `default=None`. This **preserves the canonical's nullability** (a required
+  field stays non-nullable and rejects an explicit `null`; an `Optional[T]` field
+  becomes `T | None | MISSING`, so `null` and absent are distinct — the full
+  PATCH triad), and an absent field reads as `MISSING` and is omitted from
+  `model_dump()` (no `exclude_none` needed). `pydantic_prism.MISSING` re-exports
+  the sentinel for `field is MISSING` checks.
+  - **Breaking:** absent fields now read as `MISSING`, not `None`; partial JSON
+    schemas are no longer blanket-nullable; partial field defaults are `MISSING`.
+  - **Dependency:** minimum pydantic bumped `>=2.7` → **`>=2.12`**; uses
+    pydantic's `experimental.missing_sentinel`.
+  - Generated stubs render partial fields as `T | MISSING = MISSING` (description
+    + signature aware); diagram/README type labels strip the `MISSING` marker.
+
 ### Changed — Mermaid output is now `classDiagram`
 
 - Diagrams render Mermaid as a `classDiagram` (proper class boxes with a name

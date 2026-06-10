@@ -5,8 +5,10 @@ Run from the repository root:
     pdm run python examples/partial_update/main.py
 
 Shows: a ``partial=True`` scope turning the canonical row into a PATCH-style
-Update model — every field optional, ``None`` defaults, canonical defaults
-dropped (absent means "don't touch"), JSON schema with nothing required.
+Update model — every field optional via pydantic's ``MISSING`` sentinel (absent
+means "don't touch"; absent reads as ``MISSING`` and is omitted from dumps),
+canonical nullability preserved, canonical defaults dropped, JSON schema with
+nothing required.
 """
 
 from typing import Annotated
@@ -14,7 +16,7 @@ from uuid import UUID, uuid4
 
 from pydantic import Field
 
-from pydantic_prism import Scope, ScopedModel, scoped
+from pydantic_prism import MISSING, Scope, ScopedModel, scoped
 
 
 class Public(Scope): ...
@@ -40,11 +42,12 @@ class SiteRow(ScopedModel):
 def demo() -> None:
     SiteUpdate = SiteRow.scope(Update)
 
-    empty = SiteUpdate()  # valid: every field defaults to None
-    print(f"empty update dumps to: {empty.model_dump(exclude_none=True)}")
+    empty = SiteUpdate()  # valid: every field is absent (MISSING) by default
+    print(f"empty update — url is MISSING: {empty.url is MISSING}")  # type: ignore[attr-defined]
+    print(f"empty update dumps to: {empty.model_dump()}")  # MISSING auto-omitted
 
     patch = SiteUpdate(url="https://example.org")
-    print(f"sparse update: {patch.model_dump(exclude_none=True)}")
+    print(f"sparse update: {patch.model_dump()}")
 
     schema = SiteUpdate.model_json_schema()
     print(f"schema requires: {schema.get('required', 'nothing')}")

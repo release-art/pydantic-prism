@@ -1,12 +1,12 @@
-"""Partial scopes: the all-fields-optional Update projection."""
+"""Partial scopes: the all-fields-optional Update projection (MISSING sentinel)."""
 
-from typing import Annotated
+from typing import Annotated, Optional
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from pydantic_prism import Scope, ScopedModel, scoped
+from pydantic_prism import MISSING, Scope, ScopedModel, scoped
 
 
 class Public(Scope): ...
@@ -27,16 +27,17 @@ class Row(ScopedModel):
 
 def test_partial_projection_validates_empty_input() -> None:
     update = Row.scope(Update)()
-    assert update.id is None  # type: ignore[attr-defined]
-    assert update.name is None  # type: ignore[attr-defined]
+    # absent fields read as the MISSING sentinel (not None)
+    assert update.id is MISSING  # type: ignore[attr-defined]
+    assert update.name is MISSING  # type: ignore[attr-defined]
 
 
 def test_canonical_defaults_are_dropped() -> None:
     """PATCH semantics: absent means "don't touch", not "write the default"."""
     update = Row.scope(Update)()
-    assert update.status is None  # type: ignore[attr-defined]
-    sparse = update.model_dump(exclude_none=True)
-    assert sparse == {}
+    assert update.status is MISSING  # type: ignore[attr-defined]
+    # MISSING fields are omitted from a plain dump — no exclude_none needed
+    assert update.model_dump() == {}
 
 
 def test_partial_fields_still_validate_values() -> None:
@@ -48,10 +49,27 @@ def test_partial_fields_still_validate_values() -> None:
 
 def test_json_schema_reflects_optionality() -> None:
     schema = Row.scope(Update).model_json_schema()
-    assert "required" not in schema
+    assert "required" not in schema  # nothing required
     id_schema = schema["properties"]["id"]
-    assert {"type": "null"} in id_schema["anyOf"]
-    assert id_schema["default"] is None
+    # a required canonical field stays NON-nullable in the partial projection
+    assert "anyOf" not in id_schema
+    assert id_schema["type"] == "string"
+    assert "default" not in id_schema  # MISSING is not a JSON default
+
+
+def test_partial_preserves_canonical_nullability() -> None:
+    class Account(ScopedModel):
+        name: Annotated[str, scoped(Public)]  # required -> not nullable
+        nickname: Annotated[Optional[str], scoped(Public)] = None  # nullable
+
+    patch = Account.scope(Update)
+    # required field: null rejected, absent fine
+    with pytest.raises(ValidationError):
+        patch(name=None)
+    assert patch().name is MISSING  # type: ignore[attr-defined]
+    # nullable field: null is a distinct, dumpable value; absent is omitted
+    assert patch(nickname=None).model_dump() == {"nickname": None}
+    assert patch(name="x").model_dump() == {"name": "x"}  # nickname absent
 
 
 def test_from_canonical_round_trip() -> None:
@@ -98,5 +116,5 @@ def test_partial_propagates_into_nested_models() -> None:
 
     projected = Outer.scope(Update)
     instance = projected(inner={})
-    assert instance.inner.label is None  # type: ignore[attr-defined]
-    assert projected() is not None  # inner itself is optional too
+    assert instance.inner.label is MISSING  # type: ignore[attr-defined]
+    assert projected().inner is MISSING  # type: ignore[attr-defined]  # inner optional too

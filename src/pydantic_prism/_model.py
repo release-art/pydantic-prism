@@ -14,7 +14,6 @@ from typing import (
     ClassVar,
     ForwardRef,
     Literal,
-    Optional,
     Self,
     Union,
     cast,
@@ -23,6 +22,7 @@ from typing import (
 )
 
 from pydantic import BaseModel, create_model, field_validator, model_validator
+from pydantic.experimental.missing_sentinel import MISSING
 from pydantic.fields import FieldInfo
 
 from ._markers import PRISM_MARKERS, BackRef, Ref, Scoped
@@ -662,10 +662,14 @@ def _project(
         info.metadata = [m for m in info.metadata if not isinstance(m, PRISM_MARKERS)]
         info.annotation = _rewrite(info.annotation, expr, ctx)
         if partial:
-            # Partial scope: every field optional, default None, canonical
-            # defaults dropped (PATCH semantics: absent means "don't touch").
-            info.annotation = cast(Any, Optional[info.annotation])  # noqa: UP045 — runtime types
-            info.default = None
+            # Partial scope: every field becomes optional via the MISSING
+            # sentinel (PATCH semantics — absent means "don't touch"). The
+            # canonical's own nullability is preserved (a required field stays
+            # non-nullable; an Optional one keeps None as a distinct value), and
+            # canonical defaults are dropped: an absent field reads as MISSING
+            # and is omitted from model_dump(), distinct from an explicit null.
+            info.annotation = cast(Any, info.annotation | MISSING)
+            info.default = MISSING
             info.default_factory = None
         field_definitions[field_name] = (info.annotation, info)
 

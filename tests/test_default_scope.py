@@ -7,6 +7,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from pydantic_prism import (
+    MISSING,
     EmptyProjectionError,
     Scope,
     ScopedModel,
@@ -172,12 +173,10 @@ def test_partial_flows_through_default_scoped_fields() -> None:
     # default-scoped Storage fields survive into the Update projection...
     assert "container_name" in update.model_fields
     instance = update()
-    # ...and are optional with None defaults, exactly like explicit ones.
-    assert instance.container_name is None  # type: ignore[attr-defined]
-    assert instance.md5_hash is None  # type: ignore[attr-defined]
-    assert update(container_name="c").model_dump(exclude_none=True) == {
-        "container_name": "c"
-    }
+    # ...and are optional (absent -> MISSING), exactly like explicit ones.
+    assert instance.container_name is MISSING  # type: ignore[attr-defined]
+    assert instance.md5_hash is MISSING  # type: ignore[attr-defined]
+    assert update(container_name="c").model_dump() == {"container_name": "c"}
 
 
 # --- error on bad value ----------------------------------------------------

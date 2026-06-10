@@ -5,7 +5,7 @@ description = "Derive filtered subsets of pydantic models by tagging fields with
 authors = [
     {name = "Ilja Orlovs",email = "IljaOrlovs@users.noreply.github.com"},
 ]
-dependencies = ["pydantic>=2.7"]
+dependencies = ["pydantic>=2.12"]
 requires-python = ">=3.12"
 readme = "README.md"
 license = "MIT"

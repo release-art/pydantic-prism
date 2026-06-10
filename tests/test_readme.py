@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from pydantic_prism import (
+    MISSING,
     RefShape,
     Scope,
     ScopedModel,
@@ -344,8 +345,9 @@ class CanonicalRow(ScopedModel):
 
 def test_partial_scope_example() -> None:
     RowUpdate = CanonicalRow.scope(Update)
-    assert RowUpdate().model_dump(exclude_none=True) == {}
-    assert RowUpdate(name="new").model_dump(exclude_none=True) == {"name": "new"}
+    assert RowUpdate().name is MISSING  # type: ignore[attr-defined]  # absent
+    assert RowUpdate().model_dump() == {}  # MISSING auto-omitted
+    assert RowUpdate(name="new").model_dump() == {"name": "new"}
     assert "required" not in RowUpdate.model_json_schema()
 
 

@@ -905,6 +905,32 @@ surfaced in `as_dict`. **Caveat:** Mermaid/D2 output is not validated locally (n
 renderer in the toolchain) — verified by eye and on GitHub, like the earlier
 edge-label fix.
 
+## 67. Partial scopes → the `MISSING` sentinel (supersedes decision 25, round 15)
+
+Decision 25 forced every partial field to `T | None` with `default=None` —
+wrongly nullable, and absent indistinguishable from null at the attribute level.
+Replaced with pydantic 2.12's `experimental.missing_sentinel.MISSING`: a partial
+field becomes `T | MISSING` (default `MISSING`), **preserving the canonical's
+nullability** (required → non-nullable; `Optional[T]` → `T | None | MISSING`, so
+null and absent are distinct — the full PATCH triad). Absent reads as `MISSING`
+and is omitted from `model_dump()` (no `exclude_none`); a non-nullable field
+rejects an explicit `null`. `with_updates` is unaffected in mechanism
+(`exclude_unset`) but gains precision (patch-to-null distinct from absent).
+Touches `_project`'s partial branch (not additive). Costs accepted: **breaking**
+behavior change (pre-1.0); **pydantic floor `>=2.7` → `>=2.12`**; dependence on
+an **experimental** pydantic API — isolated to a few lines in `_project` (plus
+`MISSING`-aware rendering in codegen/diagram) for easy revert. `pydantic_prism`
+re-exports `MISSING`. See docs/design-round-15.md.
+
+## Round-15 notes
+
+- Codegen stubs render partial fields faithfully as `T | MISSING = MISSING`
+  (importing the sentinel under `TYPE_CHECKING`); `MISSING` is part of the drift
+  signature. Diagram/README labels **strip** the `MISSING` marker (show the
+  underlying type) — the projection node already conveys "partial".
+- `_type_label` strips a `MISSING` union member; `_render_bare`/`_field_suffix`
+  in codegen special-case the sentinel.
+
 ## 65. `build_readme` gained `regen_hint`; relationships gated on edges
 
 The do-not-edit banner now names the producing command (`regen_hint`) — `prism

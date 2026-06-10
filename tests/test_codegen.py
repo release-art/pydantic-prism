@@ -187,8 +187,8 @@ def test_generate_contains_expected_shapes(tmp_path: Path) -> None:
     text = generate(_config(tmp_path, projections=(spec,)))
     # nested projection referenced statically
     assert "tags: list[TagPublic]" in text
-    # partial fields optional with None default
-    assert "container_name: str | None = None" in text
+    # partial fields are optional via the MISSING sentinel (not None)
+    assert "container_name: str | MISSING = MISSING" in text
     # carried base in the shim bases
     assert "class ScreenshotRef(CarrierBase, Projection):" in text
     # field-default variants
@@ -533,9 +533,15 @@ def test_field_suffix_branches() -> None:
     assert _field_suffix(fields["tags"], imp) == ""
     # non-builtin factory (uuid4) -> conservative, no suffix
     assert _field_suffix(fx.Tag.scope(fx.Ref).model_fields["id"], imp) == ""
-    # forced-None default on a partial projection
+    # MISSING-sentinel default on a partial projection
     update = fx.Screenshot.scope(fx.Update).model_fields
-    assert _field_suffix(update["container_name"], imp) == " = None"
+    assert _field_suffix(update["container_name"], imp) == " = MISSING"
+
+    # an Optional field with a None default renders ` = None`
+    class HasNone(fx.ScopedModel):
+        opt: Annotated[Optional[str], fx.scoped(fx.Public)] = None
+
+    assert _field_suffix(HasNone.scope(fx.Public).model_fields["opt"], imp) == " = None"
 
 
 # --- the static-typing payoff, checked by pyright --------------------------

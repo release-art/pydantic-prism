@@ -390,26 +390,39 @@ RowPublic = Row.scope(Public)        # isinstance(RowPublic(...), AzureTableBase
 ## Partial scopes — the Update model
 
 Declaring a scope with `partial=True` makes every projection to it
-all-optional, with `None` defaults — the classic PATCH/Update shape:
+all-optional — the classic PATCH/Update shape. A field is omitted by default
+(via pydantic 2.12's `MISSING` sentinel), so "absent" is genuinely distinct from
+an explicit `null`:
 
 ```python
+from pydantic_prism import MISSING
+
 class Update(Storage, partial=True): ...
 
 
 RowUpdate = CanonicalRow.scope(Update)
-RowUpdate()                            # valid: every field defaults to None
-RowUpdate(name="new").model_dump(exclude_none=True)   # {"name": "new"}
+RowUpdate()                       # valid: every field absent
+RowUpdate().name is MISSING       # True — absent reads as the sentinel
+RowUpdate(name="new").model_dump()    # {"name": "new"} — MISSING auto-omitted
 ```
 
-- Every surviving field becomes `T | None` with `default=None`. Canonical
-  defaults are **dropped**: an update model's contract is "absent means
-  don't touch", and a surviving default would be silently written back.
-- JSON schema reflects it: no `required`, fields nullable.
+- Every surviving field `T` becomes `T | MISSING` with `default=MISSING`.
+  Canonical **nullability is preserved**: a required field stays non-nullable (a
+  patch can't set it to `null`), while an `Optional[T]` field becomes
+  `T | None | MISSING` — so `null` (set the field to null) and absent (don't
+  touch) are **distinct**, the full PATCH triad.
+- Canonical defaults are **dropped** (absent ≠ default); an absent field reads
+  as `MISSING` and is omitted from `model_dump()` — no `exclude_none` needed.
+- JSON schema reflects it: no `required`, and fields are nullable **only** where
+  the canonical was.
 - The flag inherits down the scope graph; an expression is partial iff
   **all** its atoms are partial (mixing `Update | Public` yields a regular
   projection).
 - Scope propagation applies: nested models inside a partial projection are
-  partial too.
+  partial too. `instance.with_updates(patch)` (see "Round trips") applies one.
+
+> Requires `pydantic>=2.12` (the `MISSING` sentinel; `pydantic_prism.MISSING`
+> re-exports it). Uses pydantic's `experimental.missing_sentinel`.
 
 ## Static types for projections
 
@@ -725,6 +738,7 @@ Everything prism adds, with exact spellings. Markers and functions:
 | name | kind | summary |
 |---|---|---|
 | `Scope` | class | Subclass to declare a scope; subclass a scope to broaden it. Root = wildcard. Never instantiated. Class keywords: `partial=True` (partial scope); `description=`/`examples=`/`json_schema_extra=` (model-level schema for projections selecting it, not inherited). |
+| `MISSING` | sentinel | pydantic 2.12's missing-sentinel, re-exported. A partial-scope field reads as `MISSING` when absent (`field is MISSING`). |
 | `ScopeExpr` | class | Scope expression; built with `\|`, `&`, `-`, `~`. Methods: `.matches(scope)`, `.selects(tag)`, `.atoms()`, `.is_partial()`. |
 | `ScopedModel` | class | Base for canonical models. Class keywords: `projection_bases=(...)`, `default_scope=` (the scope untagged fields fall back to), `projection_name_template=` (auto-name template, `{model}`/`{scope}`). |
 | `Projection` | class | Base of every derived projection class. |
@@ -829,7 +843,7 @@ the combination with a relationship graph does not.
 ## Install & develop
 
 ```sh
-pip install pydantic-prism        # pydantic >= 2.7, Python >= 3.12
+pip install pydantic-prism        # pydantic >= 2.12, Python >= 3.12
 ```
 
 ```sh
