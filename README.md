@@ -609,6 +609,33 @@ narrower scope's prose). Both levels are schema-only — no effect on validation
 membership, refs, or runtime shape; a pre-existing `json_schema_extra` (dict or
 callable) on the canonical is preserved and merged.
 
+## Diagrams
+
+Export prism's structure to graph formats — for docs, review, or just seeing the
+shape of things. Three builders produce a `Diagram`; each renders to Mermaid,
+DOT (Graphviz), D2, or `as_dict()` (the raw IR, for JSON / any other tool). prism
+emits **text only** — no Graphviz/Mermaid/D2 dependency; pipe the output to those
+tools yourself.
+
+```python
+from pydantic_prism import scope_diagram, projection_diagram
+
+scope_diagram(Update).to_mermaid()        # the Scope hierarchy (partial scopes styled)
+projection_diagram(User).to_dot()         # a model + its generated projections, with fields
+User.__refs__.diagram().to_d2()           # the cross-model ref/backref/embedded graph
+scope_diagram().as_dict()                 # no args: every declared scope, as JSON-able data
+```
+
+- **`scope_diagram(*scopes)`** — the inheritance graph (`Derived --extends-->
+  Base`); ancestors are pulled in so it's connected, partial scopes are styled.
+  No args = every declared `Scope`. For a model's scopes, `scope_diagram(*User.scopes())`.
+- **`projection_diagram(Model)`** — the canonical model and one node per scope in
+  `Model.scopes()`, each listing its surviving fields (so the narrowing shows).
+- **`Model.__refs__.diagram()`** — models reachable via `walk()`, edges labelled
+  `field (kind)`.
+- Every builder takes `direction="TD"` (default) or `"LR"`. `Diagram` carries
+  `.to_mermaid()`, `.to_dot()`, `.to_d2()`, `.as_dict()`.
+
 ## FastAPI
 
 ```python
@@ -707,6 +734,15 @@ The relationship graph:
 | `RefInfo` | dataclass | Base edge: `.field_name`, `.target`, `.target_field`, `.shape`, `.optional`, `.kind`, `.key_type` (shape-driven), `.many` (derived). `__refs__[name]` is typed as this; narrow with `isinstance`/`match .kind`. |
 | `IdRefInfo` / `BackRefInfo` / `EmbeddedRefInfo` | dataclass | `RefInfo` variants by `kind`: forward id ref / declared reverse (`+ .via: str`) / embedded carrier or composition (`+ .scope: ScopeExpr \| None`). |
 
+Diagram export (see "Diagrams"):
+
+| name | kind | summary |
+|---|---|---|
+| `scope_diagram(*scopes, direction="TD")` | function | The scope-inheritance `Diagram`; no args = all declared scopes. |
+| `projection_diagram(Model, *, direction="TD")` | function | A canonical model + its generated projections (with fields) as a `Diagram`. |
+| `RefGraph.diagram(*, direction="TD")` | method | The cross-model relationship `Diagram`. |
+| `Diagram` | dataclass | `.to_mermaid()`, `.to_dot()`, `.to_d2()`, `.as_dict()`; `.nodes`, `.edges`, `.direction`. |
+
 Static-typing CLI (see "Static types for projections"):
 
 | name | kind | summary |
@@ -733,6 +769,7 @@ the combination with a relationship graph does not.
 | custom pydantic bases on derived models | `projection_bases=`/`bases=`, isinstance-true | — | — |
 | static-typing of derived models | `prism gen` stubs (universal: pyright/Pylance/mypy) + startup drift check | — | — |
 | per-projection schema metadata | per-scope field & model `description`/`examples`/`json_schema_extra` | — | — |
+| diagram export | scope / projection / relationship graphs → Mermaid, DOT, D2, JSON | — | — |
 | validators on derived models | field validators carried; model validators via `@scoped_validator` or carried bases | lost | lost |
 | implicit behavior | none | call-stack sniffing can switch modes; `model_validate` may return a different class | registry monkey-patched onto your class |
 | Python | 3.12+ | 3.9+ (claimed) | 3.13+ |

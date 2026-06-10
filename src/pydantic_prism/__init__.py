@@ -5,6 +5,7 @@ derive real pydantic model subclasses per scope, and keep FK-style
 relationships introspectable across projections.
 """
 
+from ._diagram import Diagram, projection_diagram, scope_diagram
 from ._markers import BackRef, Ref, Scoped, backref, ref, scoped
 from ._model import Projection, ScopedModel
 from ._refs import (
@@ -29,6 +30,7 @@ from .errors import (
 __all__ = [
     "BackRef",
     "BackRefInfo",
+    "Diagram",
     "EmbeddedRefInfo",
     "EmptyProjectionError",
     "IdRefInfo",
@@ -47,7 +49,9 @@ __all__ = [
     "ScopedModel",
     "StaleProjectionStubError",
     "backref",
+    "projection_diagram",
     "ref",
+    "scope_diagram",
     "scoped",
     "scoped_validator",
 ]

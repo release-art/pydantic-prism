@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 10 (diagram export)
+
+- Export prism structure to graph formats (text only — no Graphviz/Mermaid/D2
+  dependency). Three builders return a `Diagram` that renders to `.to_mermaid()`,
+  `.to_dot()`, `.to_d2()`, or `.as_dict()` (the JSON-serializable IR):
+  - `scope_diagram(*scopes)` — the `Scope` inheritance graph (ancestors pulled
+    in, partial scopes styled); no args = every declared scope.
+  - `projection_diagram(Model)` — a canonical model and the projections it
+    generates (one per scope), each node listing its surviving fields.
+  - `RefGraph.diagram()` — the cross-model `ref`/`backref`/`embedded` graph
+    reachable from a model.
+  - All take `direction="TD"|"LR"`; `Diagram`, `scope_diagram`,
+    `projection_diagram` are exported.
+
 ### Changed — round 9 (RefInfo discriminated by kind)
 
 - `RefInfo` is now the **base** of three kind-discriminated variants:

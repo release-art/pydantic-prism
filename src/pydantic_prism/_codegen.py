@@ -470,6 +470,10 @@ def _render_class(proj: type[Projection], imports: _Imports) -> str:
     for name, info in proj.model_fields.items():
         annotation = _render_annotation(info.annotation, imports)
         lines.append(f"        {name}: {annotation}{_field_suffix(info, imports)}")
+        # Preserve the field's description as an attribute docstring — surfaced
+        # by pyright/Pylance on hover; the runtime object carries the real one.
+        if info.description:
+            lines.append(f"        {info.description!r}")
     return "\n".join(lines)
 
 

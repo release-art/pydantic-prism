@@ -732,3 +732,60 @@ already by kind.
 - Runtime-safe for existing readers: `.via` is only read on backref edges,
   `.scope` only on embedded edges, `.key_type`/`.many` on the base — verified
   across tests and examples before the change.
+
+---
+
+# API decision record — round 10 (diagram export)
+
+Phase 2 output, 2026-06-10. Export prism structure to graph formats. See
+docs/design-round-10.md.
+
+## 55. Graphs → all three (scope / projection / relationship)
+
+Options: all three (recommended) / a subset.
+**Chosen: all three.** `scope_diagram(*scopes)` (the `Scope` hierarchy,
+ancestors pulled in, partial scopes styled), `projection_diagram(model)` (a
+canonical and its generated projections, with surviving fields), and
+`RefGraph.diagram()` (cross-model `ref`/`backref`/`embedded` edges, reachable via
+`walk()`). They answer different questions and share one IR, so each builder is
+cheap. "Generated models" is most literally the projection landscape; the
+relationship graph is what people usually mean by a model diagram — hence both.
+
+## 56. Formats → Mermaid + DOT + D2 + `as_dict()`
+
+Options: + D2 and `as_dict()` (recommended) / just the two musts / + PlantUML.
+**Chosen: Mermaid, DOT, D2, and `as_dict()`.** Mermaid (`graph TD` flowchart) and
+DOT (`digraph`) are the musts; D2 (modern, clean) is a natural third; `as_dict()`
+exposes the JSON-serializable IR so any other tool/format is reachable without a
+prism renderer (and makes the renderers trivially testable). PlantUML/GraphML are
+niche — a one-function add via the IR later if asked, not carried now.
+
+## 57. API → `Diagram` IR + builders + `.to_<fmt>()`
+
+Options: `Diagram` value object (recommended) / free functions per (graph,
+format).
+**Chosen: the IR.** A backend-agnostic `Diagram` (nodes + directed edges) with
+`.to_mermaid()` / `.to_dot()` / `.to_d2()` / `.as_dict()`. Builders:
+`RefGraph.diagram()` (method, discoverable on the existing object),
+`scope_diagram()` / `projection_diagram()` (top-level). One renderer per format
+× one builder per graph beats a combinatorial grid of free functions, and the IR
+is the seam that keeps "anything else?" cheap.
+
+## 58. Detail → fields in nodes
+
+Options: names-only (memo's lean) / include fields.
+**Chosen: include fields** (owner's call). Model/projection nodes list their
+fields (Mermaid `<br/>` lines, DOT `record`, D2 `shape: class`), so the
+narrowing is visible (`OrderPublic` shows it dropped the Update-only field).
+Scope nodes have no fields. Edges are labelled (`extends`, the scope name, or
+`field (kind)`).
+
+## Round-10 notes
+
+- **No new dependency:** prism emits text only; the user pipes it to
+  mermaid-cli / Graphviz / D2. Renderers handle id-sanitizing (`_Ids`, unique
+  `[A-Za-z0-9_]`) and per-format label escaping.
+- `direction` is `"TD"` or `"LR"`, mapped per format (`TD`→DOT `TB`→D2 `down`);
+  an unknown direction raises `ValueError` at the builder.
+- `RefGraph.diagram()` local-imports the builder to avoid a module cycle
+  (`_diagram` imports `_refs`/`_scopes`/`_model` for its builders).

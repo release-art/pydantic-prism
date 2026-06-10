@@ -14,7 +14,9 @@ from pydantic_prism import (
     Scope,
     ScopedModel,
     backref,
+    projection_diagram,
     ref,
+    scope_diagram,
     scoped,
     scoped_validator,
 )
@@ -237,6 +239,13 @@ class Person(ScopedModel):
         scoped(Viewer, description="User contact (public-facing)"),
         scoped(Auditor, description="User identity, for internal audit"),
     ]
+
+
+def test_diagrams_example() -> None:
+    assert "graph TD" in scope_diagram(Update).to_mermaid()
+    assert "digraph prism" in projection_diagram(User).to_dot()
+    assert "direction: down" in User.__refs__.diagram().to_d2()
+    assert "nodes" in scope_diagram().as_dict()
 
 
 def test_per_scope_schema_example() -> None:

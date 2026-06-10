@@ -14,6 +14,7 @@ from ._markers import BackRef, Ref
 from .errors import RefResolutionError
 
 if TYPE_CHECKING:
+    from ._diagram import Diagram
     from ._model import ScopedModel
     from ._scopes import ScopeExpr
 
@@ -249,6 +250,17 @@ class RefGraph(Mapping[str, RefInfo]):
                     target_graph = getattr(info.target, "__refs__", None)
                     if isinstance(target_graph, RefGraph):
                         queue.append(target_graph)
+
+    def diagram(self, *, direction: str = "TD") -> Diagram:
+        """The cross-model relationship graph as a :class:`Diagram`.
+
+        Renders with ``.to_mermaid()`` / ``.to_dot()`` / ``.to_d2()`` /
+        ``.as_dict()``. Covers the ``ref``/``backref``/``embedded`` edges
+        reachable from this model (the same span as :meth:`walk`).
+        """
+        from ._diagram import ref_diagram
+
+        return ref_diagram(self, direction=direction)
 
     def _reset(self, entries: Mapping[str, RawEdge]) -> None:
         """Replace the raw edges in place (after a model rebuild), keeping
