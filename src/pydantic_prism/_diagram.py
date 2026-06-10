@@ -108,22 +108,32 @@ class Diagram:
         }
 
     def to_mermaid(self) -> str:
-        """Render as a Mermaid flowchart (``graph TD``)."""
-        mermaid_dir = _DIRECTIONS[self.direction][0]
-        lines = [f"graph {mermaid_dir}"]
+        """Render as a Mermaid ``classDiagram`` (proper class boxes).
+
+        Chosen over a flowchart so GitHub draws a name compartment + attribute
+        list rather than ``<br/>``-stacked text in one box. Partial scopes/
+        projections get a ``«partial»`` stereotype. Generic types render with
+        Mermaid's ``~T~`` syntax; union/optional types (which would break the
+        class-member grammar) show the field name only — the full type stays in
+        ``as_dict`` and the README tables.
+        """
+        rankdir = _DIRECTIONS[self.direction][1]  # classDiagram uses TB / LR
+        lines = ["classDiagram", f"    direction {rankdir}"]
         for node in self.nodes:
-            rows = [node.label, *(_field_row(f) for f in node.fields)]
-            text = "<br/>".join(_mermaid(r) for r in rows)
-            suffix = ":::partial" if node.partial else ""
-            lines.append(f'    {node.id}["{text}"]{suffix}')
-        for edge in self.edges:
-            if edge.label:
-                # quote the label: GitHub's Mermaid parser breaks on bare
-                # parentheses/specials in an edge label (e.g. "id (ref)")
-                lines.append(f'    {edge.src} -->|"{_mermaid(edge.label)}"| {edge.dst}')
+            body: list[str] = []
+            if node.partial:
+                body.append("        <<partial>>")
+            body.extend(f"        +{_class_member(f)}" for f in node.fields)
+            if body:
+                lines.append(f"    class {node.id} {{")
+                lines.extend(body)
+                lines.append("    }")
             else:
-                lines.append(f"    {edge.src} --> {edge.dst}")
-        lines.append("    classDef partial stroke-dasharray: 5 5;")
+                lines.append(f"    class {node.id}")
+        for edge in self.edges:
+            label = _class_edge_label(edge.label)
+            arrow = f"    {edge.src} --> {edge.dst}"
+            lines.append(f"{arrow} : {label}" if label else arrow)
         return "\n".join(lines) + "\n"
 
     def to_dot(self) -> str:
@@ -172,8 +182,23 @@ class Diagram:
 # --- label escaping --------------------------------------------------------
 
 
-def _mermaid(text: str) -> str:
-    return text.replace('"', "&quot;")
+def _class_member(node_field: NodeField) -> str:
+    """A Mermaid classDiagram attribute: ``type name`` (sanitized) or ``name``.
+
+    Generics use Mermaid's ``~T~`` syntax; union/optional types contain ``|``
+    which the class-member grammar rejects, so those fall back to the name only.
+    """
+    if not node_field.type:
+        return node_field.name
+    safe = node_field.type.replace("[", "~").replace("]", "~")
+    if "|" in safe:
+        return node_field.name
+    return f"{safe} {node_field.name}"
+
+
+def _class_edge_label(label: str) -> str:
+    """A classDiagram relation label, stripped of grammar-breaking characters."""
+    return label.replace("(", "").replace(")", "").replace(":", "")
 
 
 def _dot(text: str) -> str:

@@ -5,22 +5,35 @@
 ## Scopes
 
 ```mermaid
-graph TD
-    Carrier["Carrier"]
-    Public["Public"]
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Carrier
+    class Public
 ```
 
 ## LlmSnapshot
 
 ```mermaid
-graph TD
-    LlmSnapshot["LlmSnapshot<br/>id: UUID<br/>taken_at: str<br/>prompt: str<br/>raw_response: str"]
-    LlmSnapshotCarrier["LlmSnapshotCarrier<br/>id: UUID<br/>taken_at: str"]
-    LlmSnapshotPublic["LlmSnapshotPublic<br/>id: UUID<br/>taken_at: str<br/>prompt: str<br/>raw_response: str"]
-    LlmSnapshot -->|"Carrier"| LlmSnapshotCarrier
-    LlmSnapshot -->|"Public"| LlmSnapshotPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class LlmSnapshot {
+        +UUID id
+        +str taken_at
+        +str prompt
+        +str raw_response
+    }
+    class LlmSnapshotCarrier {
+        +UUID id
+        +str taken_at
+    }
+    class LlmSnapshotPublic {
+        +UUID id
+        +str taken_at
+        +str prompt
+        +str raw_response
+    }
+    LlmSnapshot --> LlmSnapshotCarrier : Carrier
+    LlmSnapshot --> LlmSnapshotPublic : Public
 ```
 
 ### LlmSnapshotCarrier — scope `Carrier`
@@ -42,11 +55,21 @@ graph TD
 ## PageCheck
 
 ```mermaid
-graph TD
-    PageCheck["PageCheck<br/>id: UUID<br/>url: str<br/>snapshots: list[LlmSnapshotCarrier]<br/>latest_by_model: dict[str, LlmSnapshotCarrier]"]
-    PageCheckPublic["PageCheckPublic<br/>id: UUID<br/>url: str<br/>snapshots: list[LlmSnapshotCarrier]<br/>latest_by_model: dict[str, LlmSnapshotCarrier]"]
-    PageCheck -->|"Public"| PageCheckPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class PageCheck {
+        +UUID id
+        +str url
+        +list~LlmSnapshotCarrier~ snapshots
+        +dict~str, LlmSnapshotCarrier~ latest_by_model
+    }
+    class PageCheckPublic {
+        +UUID id
+        +str url
+        +list~LlmSnapshotCarrier~ snapshots
+        +dict~str, LlmSnapshotCarrier~ latest_by_model
+    }
+    PageCheck --> PageCheckPublic : Public
 ```
 
 ### PageCheckPublic — scope `Public`
@@ -61,10 +84,20 @@ graph TD
 ### PageCheck relationships
 
 ```mermaid
-graph TD
-    LlmSnapshot["LlmSnapshot<br/>id: UUID<br/>taken_at: str<br/>prompt: str<br/>raw_response: str"]
-    PageCheck["PageCheck<br/>id: UUID<br/>url: str<br/>snapshots: list[LlmSnapshotCarrier]<br/>latest_by_model: dict[str, LlmSnapshotCarrier]"]
-    PageCheck -->|"snapshots (embedded)"| LlmSnapshot
-    PageCheck -->|"latest_by_model (embedded)"| LlmSnapshot
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class LlmSnapshot {
+        +UUID id
+        +str taken_at
+        +str prompt
+        +str raw_response
+    }
+    class PageCheck {
+        +UUID id
+        +str url
+        +list~LlmSnapshotCarrier~ snapshots
+        +dict~str, LlmSnapshotCarrier~ latest_by_model
+    }
+    PageCheck --> LlmSnapshot : snapshots embedded
+    PageCheck --> LlmSnapshot : latest_by_model embedded
 ```

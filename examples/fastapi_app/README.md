@@ -5,23 +5,36 @@
 ## Scopes
 
 ```mermaid
-graph TD
-    Internal["Internal"]
-    Public["Public"]
-    Internal -->|"extends"| Public
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Internal
+    class Public
+    Internal --> Public : extends
 ```
 
 ## User
 
 ```mermaid
-graph TD
-    User["User<br/>id: UUID<br/>email: str<br/>signup_ip: str<br/>display_name: str"]
-    UserInternal["UserInternal<br/>id: UUID<br/>email: str<br/>signup_ip: str<br/>display_name: str"]
-    UserPublic["UserPublic<br/>id: UUID<br/>display_name: str"]
-    User -->|"Internal"| UserInternal
-    User -->|"Public"| UserPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class User {
+        +UUID id
+        +str email
+        +str signup_ip
+        +str display_name
+    }
+    class UserInternal {
+        +UUID id
+        +str email
+        +str signup_ip
+        +str display_name
+    }
+    class UserPublic {
+        +UUID id
+        +str display_name
+    }
+    User --> UserInternal : Internal
+    User --> UserPublic : Public
 ```
 
 ### UserInternal — scope `Internal`

@@ -5,21 +5,29 @@
 ## Scopes
 
 ```mermaid
-graph TD
-    Internal["Internal"]
-    Public["Public"]
-    Internal -->|"extends"| Public
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Internal
+    class Public
+    Internal --> Public : extends
 ```
 
 ## ComplianceAudit
 
 ```mermaid
-graph TD
-    ComplianceAudit["ComplianceAudit<br/>id: UUID<br/>expected: dict[UUID, ExpectedHighlight]<br/>found: dict[UUID, FoundHighlight]"]
-    ComplianceAuditPublic["ComplianceAuditPublic<br/>id: UUID<br/>expected: dict[UUID, ExpectedHighlightPublic]<br/>found: dict[UUID, FoundHighlightPublic]"]
-    ComplianceAudit -->|"Public"| ComplianceAuditPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class ComplianceAudit {
+        +UUID id
+        +dict~UUID, ExpectedHighlight~ expected
+        +dict~UUID, FoundHighlight~ found
+    }
+    class ComplianceAuditPublic {
+        +UUID id
+        +dict~UUID, ExpectedHighlightPublic~ expected
+        +dict~UUID, FoundHighlightPublic~ found
+    }
+    ComplianceAudit --> ComplianceAuditPublic : Public
 ```
 
 ### ComplianceAuditPublic — scope `Public`
@@ -33,24 +41,42 @@ graph TD
 ### ComplianceAudit relationships
 
 ```mermaid
-graph TD
-    ComplianceAudit["ComplianceAudit<br/>id: UUID<br/>expected: dict[UUID, ExpectedHighlight]<br/>found: dict[UUID, FoundHighlight]"]
-    ExpectedHighlight["ExpectedHighlight<br/>id: UUID<br/>quote: str"]
-    FoundHighlight["FoundHighlight<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
-    ComplianceAudit -->|"expected (ref)"| ExpectedHighlight
-    ComplianceAudit -->|"found (ref)"| FoundHighlight
-    FoundHighlight -->|"expected_id (ref)"| ExpectedHighlight
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class ComplianceAudit {
+        +UUID id
+        +dict~UUID, ExpectedHighlight~ expected
+        +dict~UUID, FoundHighlight~ found
+    }
+    class ExpectedHighlight {
+        +UUID id
+        +str quote
+    }
+    class FoundHighlight {
+        +UUID id
+        +UUID expected_id
+        +str snippet
+        +float score
+    }
+    ComplianceAudit --> ExpectedHighlight : expected ref
+    ComplianceAudit --> FoundHighlight : found ref
+    FoundHighlight --> ExpectedHighlight : expected_id ref
 ```
 
 ## ExpectedHighlight
 
 ```mermaid
-graph TD
-    ExpectedHighlight["ExpectedHighlight<br/>id: UUID<br/>quote: str"]
-    ExpectedHighlightPublic["ExpectedHighlightPublic<br/>id: UUID<br/>quote: str"]
-    ExpectedHighlight -->|"Public"| ExpectedHighlightPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class ExpectedHighlight {
+        +UUID id
+        +str quote
+    }
+    class ExpectedHighlightPublic {
+        +UUID id
+        +str quote
+    }
+    ExpectedHighlight --> ExpectedHighlightPublic : Public
 ```
 
 ### ExpectedHighlightPublic — scope `Public`
@@ -63,13 +89,27 @@ graph TD
 ## FoundHighlight
 
 ```mermaid
-graph TD
-    FoundHighlight["FoundHighlight<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
-    FoundHighlightInternal["FoundHighlightInternal<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
-    FoundHighlightPublic["FoundHighlightPublic<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str"]
-    FoundHighlight -->|"Internal"| FoundHighlightInternal
-    FoundHighlight -->|"Public"| FoundHighlightPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class FoundHighlight {
+        +UUID id
+        +UUID expected_id
+        +str snippet
+        +float score
+    }
+    class FoundHighlightInternal {
+        +UUID id
+        +UUID expected_id
+        +str snippet
+        +float score
+    }
+    class FoundHighlightPublic {
+        +UUID id
+        +UUID expected_id
+        +str snippet
+    }
+    FoundHighlight --> FoundHighlightInternal : Internal
+    FoundHighlight --> FoundHighlightPublic : Public
 ```
 
 ### FoundHighlightInternal — scope `Internal`
@@ -92,9 +132,17 @@ graph TD
 ### FoundHighlight relationships
 
 ```mermaid
-graph TD
-    ExpectedHighlight["ExpectedHighlight<br/>id: UUID<br/>quote: str"]
-    FoundHighlight["FoundHighlight<br/>id: UUID<br/>expected_id: UUID<br/>snippet: str<br/>score: float"]
-    FoundHighlight -->|"expected_id (ref)"| ExpectedHighlight
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class ExpectedHighlight {
+        +UUID id
+        +str quote
+    }
+    class FoundHighlight {
+        +UUID id
+        +UUID expected_id
+        +str snippet
+        +float score
+    }
+    FoundHighlight --> ExpectedHighlight : expected_id ref
 ```

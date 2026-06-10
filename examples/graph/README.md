@@ -5,23 +5,34 @@
 ## Scopes
 
 ```mermaid
-graph TD
-    Internal["Internal"]
-    Public["Public"]
-    Internal -->|"extends"| Public
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Internal
+    class Public
+    Internal --> Public : extends
 ```
 
 ## Customer
 
 ```mermaid
-graph TD
-    Customer["Customer<br/>id: UUID<br/>name: str<br/>order_ids: list[UUID]"]
-    CustomerInternal["CustomerInternal<br/>id: UUID<br/>name: str<br/>order_ids: list[UUID]"]
-    CustomerPublic["CustomerPublic<br/>id: UUID<br/>name: str"]
-    Customer -->|"Internal"| CustomerInternal
-    Customer -->|"Public"| CustomerPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Customer {
+        +UUID id
+        +str name
+        +list~UUID~ order_ids
+    }
+    class CustomerInternal {
+        +UUID id
+        +str name
+        +list~UUID~ order_ids
+    }
+    class CustomerPublic {
+        +UUID id
+        +str name
+    }
+    Customer --> CustomerInternal : Internal
+    Customer --> CustomerPublic : Public
 ```
 
 ### CustomerInternal — scope `Internal`
@@ -42,13 +53,27 @@ graph TD
 ## Order
 
 ```mermaid
-graph TD
-    Order["Order<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]<br/>total: Decimal"]
-    OrderInternal["OrderInternal<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]<br/>total: Decimal"]
-    OrderPublic["OrderPublic<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]"]
-    Order -->|"Internal"| OrderInternal
-    Order -->|"Public"| OrderPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Order {
+        +UUID id
+        +UUID customer_id
+        +list~UUID~ product_ids
+        +Decimal total
+    }
+    class OrderInternal {
+        +UUID id
+        +UUID customer_id
+        +list~UUID~ product_ids
+        +Decimal total
+    }
+    class OrderPublic {
+        +UUID id
+        +UUID customer_id
+        +list~UUID~ product_ids
+    }
+    Order --> OrderInternal : Internal
+    Order --> OrderPublic : Public
 ```
 
 ### OrderInternal — scope `Internal`
@@ -71,25 +96,49 @@ graph TD
 ### Order relationships
 
 ```mermaid
-graph TD
-    Customer["Customer<br/>id: UUID<br/>name: str<br/>order_ids: list[UUID]"]
-    Order["Order<br/>id: UUID<br/>customer_id: UUID<br/>product_ids: list[UUID]<br/>total: Decimal"]
-    Product["Product<br/>id: UUID<br/>title: str<br/>unit_cost: Decimal"]
-    Order -->|"customer_id (ref)"| Customer
-    Order -->|"product_ids (ref)"| Product
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Customer {
+        +UUID id
+        +str name
+        +list~UUID~ order_ids
+    }
+    class Order {
+        +UUID id
+        +UUID customer_id
+        +list~UUID~ product_ids
+        +Decimal total
+    }
+    class Product {
+        +UUID id
+        +str title
+        +Decimal unit_cost
+    }
+    Order --> Customer : customer_id ref
+    Order --> Product : product_ids ref
 ```
 
 ## Product
 
 ```mermaid
-graph TD
-    Product["Product<br/>id: UUID<br/>title: str<br/>unit_cost: Decimal"]
-    ProductInternal["ProductInternal<br/>id: UUID<br/>title: str<br/>unit_cost: Decimal"]
-    ProductPublic["ProductPublic<br/>id: UUID<br/>title: str"]
-    Product -->|"Internal"| ProductInternal
-    Product -->|"Public"| ProductPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Product {
+        +UUID id
+        +str title
+        +Decimal unit_cost
+    }
+    class ProductInternal {
+        +UUID id
+        +str title
+        +Decimal unit_cost
+    }
+    class ProductPublic {
+        +UUID id
+        +str title
+    }
+    Product --> ProductInternal : Internal
+    Product --> ProductPublic : Public
 ```
 
 ### ProductInternal — scope `Internal`

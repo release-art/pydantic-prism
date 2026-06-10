@@ -5,29 +5,45 @@
 ## Scopes
 
 ```mermaid
-graph TD
-    Internal["Internal"]
-    Pii["Pii"]
-    Public["Public"]
-    Secret["Secret"]
-    Storage["Storage"]
-    Internal -->|"extends"| Public
-    Storage -->|"extends"| Internal
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Internal
+    class Pii
+    class Public
+    class Secret
+    class Storage
+    Internal --> Public : extends
+    Storage --> Internal : extends
 ```
 
 ## Address
 
 ```mermaid
-graph TD
-    Address["Address<br/>id: UUID<br/>city: str<br/>line1: str<br/>postcode: str"]
-    AddressInternal["AddressInternal<br/>id: UUID<br/>city: str<br/>line1: str<br/>postcode: str"]
-    AddressPii["AddressPii<br/>line1: str<br/>postcode: str"]
-    AddressPublic["AddressPublic<br/>id: UUID<br/>city: str"]
-    Address -->|"Internal"| AddressInternal
-    Address -->|"Pii"| AddressPii
-    Address -->|"Public"| AddressPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Address {
+        +UUID id
+        +str city
+        +str line1
+        +str postcode
+    }
+    class AddressInternal {
+        +UUID id
+        +str city
+        +str line1
+        +str postcode
+    }
+    class AddressPii {
+        +str line1
+        +str postcode
+    }
+    class AddressPublic {
+        +UUID id
+        +str city
+    }
+    Address --> AddressInternal : Internal
+    Address --> AddressPii : Pii
+    Address --> AddressPublic : Public
 ```
 
 ### AddressInternal — scope `Internal`
@@ -56,15 +72,33 @@ graph TD
 ## Order
 
 ```mermaid
-graph TD
-    Order["Order<br/>id: UUID<br/>user_id: UUID<br/>ship_to_id: UUID<br/>card_last4: str<br/>total: Decimal"]
-    OrderInternal["OrderInternal<br/>id: UUID<br/>user_id: UUID<br/>ship_to_id: UUID<br/>card_last4: str<br/>total: Decimal"]
-    OrderPii["OrderPii<br/>card_last4: str"]
-    OrderPublic["OrderPublic<br/>id: UUID<br/>user_id: UUID<br/>ship_to_id: UUID"]
-    Order -->|"Internal"| OrderInternal
-    Order -->|"Pii"| OrderPii
-    Order -->|"Public"| OrderPublic
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Order {
+        +UUID id
+        +UUID user_id
+        +UUID ship_to_id
+        +str card_last4
+        +Decimal total
+    }
+    class OrderInternal {
+        +UUID id
+        +UUID user_id
+        +UUID ship_to_id
+        +str card_last4
+        +Decimal total
+    }
+    class OrderPii {
+        +str card_last4
+    }
+    class OrderPublic {
+        +UUID id
+        +UUID user_id
+        +UUID ship_to_id
+    }
+    Order --> OrderInternal : Internal
+    Order --> OrderPii : Pii
+    Order --> OrderPublic : Public
 ```
 
 ### OrderInternal — scope `Internal`
@@ -94,32 +128,79 @@ graph TD
 ### Order relationships
 
 ```mermaid
-graph TD
-    Address["Address<br/>id: UUID<br/>city: str<br/>line1: str<br/>postcode: str"]
-    Order["Order<br/>id: UUID<br/>user_id: UUID<br/>ship_to_id: UUID<br/>card_last4: str<br/>total: Decimal"]
-    User["User<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>password_hash: str<br/>address_id: UUID"]
-    Order -->|"user_id (ref)"| User
-    Order -->|"ship_to_id (ref)"| Address
-    User -->|"address_id (ref)"| Address
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Address {
+        +UUID id
+        +str city
+        +str line1
+        +str postcode
+    }
+    class Order {
+        +UUID id
+        +UUID user_id
+        +UUID ship_to_id
+        +str card_last4
+        +Decimal total
+    }
+    class User {
+        +UUID id
+        +str display_name
+        +str email
+        +str phone
+        +str password_hash
+        +UUID address_id
+    }
+    Order --> User : user_id ref
+    Order --> Address : ship_to_id ref
+    User --> Address : address_id ref
 ```
 
 ## User
 
 ```mermaid
-graph TD
-    User["User<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>password_hash: str<br/>address_id: UUID"]
-    UserInternal["UserInternal<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>address_id: UUID"]
-    UserPii["UserPii<br/>email: str<br/>phone: str"]
-    UserPublic["UserPublic<br/>id: UUID<br/>display_name: str<br/>email: str"]
-    UserSecret["UserSecret<br/>password_hash: str"]
-    UserStorage["UserStorage<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>password_hash: str<br/>address_id: UUID"]
-    User -->|"Internal"| UserInternal
-    User -->|"Pii"| UserPii
-    User -->|"Public"| UserPublic
-    User -->|"Secret"| UserSecret
-    User -->|"Storage"| UserStorage
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class User {
+        +UUID id
+        +str display_name
+        +str email
+        +str phone
+        +str password_hash
+        +UUID address_id
+    }
+    class UserInternal {
+        +UUID id
+        +str display_name
+        +str email
+        +str phone
+        +UUID address_id
+    }
+    class UserPii {
+        +str email
+        +str phone
+    }
+    class UserPublic {
+        +UUID id
+        +str display_name
+        +str email
+    }
+    class UserSecret {
+        +str password_hash
+    }
+    class UserStorage {
+        +UUID id
+        +str display_name
+        +str email
+        +str phone
+        +str password_hash
+        +UUID address_id
+    }
+    User --> UserInternal : Internal
+    User --> UserPii : Pii
+    User --> UserPublic : Public
+    User --> UserSecret : Secret
+    User --> UserStorage : Storage
 ```
 
 ### UserInternal — scope `Internal`
@@ -167,9 +248,21 @@ graph TD
 ### User relationships
 
 ```mermaid
-graph TD
-    Address["Address<br/>id: UUID<br/>city: str<br/>line1: str<br/>postcode: str"]
-    User["User<br/>id: UUID<br/>display_name: str<br/>email: str<br/>phone: str<br/>password_hash: str<br/>address_id: UUID"]
-    User -->|"address_id (ref)"| Address
-    classDef partial stroke-dasharray: 5 5;
+classDiagram
+    direction TB
+    class Address {
+        +UUID id
+        +str city
+        +str line1
+        +str postcode
+    }
+    class User {
+        +UUID id
+        +str display_name
+        +str email
+        +str phone
+        +str password_hash
+        +UUID address_id
+    }
+    User --> Address : address_id ref
 ```
