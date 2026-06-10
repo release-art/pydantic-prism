@@ -5,7 +5,7 @@
     width="95.99"
     height="20"
     role="img"
-    aria-label="coverage: 75%"
+    aria-label="coverage: 99%"
 >
     <style>
         rect {
@@ -26,7 +26,7 @@
             fill: #010101;
         }
     </style>
-    <title>coverage: 75%</title>
+    <title>coverage: 99%</title>
     <linearGradient id="s" x2="0" y2="100%">
         <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
         <stop offset="1" stop-opacity=".1"/>
@@ -43,10 +43,10 @@
             </g>
         </g>
         <g transform="translate(60.17 0)">
-            <rect width="35.82" fill="#a4a61d"/>
+            <rect width="35.82" fill="#4c1"/>
             <g transform="scale(.1)">
-                <text x="179.1" y="100" textLength="258.2" class="shadow">75%</text>
-                <text x="179.1" y="100" textLength="258.2">75%</text>
+                <text x="179.1" y="100" textLength="258.2" class="shadow">99%</text>
+                <text x="179.1" y="100" textLength="258.2">99%</text>
             </g>
         </g>
         <rect width="100%" height="100%" fill="url(#s)"/>

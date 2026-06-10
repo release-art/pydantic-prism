@@ -54,3 +54,19 @@ interface per projection with the same staleness guard as the Python stubs,
 ideally by composing an existing JSON-Schema→TS tool rather than hand-rolling.
 High ceiling (cross-stack single-source-of-truth is a strong story), but gated
 on the core projection story being solid.
+
+## Other codegen targets (same machinery, lower priority)
+
+The "emit per-projection types in language/framework X, drift-guarded" pattern
+generalizes. Noted so they aren't re-discovered as separate features:
+
+- **GraphQL / Strawberry.** Strawberry's pydantic integration is *experimental*,
+  forces a second class per type, and the generated types **don't run pydantic
+  validation** ([docs](https://strawberry.rocks/docs/integrations/pydantic)) —
+  so per-projection GraphQL types (one prism projection → one GraphQL type) is a
+  real gap. Same emitter pattern as `--ts`.
+- **MCP tool schemas** fold into the [LLM tool-schema](use-case-llm-tool-schema.md)
+  note — an MCP tool input *is* a JSON-Schema projection; no separate work.
+
+Each is "another target for the same per-projection + drift-guard engine", not a
+new concept. Sequence all of them after the core projection vocabulary is solid.

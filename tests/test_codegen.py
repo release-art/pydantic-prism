@@ -307,6 +307,120 @@ def test_main_missing_config_file(
     assert "prism:" in capsys.readouterr().err
 
 
+# --- diagram subcommand ----------------------------------------------------
+
+_FX = "tests._codegen_fixtures"
+
+
+@pytest.mark.parametrize(
+    ("argv", "needle"),
+    [
+        (["diagram", "scope"], "graph TD"),  # no paths = all scopes
+        (["diagram", "scope", f"{_FX}:Public", "--format", "dot"], "digraph prism"),
+        (["diagram", "projection", f"{_FX}:Screenshot", "--format", "d2"], "direction"),
+        (["diagram", "refs", f"{_FX}:Screenshot", "--format", "json"], '"nodes"'),
+        (["diagram", "scope", "--direction", "LR"], "graph LR"),
+    ],
+)
+def test_diagram_to_stdout(
+    argv: list[str], needle: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(argv) == 0
+    assert needle in capsys.readouterr().out
+
+
+def test_diagram_to_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    out = tmp_path / "d.mmd"
+    assert main(["diagram", "projection", f"{_FX}:Screenshot", "--output", str(out)]) == 0
+    assert "graph TD" in out.read_text()
+    assert "wrote mermaid diagram" in capsys.readouterr().out
+
+
+def test_diagram_wrong_kind_path(capsys: pytest.CaptureFixture[str]) -> None:
+    # a Scope where a model is wanted
+    assert main(["diagram", "projection", f"{_FX}:Public"]) == 2
+    assert "not a ScopedModel" in capsys.readouterr().err
+    # a model where a scope is wanted
+    assert main(["diagram", "scope", f"{_FX}:Screenshot"]) == 2
+    assert "not a Scope" in capsys.readouterr().err
+
+
+def test_diagram_projection_needs_one_path(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["diagram", "projection"]) == 2  # zero paths
+    assert "exactly one" in capsys.readouterr().err
+
+
+# --- generated README ------------------------------------------------------
+
+
+def _readme_pyproject(tmp_path: Path) -> Path:
+    return _write_pyproject(
+        tmp_path,
+        "[tool.pydantic-prism]\n"
+        'output = "out.py"\n'
+        'readme = "GENERATED.md"\n'
+        f'modules = ["{_FX}"]\n',
+    )
+
+
+def test_gen_writes_readme_with_diagrams_and_tables(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["gen", "--config", str(_readme_pyproject(tmp_path))]) == 0
+    readme = (tmp_path / "GENERATED.md").read_text()
+    assert "```mermaid" in readme  # GitHub-rendered diagrams
+    assert "## Scopes" in readme
+    assert "| field | type | description |" in readme  # docs table
+    assert "A storage container name." in readme  # field description flows in
+    assert "A stored screenshot row." in readme  # model docstring flows in
+    assert "wrote README" in capsys.readouterr().out
+
+
+def test_check_detects_stale_readme(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pyproject = _readme_pyproject(tmp_path)
+    main(["gen", "--config", str(pyproject)])
+    capsys.readouterr()
+    # stub fresh, README tampered -> check fails on the README
+    (tmp_path / "GENERATED.md").write_text("# stale\n", encoding="utf-8")
+    assert main(["check", "--config", str(pyproject)]) == 1
+    assert "GENERATED.md is out of date" in capsys.readouterr().err
+
+
+def test_readme_cli_override(tmp_path: Path) -> None:
+    # --readme overrides/enables README even without config `readme`
+    pyproject = _cli_pyproject(tmp_path)  # no readme in config
+    out = tmp_path / "DOCS.md"
+    assert main(["gen", "--config", str(pyproject), "--readme", str(out)]) == 0
+    assert "# Generated projection models" in out.read_text()
+
+
+def test_readme_config_must_be_string(tmp_path: Path) -> None:
+    body = '[tool.pydantic-prism]\noutput = "o.py"\nmodules = ["m"]\nreadme = 123\n'
+    with pytest.raises(CodegenError, match="`readme` must be a string"):
+        load_config(_write_pyproject(tmp_path, body))
+
+
+def test_generate_readme_empty_workset_raises(tmp_path: Path) -> None:
+    from pydantic_prism._codegen import generate_readme
+
+    config = _config(tmp_path, modules=("pydantic_prism.errors",))
+    with pytest.raises(CodegenError, match="no projections to document"):
+        generate_readme(config)
+
+
+def test_readme_includes_relationship_diagram(tmp_path: Path) -> None:
+    # a model with a ref edge gets a relationships section
+    from . import _codegen_fixtures as fixtures
+
+    assert main(["gen", "--config", str(_readme_pyproject(tmp_path))]) == 0
+    readme = (tmp_path / "GENERATED.md").read_text()
+    # Screenshot embeds Tag (list[Tag]) -> Screenshot has edges -> relationships
+    assert fixtures.Screenshot.__refs__  # sanity: has edges
+    assert "relationships" in readme
+
+
 def test_module_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["prism"])  # no subcommand -> argparse exits 2
     with pytest.raises(SystemExit):

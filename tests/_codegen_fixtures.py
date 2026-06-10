@@ -43,6 +43,8 @@ class Screenshot(
     default_scope=Storage,
     projection_bases=(CarrierBase,),
 ):
+    """A stored screenshot row."""
+
     id: Annotated[UUID, scoped(Ref)] = Field(default_factory=uuid4)
     timestamp: Annotated[datetime, scoped(Ref)]
     website_id: Annotated[UUID, scoped(Public)]
