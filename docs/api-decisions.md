@@ -651,3 +651,40 @@ significant; "error on any multiple" would break the common hierarchy case.
   runtime shape.
 - The scope-class metadata is read via `vars(scope)` so it stays strictly
   per-class (non-inherited), unlike `partial=` which inherits.
+
+---
+
+# API decision record — round 8 (partial round-trip story)
+
+Phase 2 output, 2026-06-10. See docs/design-round-8.md.
+
+## 51. `from_projection` on a partial projection → raise, point to `with_updates`
+
+Options: raise a guiding error (recommended) / docs only / warn.
+**Chosen: raise `TypeError`.** A partial (`partial=True`) projection is a delta,
+not a complete record; building a standalone canonical from it is meaningless
+without a baseline. Previously `from_projection(partial)` dumped the unset fields
+as `None` and failed with a misleading `ValidationError` blaming a field.
+`from_projection` now detects a partial `Projection` (`__prism_scope__.is_partial()`)
+and raises a clear error pointing to `baseline.with_updates(patch)` (the round-6
+partial → canonical round-trip, which pulls dropped fields from the baseline) or
+to building from a non-partial projection. This removes one unusual ability —
+`from_projection` on a fully-populated partial plus `**extra` — but that is a
+misuse of `partial`; the guard only fires for prism `Projection`s, so plain
+`BaseModel` inputs are unaffected.
+
+## 52. The two reverse round-trips, documented
+
+`from_projection(proj, **extra)` reconstructs a canonical from a **complete**
+projection (dropped fields from `**extra`/defaults); `baseline.with_updates(patch)`
+applies a **partial** delta onto a baseline (dropped fields from the baseline).
+README states this as a table — the symmetric counterpart to `from_canonical`.
+
+## Item 7 (doc debt) — reported already-paid
+
+The feedback predated this branch's round-2/3 documentation. Audited:
+`projection_bases=`, `RefShape.KEYED_DICT`, `partial=True`, and `Model.scopes()`
+all have substantive README coverage (dedicated sections + API-reference rows)
+and CHANGELOG entries. **No redundant edits made** — manufacturing churn on
+already-covered docs would be dishonest; the honest deliverable was the audit
+and this record.

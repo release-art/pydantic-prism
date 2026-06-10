@@ -321,6 +321,24 @@ updated = acct.with_updates(patch)           # Account(name="ADA", status="activ
   source) — a projection of a different model raises `TypeError`. `self` is left
   unchanged; a new instance is returned.
 
+### Which round-trip do I want?
+
+The reverse direction (projection → canonical) splits by whether you hold a
+*complete* projection or a *partial* delta — and that determines where the
+fields the projection doesn't carry come from:
+
+| you have | you want | use | the missing fields come from |
+|---|---|---|---|
+| a **full** projection (+ the rest) | a fresh canonical | `Model.from_projection(proj, **extra)` | `**extra` / canonical defaults |
+| a **partial** patch (+ an existing record) | the updated canonical | `baseline.with_updates(patch)` | the **baseline** instance |
+
+A partial (`partial=True`) projection is a *delta*, not a record, so there is no
+meaningful standalone canonical to build from it — `from_projection` raises
+`TypeError` on a partial and points you to `with_updates`. Use `with_updates`
+when you have a baseline to merge into; use `from_projection` when you're
+reconstructing a whole record from a complete projection plus whatever it
+dropped.
+
 `from_canonical` forwards `mode`, `by_alias` (default `True`, so alias
 generators round-trip), `context`, `exclude_none`, `exclude_unset` and
 `exclude_defaults` to the instance's own `model_dump`; `context` is also
@@ -500,6 +518,7 @@ class Webpage(ScopedModel):
 | marker nested below the field's top-level `Annotated` | `TypeError` | class definition |
 | `ref()` target neither ScopedModel nor str | `TypeError` | marker construction |
 | `default_scope=` value is not a Scope class or expression | `TypeError` | class definition |
+| `from_projection()` given a partial projection (a delta, not a record) | `TypeError` | `.from_projection()` call |
 | two `ref`/`backref` markers on one field | `TypeError` | class definition |
 | projection selects zero fields (message lists the scopes the model defines) | `EmptyProjectionError` | `.scope()` call |
 | one projection name for two different expressions (or bases) | `ProjectionNameError` | `.scope()` call |
@@ -656,7 +675,7 @@ Methods and attributes on canonical models:
 |---|---|---|
 | `Model.scope(*scopes, name=None, bases=None)` | classmethod | Derive/fetch the cached projection class. `name` and `bases` join the cache key. |
 | `Model.scopes()` | classmethod | `frozenset[type[Scope]]` of the atom scopes used in field tags. |
-| `Model.from_projection(proj, **extra)` | classmethod | Projected instance → canonical instance. |
+| `Model.from_projection(proj, **extra)` | classmethod | Projected instance → canonical instance. Rejects partial projections (use `with_updates`). |
 | `instance.with_updates(patch)` | method | Apply a (partial) projection's set fields as a PATCH; returns a new re-validated instance. |
 | `Model.__refs__` | ClassVar | The model's `RefGraph`. |
 | `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each field's **resolved** scope expression (the class default folded in for untagged fields). |

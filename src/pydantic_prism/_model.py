@@ -263,11 +263,28 @@ class ScopedModel(BaseModel):
 
     @classmethod
     def from_projection(cls, projection: BaseModel, /, **extra: Any) -> Self:
-        """Build a canonical instance from a projected one.
+        """Build a canonical instance from a (non-partial) projected one.
 
         Fields the projection lacks must arrive via ``**extra`` (keyed by
         python field name, or carry defaults on the canonical model).
+
+        This is the round-trip for a *complete* projection. A **partial**
+        projection (from a ``partial=True`` scope) is a delta, not a record —
+        building a standalone canonical from it has no meaning without a
+        baseline. Apply it to one with :meth:`with_updates` instead; passing a
+        partial projection here raises :class:`TypeError`.
         """
+        if (
+            isinstance(projection, Projection)
+            and projection.__prism_scope__.is_partial()
+        ):
+            raise TypeError(
+                f"{cls.__name__}.from_projection() received a partial projection "
+                f"({type(projection).__name__}); a partial scope is a delta, not a "
+                f"complete record. Apply it to a baseline with "
+                f"baseline.with_updates({type(projection).__name__.lower()}), or "
+                f"build from a non-partial projection of {cls.__name__}"
+            )
         data = dict(projection.model_dump(by_alias=True))
         for key, value in extra.items():
             info = cls.model_fields.get(key)

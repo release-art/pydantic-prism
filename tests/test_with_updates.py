@@ -117,6 +117,21 @@ def test_non_projection_raises() -> None:
         _row().with_updates(Inner(label="x"))  # type: ignore[arg-type]
 
 
+def test_from_projection_rejects_partial() -> None:
+    # A partial projection is a delta, not a record: from_projection guides to
+    # with_updates instead of failing with a confusing ValidationError.
+    patch = Row.scope(Update)(name="b")
+    with pytest.raises(TypeError, match="partial scope is a delta"):
+        Row.from_projection(patch)
+
+
+def test_from_projection_still_works_for_full_projection() -> None:
+    pub = Row.scope(Public)(name="z", note="n", inner={"label": "q"})  # type: ignore[arg-type]
+    back = Row.from_projection(pub, count=3)
+    assert back.name == "z"
+    assert back.count == 3
+
+
 def test_subclass_instance_accepts_base_projection() -> None:
     class Sub(Row):
         extra: Annotated[str, scoped(Public)] = ""

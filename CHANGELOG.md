@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — round 8 (partial round-trip story)
+
+- `Model.from_projection()` now raises a clear `TypeError` when handed a
+  **partial** projection (a delta, not a complete record), pointing to
+  `with_updates` — previously it failed with a misleading `ValidationError`
+  blaming an individual field. The partial → canonical round-trip is
+  `baseline.with_updates(patch)` (round 6), which pulls the dropped fields from
+  the baseline; `from_projection` remains the round-trip for *complete*
+  projections (with `**extra` / defaults supplying what they dropped). README
+  gains a "Which round-trip do I want?" table making this explicit.
+- Doc-debt note: `projection_bases=`, `RefShape.KEYED_DICT`, `partial=True`, and
+  `Model.scopes()` were already documented (README sections + API reference +
+  earlier CHANGELOG entries); audited, no further changes needed.
+
 ### Added — round 7 (projection naming + scope schema metadata)
 
 - `projection_name_template=` class keyword: set a house style for auto-named
