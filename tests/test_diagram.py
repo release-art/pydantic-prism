@@ -15,7 +15,7 @@ from pydantic_prism import (
     scope_diagram,
     scoped,
 )
-from pydantic_prism._diagram import Edge, Node, _Ids
+from pydantic_prism._diagram import Edge, Node, NodeField, _Ids, _type_label
 
 
 class Public(Scope): ...
@@ -95,10 +95,11 @@ def test_projection_diagram_nodes_edges_and_fields() -> None:
     diagram = projection_diagram(Order)
     by_label = {n.label: n for n in diagram.nodes}
     assert by_label["Order"].kind == "model"
-    assert set(by_label["Order"].fields) == {"id", "customer_id", "draft"}
+    assert {f.name for f in by_label["Order"].fields} == {"id", "customer_id", "draft"}
     # one projection per scope in Order.scopes() = {Public, Update}
     assert by_label["OrderPublic"].kind == "projection"
-    assert "draft" not in by_label["OrderPublic"].fields  # Public drops Update field
+    public_fields = {f.name for f in by_label["OrderPublic"].fields}
+    assert "draft" not in public_fields  # Public drops the Update-only field
     assert by_label["OrderUpdate"].kind == "partial_projection"
     # edges labelled by scope
     labels = {e.label for e in diagram.edges}
@@ -112,7 +113,7 @@ def test_ref_diagram_models_fields_and_kind_labels() -> None:
     diagram = Order.__refs__.diagram()
     by_label = {n.label: n for n in diagram.nodes}
     assert set(by_label) == {"Order", "Customer"}
-    assert "customer_id" in by_label["Order"].fields
+    assert "customer_id" in {f.name for f in by_label["Order"].fields}
     edge_labels = {e.label for e in diagram.edges}
     assert "customer_id (ref)" in edge_labels
 
@@ -183,16 +184,77 @@ def test_unlabelled_edge_and_plain_nodes() -> None:
 
 
 def test_label_escaping_across_formats() -> None:
-    diagram = Diagram(
-        nodes=(Node("x", 'La"bel', "model", ("a|b", "ok_field")),),
-        edges=(),
-    )
+    node = Node("x", 'La"bel', "model", (NodeField("a|b"), NodeField("ok_field")))
+    diagram = Diagram(nodes=(node,), edges=())
     assert "&quot;" in diagram.to_mermaid()  # mermaid entity-escapes quote
     dot = diagram.to_dot()
     assert "\\|" in dot  # record special char escaped
     d2 = diagram.to_d2()
     assert '"a|b"' in d2  # non-identifier field quoted
     assert "ok_field" in d2  # identifier field bare
+
+
+def test_fields_carry_type_and_description() -> None:
+    from pydantic import Field
+
+    class Doc(ScopedModel):
+        """A documented model."""
+
+        id: Annotated[UUID, scoped(Public)]
+        note: Annotated[str, Field(description="A note."), scoped(Public)]
+        tags: Annotated[list[str], scoped(Public)] = []
+
+    diagram = projection_diagram(Doc)
+    canonical = next(n for n in diagram.nodes if n.label == "Doc")
+    by_name = {f.name: f for f in canonical.fields}
+    assert by_name["id"].type == "UUID"
+    assert by_name["tags"].type == "list[str]"  # module paths stripped
+    assert by_name["note"].description == "A note."
+    assert by_name["id"].description is None
+    # node-level description = the model docstring
+    assert canonical.description == "A documented model."
+    # projection nodes carry their __doc__
+    proj_node = next(n for n in diagram.nodes if n.label == "DocPublic")
+    assert proj_node.description and "Projection of" in proj_node.description
+
+
+def test_field_rows_render_name_and_type() -> None:
+    diagram = projection_diagram(Order)
+    assert "customer_id: UUID" in diagram.to_mermaid()
+    assert "customer_id: UUID" in diagram.to_dot()  # record row
+    assert "customer_id: UUID" in diagram.to_d2()  # d2 class row
+
+
+def test_descriptions_in_as_dict_and_dot_tooltip() -> None:
+    class Doc(ScopedModel):
+        """Doc model."""
+
+        x: Annotated[str, scoped(Public, description="the x field")]
+
+    data = projection_diagram(Doc).as_dict()
+    canonical = next(n for n in data["nodes"] if n["label"] == "Doc")
+    assert canonical["description"] == "Doc model."  # docstring on the node
+    # the round-7 per-scope description shows on the projection node
+    projection = next(n for n in data["nodes"] if n["label"] == "DocPublic")
+    xfield = next(f for f in projection["fields"] if f["name"] == "x")
+    assert xfield["description"] == "the x field"
+    assert xfield["type"] == "str"
+    # Node.description surfaces as a DOT tooltip
+    assert 'tooltip="Doc model."' in projection_diagram(Doc).to_dot()
+
+
+def test_scope_node_carries_round7_description() -> None:
+    class Described(Scope, description="A described scope"): ...
+
+    node = next(n for n in scope_diagram(Described).nodes if n.label == "Described")
+    assert node.description == "A described scope"
+
+
+def test_type_label() -> None:
+    assert _type_label(None) == "None"
+    assert _type_label(str) == "str"  # plain type -> __name__
+    assert _type_label(list[str]) == "list[str]"
+    assert _type_label(dict[UUID, str]) == "dict[UUID, str]"  # module paths stripped
 
 
 def test_ids_sanitize_and_disambiguate() -> None:

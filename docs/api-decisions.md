@@ -789,3 +789,43 @@ Scope nodes have no fields. Edges are labelled (`extends`, the scope name, or
   an unknown direction raises `ValueError` at the builder.
 - `RefGraph.diagram()` local-imports the builder to avoid a module cycle
   (`_diagram` imports `_refs`/`_scopes`/`_model` for its builders).
+
+---
+
+# API decision record — round 11 (preserve field metadata in derived objects)
+
+Phase 2 output, 2026-06-10. "`Node.fields` — don't make them plain str … same
+stands for most other prism-derived objects." See docs/design-round-11.md. The
+audit found the *live* projection objects already preserve `FieldInfo`
+(descriptions/annotations survive `_project`); the loss happens at two
+serialization boundaries — the diagram IR (fixed here) and the codegen stubs
+(also fixed, per the owner's call).
+
+## 59. Diagram fields → structured `NodeField`, plus `Node.description`
+
+`Node.fields` is now `tuple[NodeField, ...]` where `NodeField` carries `name`,
+`type` (a display label off the annotation), and `description`
+(`FieldInfo.description`). `Node` gains `description` (the model/projection
+`__doc__`, or a scope's round-7 description). Visual renderers show `name: type`
+(D2 class-native; Mermaid/DOT append) and the DOT node `tooltip`; **`as_dict()`
+is lossless** — types and descriptions are always there, which is the point
+("preserve metadata," not necessarily paint it into every format). Examples/
+constraints stay out of the node (read the live model for more).
+
+## 60. Codegen stubs → carry field descriptions as attribute docstrings
+
+`prism gen` now emits each described field's `description` as an attribute
+docstring (`field: T = …` then a `repr`'d string literal on the next line),
+surfaced by pyright/Pylance on hover. Attribute docstrings were chosen over
+`Field(description=...)` because they need no `Field()` call (so the type-correct
+default rendering is untouched) and pyright shows them. The description is now
+part of the drift `projection_signature`, so a doc change regenerates the stub —
+and because round-7 per-scope descriptions live on the projection's `FieldInfo`,
+each generated projection shows its scope-appropriate doc for free.
+
+## Round-11 notes
+
+- The two **non-lossy** derived objects were confirmed and left alone:
+  projections (deep-copy `FieldInfo`) and `RefInfo`/`RefGraph` (structured).
+- `_type_label` strips module paths for readable diagram labels
+  (`list[uuid.UUID]` → `list[UUID]`); best-effort, display-only.

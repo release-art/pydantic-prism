@@ -2,10 +2,10 @@
 <svg
     xmlns="http://www.w3.org/2000/svg"
     xmlns:xlink="http://www.w3.org/1999/xlink"
-    width="67.64"
+    width="79.63"
     height="20"
     role="img"
-    aria-label="tests: 281"
+    aria-label="tests: 21/22"
 >
     <style>
         rect {
@@ -26,7 +26,7 @@
             fill: #010101;
         }
     </style>
-    <title>tests: 281</title>
+    <title>tests: 21/22</title>
     <linearGradient id="s" x2="0" y2="100%">
         <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
         <stop offset="1" stop-opacity=".1"/>
@@ -43,10 +43,10 @@
             </g>
         </g>
         <g transform="translate(36.67 0)">
-            <rect width="30.97" fill="#4c1"/>
+            <rect width="42.96" fill="#97ca00"/>
             <g transform="scale(.1)">
-                <text x="154.85" y="100" textLength="209.7" class="shadow">281</text>
-                <text x="154.85" y="100" textLength="209.7">281</text>
+                <text x="214.8" y="100" textLength="329.6" class="shadow">21/22</text>
+                <text x="214.8" y="100" textLength="329.6">21/22</text>
             </g>
         </g>
         <rect width="100%" height="100%" fill="url(#s)"/>

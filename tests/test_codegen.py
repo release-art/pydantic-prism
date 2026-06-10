@@ -201,6 +201,31 @@ def test_generate_contains_expected_shapes(tmp_path: Path) -> None:
     assert "if TYPE_CHECKING:" in text and "else:" in text
 
 
+def test_field_descriptions_become_attribute_docstrings(tmp_path: Path) -> None:
+    spec = ProjectionSpec(
+        "tests._codegen_fixtures:Screenshot", ("tests._codegen_fixtures:Storage",)
+    )
+    text = generate(_config(tmp_path, modules=(), projections=(spec,)))
+    # Screenshot.container_name carries a description (see fixtures) -> docstring
+    assert "'A storage container name.'" in text
+
+
+def test_description_change_shifts_drift_signature() -> None:
+    from pydantic import Field
+
+    from pydantic_prism._drift import projection_signature
+
+    class M(fx.ScopedModel):
+        x: Annotated[str, fx.scoped(fx.Public), Field(description="one")]
+
+    sig_one = projection_signature(M.scope(fx.Public))
+
+    class N(fx.ScopedModel):
+        x: Annotated[str, fx.scoped(fx.Public), Field(description="two")]
+
+    assert projection_signature(N.scope(fx.Public)) != sig_one  # desc is in the sig
+
+
 def test_generated_module_imports_with_identity(
     import_generated: Callable[[Config], Any], tmp_path: Path
 ) -> None:

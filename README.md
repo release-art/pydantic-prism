@@ -465,6 +465,10 @@ assert_fresh(ScreenshotRef, "…")           # startup drift guard
   do-not-edit banner — regenerate it, don't hand-edit.
 - Per-atom by default (one projection per scope in `Model.scopes()`); the
   `projections` list adds unions and `name=` overrides.
+- Field **descriptions** are carried into the stub as attribute docstrings, so
+  your editor shows them on hover — including per-scope descriptions from
+  `scoped(Scope, description=...)`. A description change is part of the drift
+  signature, so it triggers a regenerate.
 
 ## Validators
 
@@ -635,6 +639,10 @@ scope_diagram().as_dict()                 # no args: every declared scope, as JS
   `field (kind)`.
 - Every builder takes `direction="TD"` (default) or `"LR"`. `Diagram` carries
   `.to_mermaid()`, `.to_dot()`, `.to_d2()`, `.as_dict()`.
+- Nodes preserve **field metadata**: each `NodeField` has `.name`, `.type`, and
+  `.description`; each `Node` has a `.description` (model/projection docstring or
+  a scope's description). Visual formats render `name: type` (+ DOT tooltips);
+  `as_dict()` is lossless — descriptions are always carried for downstream tools.
 
 ## FastAPI
 
@@ -742,6 +750,7 @@ Diagram export (see "Diagrams"):
 | `projection_diagram(Model, *, direction="TD")` | function | A canonical model + its generated projections (with fields) as a `Diagram`. |
 | `RefGraph.diagram(*, direction="TD")` | method | The cross-model relationship `Diagram`. |
 | `Diagram` | dataclass | `.to_mermaid()`, `.to_dot()`, `.to_d2()`, `.as_dict()`; `.nodes`, `.edges`, `.direction`. |
+| `Node` / `NodeField` | dataclass | Node: `.id`, `.label`, `.kind`, `.description`, `.fields`. NodeField: `.name`, `.type`, `.description`. `as_dict()` is lossless (types + descriptions). |
 
 Static-typing CLI (see "Static types for projections"):
 

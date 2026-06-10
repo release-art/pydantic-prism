@@ -33,10 +33,11 @@ def projection_signature(projection: type[Projection]) -> str:
     Deterministic across interpreter runs for an unchanged model definition:
     it reads field names, their annotation's ``str`` (stable — module-qualified
     type names, including nested projections by class name), whether each field
-    is required, and the carried-base names.
+    is required, each field's ``description`` (so a doc change regenerates the
+    stub), and the carried-base names.
     """
     fields = [
-        (name, str(info.annotation), info.is_required())
+        (name, str(info.annotation), info.is_required(), info.description)
         for name, info in projection.model_fields.items()
     ]
     bases = tuple(base.__name__ for base in projection.__prism_bases__)

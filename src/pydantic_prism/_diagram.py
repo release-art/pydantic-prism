@@ -341,9 +341,7 @@ def projection_diagram(model: type[Any], *, direction: str = "TD") -> Diagram:
         )
     ids = _Ids()
     cid = ids.make(model.__name__)
-    nodes = [
-        Node(cid, model.__name__, "model", _node_fields(model), model.__doc__)
-    ]
+    nodes = [Node(cid, model.__name__, "model", _node_fields(model), model.__doc__)]
     edges: list[Edge] = []
     for scope in sorted(model.scopes(), key=lambda s: s.__name__):
         proj = model.scope(scope)

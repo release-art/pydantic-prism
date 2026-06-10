@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — round 11 (preserve field metadata in derived objects)
+
+- Diagram nodes preserve field metadata instead of bare names. `Node.fields` is
+  now `tuple[NodeField, ...]` (`NodeField.name`/`.type`/`.description`), and
+  `Node` gains `.description` (model/projection docstring, or a scope's round-7
+  description). Visual renderers show `name: type` (+ DOT node tooltips);
+  `as_dict()` is lossless (types + descriptions), so downstream tools keep
+  everything. **Breaking:** `Node.fields` entries are `NodeField`, not `str`.
+- `prism gen` now carries each field's `description` into the generated stub as
+  an attribute docstring (surfaced by pyright/Pylance on hover), including
+  per-scope descriptions from `scoped(Scope, description=...)`. Descriptions are
+  part of the drift signature, so a doc change regenerates the stub.
+- Audit note: the live projection objects (`.scope()`) and `RefInfo`/`RefGraph`
+  already preserve field metadata — the flattening was only at the diagram and
+  stub serialization boundaries, both now fixed.
+
 ### Added — round 10 (diagram export)
 
 - Export prism structure to graph formats (text only — no Graphviz/Mermaid/D2
