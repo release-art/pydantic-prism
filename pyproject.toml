@@ -11,7 +11,7 @@ readme = "README.md"
 license = "MIT"
 
 [project.scripts]
-prism = "pydantic_prism._codegen:main"
+prism = "pydantic_prism._internal.codegen:main"
 
 [project.optional-dependencies]
 dev = [
@@ -58,7 +58,7 @@ ignore = ["N802"]
     "E402",
 ]
 # The codegen CLI legitimately writes progress/errors to stdout/stderr.
-"src/pydantic_prism/_codegen/_cli.py" = ["T201"]
+"src/pydantic_prism/_internal/codegen/cli.py" = ["T201"]
 # dev scripts print progress.
 "bin/*.py" = ["T201"]
 # Variables holding derived projection *classes* (UserPublic = User.scope(...))

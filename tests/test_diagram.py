@@ -15,7 +15,7 @@ from pydantic_prism import (
     scope_diagram,
     scoped,
 )
-from pydantic_prism._diagram import (
+from pydantic_prism._internal.diagram import (
     Edge,
     Node,
     NodeField,

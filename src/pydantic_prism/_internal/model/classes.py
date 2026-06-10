@@ -13,8 +13,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel
 
-from .._refs import RefGraph
-from .._scopes import (
+from ..refs import RefGraph
+from ..scopes import (
     Classification,
     Scope,
     ScopeExpr,
@@ -24,7 +24,7 @@ from .._scopes import (
 )
 
 if TYPE_CHECKING:
-    from .._flow import FlowReport
+    from ..flow import FlowReport
 
 __all__ = ["Projection", "ScopedModel"]
 
@@ -84,7 +84,7 @@ class Projection(BaseModel):
         shape, but the validators carried from your base can. Pass ``narrow=``
         to override this auto-detection in either direction.
         """
-        from ._narrow import _narrow
+        from .narrow import _narrow
 
         data: Any = instance.model_dump(
             mode=mode,
@@ -146,8 +146,8 @@ class ScopedModel(BaseModel):
         **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
-        from ._bases import _check_bases
-        from ._build import _validate_name_template
+        from .bases import _check_bases
+        from .build import _validate_name_template
 
         if projection_bases is not None:
             cls.__prism_projection_bases__ = _check_bases(
@@ -171,7 +171,7 @@ class ScopedModel(BaseModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
-        from ._collect import _initialize
+        from .collect import _initialize
 
         cls.__prism_cache__ = {}
         cls.__prism_names__ = {}
@@ -192,7 +192,7 @@ class ScopedModel(BaseModel):
         references at class-definition time: their ``scoped()``/``ref()``
         markers only become visible once the rebuild evaluates them.
         """
-        from ._collect import _collect
+        from .collect import _collect
 
         result = super().model_rebuild(
             force=force,
@@ -246,7 +246,7 @@ class ScopedModel(BaseModel):
         live, via which references?* Render the returned :class:`.FlowReport`
         with ``.as_dict()`` (JSON) or ``.to_mermaid()``.
         """
-        from .._flow import build_flow_report
+        from ..flow import build_flow_report
 
         return build_flow_report(cls)
 
@@ -310,8 +310,8 @@ class ScopedModel(BaseModel):
         fields) — tagging such a field with a scope the projection does not
         select raises :class:`ProjectionBaseError`.
         """
-        from ._bases import _check_bases
-        from ._build import _BuildContext, _project
+        from .bases import _check_bases
+        from .build import _BuildContext, _project
 
         if not scopes:
             raise TypeError("scope() requires at least one scope or scope expression")
@@ -356,7 +356,7 @@ class ScopedModel(BaseModel):
         baseline. Apply it to one with :meth:`with_updates` instead; passing a
         partial projection here raises :class:`TypeError`.
         """
-        from ._narrow import _validation_key
+        from .narrow import _validation_key
 
         if (
             isinstance(projection, Projection)

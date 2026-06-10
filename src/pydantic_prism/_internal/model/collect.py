@@ -5,13 +5,13 @@ from __future__ import annotations
 import inspect
 from typing import Any, cast, get_args, get_origin
 
-from .._markers import PRISM_MARKERS, BackRef, Ref, Scoped
-from .._refs import Embedded, RawEdge, RefGraph, RefShape, shape_of
-from .._scopes import ScopeExpr, union_all
-from .._validators import (
+from ..markers import PRISM_MARKERS, BackRef, Ref, Scoped
+from ..refs import Embedded, RawEdge, RefGraph, RefShape, shape_of
+from ..scopes import ScopeExpr, union_all
+from ..validators import (
     _SCOPED_VALIDATOR_SCOPES,  # pyright: ignore[reportPrivateUsage] — intra-package
 )
-from ._classes import Projection, ScopedModel
+from .classes import Projection, ScopedModel
 
 __all__ = ["_collect", "_initialize", "_variable_container"]
 

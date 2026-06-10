@@ -21,17 +21,17 @@ from pydantic import create_model, field_validator, model_validator
 from pydantic.experimental.missing_sentinel import MISSING
 from pydantic.fields import FieldInfo
 
-from .._markers import PRISM_MARKERS
-from .._scopes import ScopeExpr
-from ..errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameError
-from ._bases import _warn_dropped_behavior
-from ._classes import Projection, ScopedModel
-from ._schema import _apply_field_schema, _apply_model_schema
+from ...errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameError
+from ..markers import PRISM_MARKERS
+from ..scopes import ScopeExpr
+from .bases import _warn_dropped_behavior
+from .classes import Projection, ScopedModel
+from .schema import _apply_field_schema, _apply_model_schema
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-    from ._classes import (
+    from .classes import (
         _ProjectionKey,  # pyright: ignore[reportPrivateUsage] — intra-package
     )
 

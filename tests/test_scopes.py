@@ -3,7 +3,7 @@
 import pytest
 
 from pydantic_prism import Scope
-from pydantic_prism._scopes import as_expr, union_all
+from pydantic_prism._internal.scopes import as_expr, union_all
 
 
 class Public(Scope): ...

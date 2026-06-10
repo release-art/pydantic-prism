@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from .._drift import projection_signature
-from .._model import (
+from ..drift import projection_signature
+from ..model import (
     Projection,
     _auto_name,  # pyright: ignore[reportPrivateUsage] — intra-package
 )
-from ._config import CodegenError, Config
-from ._discover import _build_workset, _discover
-from ._render import (
+from .config import CodegenError, Config
+from .discover import _build_workset, _discover
+from .render import (
     _field_suffix,
     _import_lines,
     _Imports,
@@ -29,7 +29,7 @@ _BANNER = (
 
 def generate_readme(config: Config) -> str:
     """Render the GitHub README documenting ``config``'s generated workset."""
-    from .._readme import build_readme
+    from ..readme import build_readme
 
     projections = _build_workset(_discover(config))
     if not projections:
@@ -51,7 +51,7 @@ def generate(config: Config) -> str:
         )
 
     imports = _Imports()
-    imports.runtime.add(("pydantic_prism._drift", "assert_fresh"))
+    imports.runtime.add(("pydantic_prism._internal.drift", "assert_fresh"))
     imports.add_typing("pydantic_prism", "Projection")
 
     class_blocks: list[str] = []

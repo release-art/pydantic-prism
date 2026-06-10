@@ -19,10 +19,10 @@ from __future__ import annotations
 import hashlib
 from typing import TYPE_CHECKING
 
-from .errors import StaleProjectionStubError
+from ..errors import StaleProjectionStubError
 
 if TYPE_CHECKING:
-    from ._model import Projection
+    from .model import Projection
 
 __all__ = ["assert_fresh", "projection_signature"]
 

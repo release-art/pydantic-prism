@@ -8,9 +8,9 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
 
-from ._config import CodegenError, load_config
-from ._discover import _resolve  # pyright: ignore[reportPrivateUsage] — intra-package
-from ._generate import generate, generate_readme
+from .config import CodegenError, load_config
+from .discover import _resolve  # pyright: ignore[reportPrivateUsage] — intra-package
+from .generate import generate, generate_readme
 
 __all__ = ["main"]
 
@@ -26,9 +26,9 @@ def _resolve_kind(path: str, want: type[Any], label: str) -> Any:
 
 
 def _build_cli_diagram(kind: str, paths: Sequence[str], direction: str) -> Any:
-    from .._diagram import projection_diagram, scope_diagram
-    from .._model import ScopedModel
-    from .._scopes import Scope
+    from ..diagram import projection_diagram, scope_diagram
+    from ..model import ScopedModel
+    from ..scopes import Scope
 
     # console scripts don't put the cwd on the path the way `python` does
     sys.path.insert(0, str(Path.cwd()))
@@ -74,7 +74,7 @@ def _run_diagram(args: argparse.Namespace) -> int:
 
 
 def _run_flow(args: argparse.Namespace) -> int:
-    from .._model import ScopedModel
+    from ..model import ScopedModel
 
     # console scripts don't put the cwd on the path the way `python` does
     sys.path.insert(0, str(Path.cwd()))

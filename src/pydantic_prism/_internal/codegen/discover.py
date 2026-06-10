@@ -8,9 +8,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, cast, get_args
 
-from .._model import Projection, ScopedModel
-from .._scopes import ScopeExpr, as_expr, union_all
-from ._config import CodegenError, Config
+from ..model import Projection, ScopedModel
+from ..scopes import ScopeExpr, as_expr, union_all
+from .config import CodegenError, Config
 
 __all__ = ["_build_workset", "_discover", "_projections_in", "_reject_name_clashes"]
 

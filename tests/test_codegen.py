@@ -18,7 +18,7 @@ from uuid import UUID
 import pytest
 
 from pydantic_prism import StaleProjectionStubError
-from pydantic_prism._codegen import (
+from pydantic_prism._internal.codegen import (
     CodegenError,
     Config,
     ProjectionSpec,
@@ -35,8 +35,8 @@ from pydantic_prism._codegen import (
     load_config,
     main,
 )
-from pydantic_prism._drift import assert_fresh, projection_signature
-from pydantic_prism._scopes import ScopeExpr, as_expr
+from pydantic_prism._internal.drift import assert_fresh, projection_signature
+from pydantic_prism._internal.scopes import ScopeExpr, as_expr
 
 from . import _codegen_fixtures as fx
 
@@ -213,7 +213,7 @@ def test_field_descriptions_become_attribute_docstrings(tmp_path: Path) -> None:
 def test_description_change_shifts_drift_signature() -> None:
     from pydantic import Field
 
-    from pydantic_prism._drift import projection_signature
+    from pydantic_prism._internal.drift import projection_signature
 
     class M(fx.ScopedModel):
         x: Annotated[str, fx.scoped(fx.Public), Field(description="one")]
@@ -404,7 +404,7 @@ def test_readme_config_must_be_string(tmp_path: Path) -> None:
 
 
 def test_generate_readme_empty_workset_raises(tmp_path: Path) -> None:
-    from pydantic_prism._codegen import generate_readme
+    from pydantic_prism._internal.codegen import generate_readme
 
     config = _config(tmp_path, modules=("pydantic_prism.errors",))
     with pytest.raises(CodegenError, match="no projections to document"):

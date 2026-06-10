@@ -7,17 +7,17 @@ relationships introspectable across projections.
 
 from pydantic.experimental.missing_sentinel import MISSING
 
-from ._diagram import Diagram, projection_diagram, scope_diagram
-from ._flow import (
+from ._internal.diagram import Diagram, projection_diagram, scope_diagram
+from ._internal.flow import (
     ClassifiedField,
     FlowEdge,
     FlowNode,
     FlowReport,
     build_flow_report,
 )
-from ._markers import BackRef, Ref, Scoped, backref, ref, scoped
-from ._model import Projection, ScopedModel
-from ._refs import (
+from ._internal.markers import BackRef, Ref, Scoped, backref, ref, scoped
+from ._internal.model import Projection, ScopedModel
+from ._internal.refs import (
     BackRefInfo,
     EmbeddedRefInfo,
     IdRefInfo,
@@ -25,8 +25,8 @@ from ._refs import (
     RefInfo,
     RefShape,
 )
-from ._scopes import Classification, Scope, ScopeExpr
-from ._validators import scoped_validator
+from ._internal.scopes import Classification, Scope, ScopeExpr
+from ._internal.validators import scoped_validator
 from .errors import (
     EmptyProjectionError,
     PrismError,

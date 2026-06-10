@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from pydantic_prism import Classification, FlowReport, Scope
-from pydantic_prism._codegen._cli import main  # pyright: ignore[reportPrivateUsage]
+from pydantic_prism._internal.codegen.cli import (
+    main,  # pyright: ignore[reportPrivateUsage]
+)
 
 from . import _flow_fixtures as fx
 

@@ -9,8 +9,8 @@ from typing import Any, Literal, Union, get_args, get_origin
 
 from pydantic.experimental.missing_sentinel import MISSING
 
-from .._model import Projection
-from .._scopes import (
+from ..model import Projection
+from ..scopes import (
     ScopeExpr,
     _Atom,  # pyright: ignore[reportPrivateUsage] — intra-package expr rendering
     _Complement,  # pyright: ignore[reportPrivateUsage]
@@ -18,7 +18,7 @@ from .._scopes import (
     _Intersection,  # pyright: ignore[reportPrivateUsage]
     _Union,  # pyright: ignore[reportPrivateUsage]
 )
-from ._config import CodegenError
+from .config import CodegenError
 
 __all__ = [
     "_Imports",

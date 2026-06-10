@@ -12,10 +12,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from ._scopes import ScopeExpr, ScopeLike, as_expr, union_all
+from .scopes import ScopeExpr, ScopeLike, as_expr, union_all
 
 if TYPE_CHECKING:
-    from ._model import ScopedModel
+    from .model import ScopedModel
 
 __all__ = ["BackRef", "Ref", "Scoped", "backref", "ref", "scoped"]
 
@@ -107,7 +107,7 @@ def _check_str(value: object, message: str) -> None:
 def _check_target(target: object, marker: str) -> None:
     if isinstance(target, str):
         return
-    from ._model import ScopedModel
+    from .model import ScopedModel
 
     if isinstance(target, type) and issubclass(target, ScopedModel):
         return

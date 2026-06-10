@@ -39,7 +39,7 @@ def _load(main_py: Path) -> ModuleType:
 def readme_for(main_py: Path) -> str:
     """Render the README markdown for one example ``main.py``."""
     from pydantic_prism import ScopedModel
-    from pydantic_prism._readme import build_readme
+    from pydantic_prism._internal.readme import build_readme
 
     module = _load(main_py)
     projections = [

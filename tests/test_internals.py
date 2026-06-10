@@ -16,14 +16,14 @@ from pydantic_prism import (
     ref,
     scoped,
 )
-from pydantic_prism._model import (
+from pydantic_prism._internal.model import (
     _build_lock,
     _narrow_value,
     _rewrite,
     _variable_container,
 )
-from pydantic_prism._refs import shape_of
-from pydantic_prism._scopes import as_expr, intersect_all, union_all
+from pydantic_prism._internal.refs import shape_of
+from pydantic_prism._internal.scopes import as_expr, intersect_all, union_all
 
 
 class Public(Scope): ...
@@ -170,7 +170,7 @@ def test_rewrite_preserves_nested_annotated_metadata() -> None:
 
 
 def test_rewrite_leaves_bare_generics_alone() -> None:
-    from pydantic_prism._model import _BuildContext
+    from pydantic_prism._internal.model import _BuildContext
 
     expr = as_expr(Public)
     assert _rewrite(list, expr, _BuildContext()) is list
@@ -181,7 +181,7 @@ def test_rewrite_leaves_bare_generics_alone() -> None:
 def test_validation_key_prefers_validation_alias() -> None:
     from pydantic.fields import FieldInfo
 
-    from pydantic_prism._model import _validation_key
+    from pydantic_prism._internal.model import _validation_key
 
     assert _validation_key("f", FieldInfo(validation_alias="v")) == "v"
     assert _validation_key("f", FieldInfo(alias="a")) == "a"

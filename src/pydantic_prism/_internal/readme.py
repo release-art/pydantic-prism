@@ -12,15 +12,15 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from ._diagram import (
+from .diagram import (
     _node_fields,  # pyright: ignore[reportPrivateUsage] — intra-package
     projection_diagram,
     scope_diagram,
 )
 
 if TYPE_CHECKING:
-    from ._model import Projection, ScopedModel
-    from ._scopes import Scope
+    from .model import Projection, ScopedModel
+    from .scopes import Scope
 
 __all__ = ["build_readme"]
 

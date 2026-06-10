@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from ._diagram import Diagram
-    from ._model import ScopedModel
-    from ._scopes import Classification
+    from .diagram import Diagram
+    from .model import ScopedModel
+    from .scopes import Classification
 
 __all__ = [
     "ClassifiedField",
@@ -110,7 +110,7 @@ class FlowReport:
         return self._diagram(direction=direction).to_mermaid()
 
     def _diagram(self, *, direction: str) -> Diagram:
-        from ._diagram import Diagram, Edge, Node, NodeField
+        from .diagram import Diagram, Edge, Node, NodeField
 
         classified = {node.model: node for node in self.nodes}
         order: list[type[ScopedModel]] = [self.root]

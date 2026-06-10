@@ -7,11 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic.fields import FieldInfo
 
-from .._markers import Scoped
-from .._scopes import Scope, ScopeExpr
+from ..markers import Scoped
+from ..scopes import Scope, ScopeExpr
 
 if TYPE_CHECKING:
-    from ._classes import ScopedModel
+    from .classes import ScopedModel
 
 __all__ = ["_apply_field_schema", "_apply_model_schema", "_merge_json_schema_extra"]
 

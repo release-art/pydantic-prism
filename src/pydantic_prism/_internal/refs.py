@@ -10,13 +10,13 @@ from dataclasses import dataclass
 from enum import StrEnum, unique
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args, get_origin
 
-from ._markers import BackRef, Ref
-from .errors import RefResolutionError
+from ..errors import RefResolutionError
+from .markers import BackRef, Ref
 
 if TYPE_CHECKING:
-    from ._diagram import Diagram
-    from ._model import ScopedModel
-    from ._scopes import ScopeExpr
+    from .diagram import Diagram
+    from .model import ScopedModel
+    from .scopes import ScopeExpr
 
 __all__ = [
     "BackRefInfo",
@@ -258,7 +258,7 @@ class RefGraph(Mapping[str, RefInfo]):
         ``.as_dict()``. Covers the ``ref``/``backref``/``embedded`` edges
         reachable from this model (the same span as :meth:`walk`).
         """
-        from ._diagram import ref_diagram
+        from .diagram import ref_diagram
 
         return ref_diagram(self, direction=direction)
 
@@ -280,7 +280,7 @@ class RefGraph(Mapping[str, RefInfo]):
         return graph
 
     def _resolve(self, field_name: str) -> RefInfo:
-        from ._model import ScopedModel
+        from .model import ScopedModel
 
         edge = self._raw[field_name]
         marker = edge.marker
