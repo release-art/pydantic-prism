@@ -3,4 +3,6 @@
 THIS_DIR=$(dirname "${BASH_SOURCE[0]}")
 PROJECT_ROOT=$(realpath "${THIS_DIR}/..")
 cd "${PROJECT_ROOT}"
-exec pdm run make autoformat
+
+pdm run ruff format src tests examples
+pdm run ruff check --fix src tests examples
