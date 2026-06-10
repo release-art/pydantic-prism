@@ -9,6 +9,7 @@ from ._markers import BackRef, Ref, Scoped, backref, ref, scoped
 from ._model import Projection, ScopedModel
 from ._refs import RefGraph, RefInfo, RefShape
 from ._scopes import Scope, ScopeExpr
+from ._validators import scoped_validator
 from .errors import (
     EmptyProjectionError,
     PrismError,
@@ -38,4 +39,5 @@ __all__ = [
     "backref",
     "ref",
     "scoped",
+    "scoped_validator",
 ]

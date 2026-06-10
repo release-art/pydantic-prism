@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 5 (`@scoped_validator`)
+
+- `@scoped_validator(*scopes, mode=...)`: a model validator that survives
+  projection. It is a normal `@model_validator` on the canonical model and also
+  carries onto every projection whose scope expression selects one of `scopes`
+  (the same membership rule as a `scoped(...)` field). Fixes the silent drop of
+  `@model_validator` on projections (e.g. a `mode="before"` coercion that
+  derives one field from another). Varargs/expressions allowed; root `Scope` is
+  the wildcard; `mode` is required and pass-through (`before`/`after`/`wrap`).
+  Plain `@model_validator` is unchanged (still canonical-only). Field-set safety
+  is the user's: the scope list asserts the touched fields survive there.
+- `Model.__prism_validator_scopes__` (`dict[str, ScopeExpr]`) exposes which
+  model validators carry, and to what — the analogue of `__field_scopes__`.
+
 ### Added — round 4 (static-type visibility for projections)
 
 - `prism gen` / `prism check` CLI (also `python -m pydantic_prism`): generates a

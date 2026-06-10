@@ -464,3 +464,67 @@ base list) all land in this round.
   and standard containers; `Annotated` metadata is dropped (typing-irrelevant).
   Anything else raises `CodegenError` at gen time rather than emitting broken
   source.
+
+---
+
+# API decision record — round 5 (`@scoped_validator`)
+
+Phase 2 output, 2026-06-10. Field validators carry to projections, plain model
+validators do not (decision 14) — defensible by implementation, surprising as
+semantics, and it silently broke the SiteCompliance Update-scope hostname
+coercion. See docs/design-round-5.md. The chosen fix is an explicit opt-in,
+not carry-by-default.
+
+## 40. Form → dedicated `@scoped_validator(*scopes, mode=...)` decorator
+
+Options: dedicated decorator (recommended) / extend `@model_validator` with a
+`scopes=` kwarg / carry-by-default with an opt-out.
+**Chosen: dedicated decorator.** A sibling of `@model_validator` with one added
+duty ("meaningful for *these* projections"), composing with prism's `scoped()`/
+`.scope()` vocabulary. Extending pydantic's own decorator would mean shadowing a
+third-party API (fragile across versions); carry-by-default inverts decision
+14's safety (silently pushing validators onto field sets they never
+anticipated). Plain `@model_validator` is unchanged — still canonical-only.
+
+## 41. Carry rule → same algebra as fields (`projection_expr.selects(tag)`)
+
+Options: field algebra (recommended) / scopes are advisory, carry everywhere.
+**Chosen: field algebra.** A validator tagged `scoped_validator(Storage)` carries
+exactly where a field tagged `scoped(Storage)` survives — one membership rule
+library-wide, reusing `ScopeExpr.selects`. The tag should name the scope of the
+fields the validator touches, so it lands wherever those fields do. Varargs and
+expressions work (`scoped_validator(Public | Other)`), as in `scoped()`.
+
+## 42. Zero scopes → require ≥1; wildcard is `scoped_validator(Scope)`
+
+Options: require ≥1 (recommended) / zero = all projections.
+**Chosen: require ≥1**, mirroring `scoped()`. "Every projection" is the root
+`Scope`, the wildcard everywhere else — no new convention.
+
+## 43. Introspection → `Model.__prism_validator_scopes__`
+
+Options: expose (recommended) / internal only.
+**Chosen: expose** a `dict[str, ScopeExpr]` keyed by validator name — the
+model-validator analogue of `__field_scopes__`, and the very map `_carry_validators`
+reads from at projection time. The point of an explicit marker is that carry
+behavior is obvious; this makes "which validators carry here, and why"
+answerable without reading internals.
+
+## Round-5 decisions made by fiat during implementation
+
+- `mode` is a required keyword (`"before" | "after" | "wrap"`), pass-through to
+  `@model_validator` — same muscle memory, all three modes carry.
+- **Field-set safety is the user's.** A carried `mode="after"` validator reading
+  a dropped field raises at validation; the scope list *is* the assertion that
+  the fields it touches survive there. Prism cannot inspect a `mode="before"`
+  dict-coercion's needs, so it does not try (parallels decision 14's field-
+  validator `info.data` caveat). Validators that may carry to a partial scope
+  must guard against `None` (surviving fields are optional there).
+- Bad scope argument raises `TypeError` at decoration (via `as_expr`), like
+  `scoped()` / decision 13.
+- The scope tag is recorded in a module-level `WeakKeyDictionary` keyed by the
+  raw function (`before`/`wrap` validators are stored by pydantic as bound
+  methods with no writable `__dict__`); `_collect` resolves it into
+  `__prism_validator_scopes__`. Inherited automatically — a `scoped_validator`
+  on a base `ScopedModel` keys by the same function and carries to subclass
+  projections.

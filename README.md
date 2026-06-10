@@ -426,6 +426,43 @@ annotations are copied.
 Caveat: a carried field validator that reads `info.data` of a dropped field
 will fail at validation time.
 
+### `@scoped_validator` — model validators that survive projection
+
+When a model validator *should* travel to projections — a `mode="before"`
+coercion that derives one field from another, say — declare it with
+`@scoped_validator(*scopes, mode=...)` instead of `@model_validator`. It is a
+normal model validator on the canonical model and **also** carries onto every
+projection whose scope expression selects one of `scopes` (the same membership
+rule as a field tagged `scoped(...)`):
+
+```python
+class Webpage(ScopedModel):
+    url: Annotated[str, scoped(Public)]
+    hostname: Annotated[str, scoped(Public)] = ""
+
+    @scoped_validator(Update, mode="before")   # carries to Update and broader
+    @classmethod
+    def derive_hostname(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("url") and not data.get("hostname"):
+            data = {**data, "hostname": urlparse(data["url"]).hostname or ""}
+        return data
+```
+
+- Tag it with the scope(s) of the fields it touches; it lands on every
+  projection that keeps those fields. Varargs/expressions work
+  (`scoped_validator(Public | Internal)`); use the root `Scope` for "every
+  projection". `mode` is required (`"before" | "after" | "wrap"`, pass-through).
+- Plain `@model_validator` is **unchanged** — still canonical-only. Only
+  `@scoped_validator` carries.
+- **Field-set safety is yours.** The scope list asserts the touched fields
+  survive there; prism does not check it. A carried `mode="after"` validator
+  that reads a dropped field raises at validation, and one that may carry to a
+  **partial** scope must guard against `None` (surviving fields are optional
+  there).
+- `Model.__prism_validator_scopes__` (`dict[str, ScopeExpr]`) exposes which
+  validators carry and to what — the model-validator analogue of
+  `__field_scopes__`.
+
 ## Errors
 
 | situation | error | when |
@@ -513,6 +550,7 @@ Everything prism adds, with exact spellings. Markers and functions:
 | `ScopedModel` | class | Base for canonical models. Class keywords: `projection_bases=(...)`, `default_scope=` (the scope untagged fields fall back to). |
 | `Projection` | class | Base of every derived projection class. |
 | `scoped(*scopes)` | marker | Tags a field with scopes / a scope expression. Varargs union. |
+| `scoped_validator(*scopes, mode=...)` | decorator | A `@model_validator` that also carries onto projections whose expr selects `scopes`. `mode` required. |
 | `ref(target, *, field="id")` | marker | Forward FK-style reference. `target`: ScopedModel subclass or string. Keyed-dict shape inferred from a `dict[...]` annotation. |
 | `backref(target, *, via, field="id")` | marker | Declared reverse reference; `via` names the forward-ref field on `target`. |
 | `RefShape` | StrEnum | `SCALAR`, `COLLECTION`, `KEYED_DICT` — also comparable to their lowercase strings. |
@@ -527,6 +565,7 @@ Methods and attributes on canonical models:
 | `Model.__refs__` | ClassVar | The model's `RefGraph`. |
 | `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each field's **resolved** scope expression (the class default folded in for untagged fields). |
 | `Model.__prism_default_scope__` | ClassVar | `ScopeExpr \| None`: the class-level `default_scope=` (inherited down the MRO), or `None`. |
+| `Model.__prism_validator_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each `@scoped_validator`'s name → the scope expression deciding which projections carry it. |
 
 Methods and attributes on projection classes:
 
@@ -570,7 +609,7 @@ the combination with a relationship graph does not.
 | all-optional Update views | any scope: `partial=True` | — | fixed `Update`/`UpdateOptional` views |
 | custom pydantic bases on derived models | `projection_bases=`/`bases=`, isinstance-true | — | — |
 | static-typing of derived models | `prism gen` stubs (universal: pyright/Pylance/mypy) + startup drift check | — | — |
-| validators on derived models | field validators carried; carried bases keep model validators | lost | lost |
+| validators on derived models | field validators carried; model validators via `@scoped_validator` or carried bases | lost | lost |
 | implicit behavior | none | call-stack sniffing can switch modes; `model_validate` may return a different class | registry monkey-patched onto your class |
 | Python | 3.12+ | 3.9+ (claimed) | 3.13+ |
 

@@ -22,12 +22,15 @@ from typing import (
     get_origin,
 )
 
-from pydantic import BaseModel, create_model, field_validator
+from pydantic import BaseModel, create_model, field_validator, model_validator
 from pydantic.fields import FieldInfo
 
 from ._markers import PRISM_MARKERS, BackRef, Ref, Scoped
 from ._refs import Embedded, RawEdge, RefGraph, RefShape, shape_of
 from ._scopes import Scope, ScopeExpr, ScopeLike, as_expr, union_all
+from ._validators import (
+    _SCOPED_VALIDATOR_SCOPES,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 from .errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameError
 
 __all__ = ["Projection", "ScopedModel"]
@@ -122,6 +125,9 @@ class ScopedModel(BaseModel):
     # inherited down the ScopedModel MRO like any class attribute and may be
     # re-declared (or cleared with default_scope=None) by a subclass.
     __prism_default_scope__: ClassVar[ScopeExpr | None] = None
+    # Model validators declared with @scoped_validator, keyed by validator name,
+    # mapped to the scope expression that decides which projections carry them.
+    __prism_validator_scopes__: ClassVar[dict[str, ScopeExpr]] = {}
     __refs__: ClassVar[RefGraph]
     __prism_cache__: ClassVar[dict[_ProjectionKey, type[Projection]]] = {}
     __prism_names__: ClassVar[dict[str, _ProjectionKey]] = {}
@@ -388,6 +394,7 @@ def _collect(cls: type[ScopedModel]) -> None:
                 shape, optional, key_type = shape_of(info.annotation)
                 raw_refs[field_name] = RawEdge(embedded, shape, optional, key_type)
     cls.__field_scopes__ = field_scopes
+    cls.__prism_validator_scopes__ = _collect_validator_scopes(cls)
     existing = cls.__dict__.get("__refs__")
     if isinstance(existing, RefGraph):
         # Mutate in place so graphs already held by user code stay current.
@@ -614,7 +621,7 @@ def _project(
         __base__=cast(type[Projection], config_base),
         __module__=cls.__module__,
         __doc__=f"Projection of {cls.__qualname__} to scope {expr!r}.",
-        __validators__=_carry_validators(cls, set(surviving)),
+        __validators__=_carry_validators(cls, set(surviving), expr),
         **cast(dict[str, Any], field_definitions),
     )
     projection.__prism_source__ = cls
@@ -686,13 +693,16 @@ def _rewrite(annotation: Any, expr: ScopeExpr, ctx: _BuildContext) -> Any:
 
 
 def _carry_validators(
-    cls: type[ScopedModel], surviving: set[str]
+    cls: type[ScopedModel], surviving: set[str], expr: ScopeExpr
 ) -> dict[str, Any] | None:
-    """Re-target the canonical model's field validators onto surviving fields.
+    """Re-target the canonical model's validators onto the projection.
 
-    Model validators are intentionally not carried over: they assume the full
-    canonical field set. (Model validators declared on *carried bases* are
-    inherited by the projection through the base itself.)
+    Field validators carry, re-targeted to the surviving subset. Plain
+    ``@model_validator``s are intentionally *not* carried (they assume the full
+    canonical field set); only those declared with ``@scoped_validator`` carry,
+    and only onto projections whose ``expr`` selects the validator's scope tag.
+    (Model validators declared on *carried bases* are inherited through the base
+    itself, independently of this.)
     """
     carried: dict[str, Any] = {}
     for dec_name, decorator in cls.__pydantic_decorators__.field_validators.items():
@@ -713,7 +723,33 @@ def _carry_validators(
         carried[dec_name] = make(
             kept[0], *kept[1:], mode=decorator.info.mode, check_fields=False
         )(func)
+    for dec_name, decorator in cls.__pydantic_decorators__.model_validators.items():
+        tag = cls.__prism_validator_scopes__.get(dec_name)
+        if tag is None or not expr.selects(tag):
+            continue
+        func = decorator.func
+        if inspect.ismethod(func):  # before/wrap: re-wrap as a fresh classmethod
+            func = classmethod(func.__func__)
+        make_model = cast(Callable[..., Callable[[Any], Any]], model_validator)
+        carried[dec_name] = make_model(mode=decorator.info.mode)(func)
     return carried or None
+
+
+def _collect_validator_scopes(cls: type[ScopedModel]) -> dict[str, ScopeExpr]:
+    """Map each ``@scoped_validator`` name to the scope expression it carries to.
+
+    The scope tag is recorded by the decorator in a registry keyed by the raw
+    function; ``decorator.func`` is that function for ``mode="after"`` and a
+    bound method (``.__func__`` is the raw function) for ``before``/``wrap``.
+    """
+    scopes: dict[str, ScopeExpr] = {}
+    for dec_name, decorator in cls.__pydantic_decorators__.model_validators.items():
+        func: Any = decorator.func
+        raw: Any = func.__func__ if inspect.ismethod(func) else func
+        tag = _SCOPED_VALIDATOR_SCOPES.get(raw)
+        if tag is not None:
+            scopes[dec_name] = tag
+    return scopes
 
 
 def _validation_key(name: str, info: FieldInfo) -> str:

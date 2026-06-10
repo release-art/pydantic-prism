@@ -3,12 +3,21 @@
 The FastAPI section is covered verbatim by tests/test_fastapi.py.
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, Any, Optional
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel
 
-from pydantic_prism import RefShape, Scope, ScopedModel, backref, ref, scoped
+from pydantic_prism import (
+    RefShape,
+    Scope,
+    ScopedModel,
+    backref,
+    ref,
+    scoped,
+    scoped_validator,
+)
 
 # --- "30 seconds" ----------------------------------------------------------
 
@@ -271,3 +280,26 @@ def test_partial_scope_example() -> None:
     assert RowUpdate().model_dump(exclude_none=True) == {}
     assert RowUpdate(name="new").model_dump(exclude_none=True) == {"name": "new"}
     assert "required" not in RowUpdate.model_json_schema()
+
+
+# --- "@scoped_validator" ----------------------------------------------------
+
+
+class Webpage(ScopedModel):
+    url: Annotated[str, scoped(Public)]
+    hostname: Annotated[str, scoped(Public)] = ""
+
+    @scoped_validator(Update, mode="before")  # carries to Update and broader
+    @classmethod
+    def derive_hostname(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("url") and not data.get("hostname"):
+            data = {**data, "hostname": urlparse(data["url"]).hostname or ""}
+        return data
+
+
+def test_scoped_validator_example() -> None:
+    update = Webpage.scope(Update)
+    derived = update(url="https://example.com/page")
+    assert derived.hostname == "example.com"  # type: ignore[attr-defined]
+    assert "derive_hostname" in update.__pydantic_decorators__.model_validators
+    assert repr(Webpage.__prism_validator_scopes__["derive_hostname"]) == "Update"
