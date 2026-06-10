@@ -32,6 +32,10 @@ from .errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameErr
 
 __all__ = ["Projection", "ScopedModel"]
 
+# Sentinel: "no default_scope= keyword on this class definition". Distinct from
+# None, which is a legitimate resolved value meaning "no default declared".
+_NO_DEFAULT: Any = object()
+
 # Cache key of one derived projection class: (expression, name override,
 # carried bases). All three participate — changing any yields a new class.
 type _ProjectionKey = tuple[ScopeExpr, str | None, tuple[type[BaseModel], ...]]
@@ -113,6 +117,11 @@ class ScopedModel(BaseModel):
     """
 
     __field_scopes__: ClassVar[dict[str, ScopeExpr]] = {}
+    # The class-level default scope: the expression a field falls back to when
+    # it carries no scoped(...) marker. None means "no default declared"; it is
+    # inherited down the ScopedModel MRO like any class attribute and may be
+    # re-declared (or cleared with default_scope=None) by a subclass.
+    __prism_default_scope__: ClassVar[ScopeExpr | None] = None
     __refs__: ClassVar[RefGraph]
     __prism_cache__: ClassVar[dict[_ProjectionKey, type[Projection]]] = {}
     __prism_names__: ClassVar[dict[str, _ProjectionKey]] = {}
@@ -122,12 +131,23 @@ class ScopedModel(BaseModel):
     __prism_base_warned__: ClassVar[bool] = False
 
     def __init_subclass__(
-        cls, projection_bases: Sequence[type[BaseModel]] | None = None, **kwargs: Any
+        cls,
+        projection_bases: Sequence[type[BaseModel]] | None = None,
+        default_scope: ScopeLike | None = _NO_DEFAULT,
+        **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
         if projection_bases is not None:
             cls.__prism_projection_bases__ = _check_bases(
                 cast("type[ScopedModel]", cls), projection_bases
+            )
+        if default_scope is not _NO_DEFAULT:
+            # Validate eagerly (TypeError for a non-Scope value) at class
+            # definition; default_scope=None explicitly clears an inherited
+            # default. Setting the attribute on this class shadows the
+            # inherited one; leaving the keyword off lets the MRO supply it.
+            cls.__prism_default_scope__ = (
+                as_expr(default_scope) if default_scope is not None else None
             )
 
     @classmethod
@@ -348,7 +368,12 @@ def _collect(cls: type[ScopedModel]) -> None:
         scope_markers = [m for m in info.metadata if isinstance(m, Scoped)]
         ref_markers = [m for m in info.metadata if isinstance(m, (Ref, BackRef))]
         if scope_markers:
+            # Explicit wins, no merge: a tagged field ignores the class default.
             field_scopes[field_name] = union_all(m.expr for m in scope_markers)
+        elif cls.__prism_default_scope__ is not None:
+            # Untagged field on a class with a default: fall back to it. The
+            # fallback is uniform — ref()/backref() fields are filled too.
+            field_scopes[field_name] = cls.__prism_default_scope__
         if len(ref_markers) > 1:
             raise TypeError(
                 f"{cls.__name__}.{field_name}: at most one ref()/backref() marker "

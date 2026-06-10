@@ -106,6 +106,41 @@ Document.scope(~Llm)                # every field NOT visible to Llm
 `scoped(Scope - Llm)` is excluded from `Llm` *and every scope that extends
 `Llm`*.
 
+## Class-level default scope
+
+When most of a model's fields share one scope, repeating `scoped(...)` on every
+line is noise. Declare a `default_scope=` and only annotate the deviations:
+
+```python
+# Noisy — every line opts in:                # Quiet — one default, two deviations:
+class Screenshot(ScopedModel):                class Screenshot(ScopedModel, default_scope=Storage):
+    id:   Annotated[UUID, scoped(Ref)]            id:   Annotated[UUID, scoped(Ref)]
+    website_id: Annotated[UUID,                   website_id: Annotated[UUID, scoped(Public)]
+                          scoped(Public)]
+    container_name: Annotated[str,                container_name: str        # implicitly Storage
+                              scoped(Storage)]    blob_path:      str        # implicitly Storage
+    blob_path: Annotated[str, scoped(Storage)]    md5_hash:       str        # implicitly Storage
+    md5_hash:  Annotated[str, scoped(Storage)]
+```
+
+A field with no `scoped(...)` marker falls back to the class default; a field
+with one keeps it (**replace, not merge** — `scoped(Public)` is `{Public}`, not
+`{Public, Storage}`).
+
+- `default_scope=` (class keyword) takes one `Scope` class or a `ScopeExpr`;
+  use `default_scope=Public | Internal` for several. A non-`Scope` value raises
+  `TypeError` at class definition.
+- It is **inherited** down the `ScopedModel` MRO like `projection_bases=`. A
+  subclass that re-declares its own default re-scopes inherited *untagged*
+  fields too; `default_scope=None` clears an inherited default.
+- The fallback is **uniform** — `ref()`/`backref()` fields with no `scoped(...)`
+  take the default as well.
+- A model *without* a default is unchanged: untagged fields belong to no scope
+  and an all-untagged projection still raises `EmptyProjectionError`.
+- The resolved scope of every field is visible in `Model.__field_scopes__`
+  (default folded in); `Model.__prism_default_scope__` exposes the default
+  itself, so explicit-vs-defaulted stays introspectable.
+
 ## Relationships
 
 ```python
@@ -343,6 +378,7 @@ will fail at validation time.
 | marker used as a field default | `TypeError` | class definition |
 | marker nested below the field's top-level `Annotated` | `TypeError` | class definition |
 | `ref()` target neither ScopedModel nor str | `TypeError` | marker construction |
+| `default_scope=` value is not a Scope class or expression | `TypeError` | class definition |
 | two `ref`/`backref` markers on one field | `TypeError` | class definition |
 | projection selects zero fields (message lists the scopes the model defines) | `EmptyProjectionError` | `.scope()` call |
 | one projection name for two different expressions (or bases) | `ProjectionNameError` | `.scope()` call |
@@ -417,7 +453,7 @@ Everything prism adds, with exact spellings. Markers and functions:
 |---|---|---|
 | `Scope` | class | Subclass to declare a scope; subclass a scope to broaden it. Root = wildcard. Never instantiated. `class Update(Storage, partial=True)` declares a partial scope. |
 | `ScopeExpr` | class | Scope expression; built with `\|`, `&`, `-`, `~`. Methods: `.matches(scope)`, `.selects(tag)`, `.atoms()`, `.is_partial()`. |
-| `ScopedModel` | class | Base for canonical models. Class keyword: `projection_bases=(...)`. |
+| `ScopedModel` | class | Base for canonical models. Class keywords: `projection_bases=(...)`, `default_scope=` (the scope untagged fields fall back to). |
 | `Projection` | class | Base of every derived projection class. |
 | `scoped(*scopes)` | marker | Tags a field with scopes / a scope expression. Varargs union. |
 | `ref(target, *, field="id")` | marker | Forward FK-style reference. `target`: ScopedModel subclass or string. Keyed-dict shape inferred from a `dict[...]` annotation. |
@@ -432,7 +468,8 @@ Methods and attributes on canonical models:
 | `Model.scopes()` | classmethod | `frozenset[type[Scope]]` of the atom scopes used in field tags. |
 | `Model.from_projection(proj, **extra)` | classmethod | Projected instance → canonical instance. |
 | `Model.__refs__` | ClassVar | The model's `RefGraph`. |
-| `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each tagged field's scope expression. |
+| `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each field's **resolved** scope expression (the class default folded in for untagged fields). |
+| `Model.__prism_default_scope__` | ClassVar | `ScopeExpr \| None`: the class-level `default_scope=` (inherited down the MRO), or `None`. |
 
 Methods and attributes on projection classes:
 

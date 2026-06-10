@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 3 (class-level default scope)
+
+- Class-level default scope: `class Row(ScopedModel, default_scope=Storage)`
+  makes every field with no `scoped(...)` marker fall back to `Storage`, so
+  mostly-single-shape models annotate only the deviations. Takes one `Scope`
+  class or a `ScopeExpr` (`default_scope=Public | Internal` for several); a
+  non-`Scope` value raises `TypeError` at class definition. Explicit
+  `scoped(...)` **replaces** the default (no merge). Inherited down the
+  `ScopedModel` MRO like `projection_bases=` — a subclass that re-declares
+  re-scopes inherited untagged fields; `default_scope=None` clears it. The
+  fallback is uniform (it fills untagged `ref()`/`backref()` fields too).
+- `Model.__prism_default_scope__` ClassVar exposes the resolved default
+  (`ScopeExpr | None`) for introspection; `Model.__field_scopes__` now reports
+  each field's **resolved** scope with the default folded in.
+
 ### Added — round 2 (adoption feedback)
 
 - Custom-base composition: `class Row(CustomBase, ScopedModel,

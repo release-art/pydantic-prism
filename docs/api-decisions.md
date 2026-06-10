@@ -286,3 +286,101 @@ names themselves.
 - `bases=` entries must be classes the canonical model actually inherits
   from (`TypeError` otherwise) — carrying a base the canonical does not
   have would make the projection behaviorally unrelated to its source.
+
+---
+
+# API decision record — round 3 (class-level default scope)
+
+Phase 2 output, 2026-06-10. One feature: a class-level default scope so fields
+in the dominant scope need no per-line `scoped(...)` marker (see
+docs/design-round-3.md for the full option analysis). All eight open questions
+resolved on the recommendation.
+
+## 27. Spelling → `default_scope=` (singular class keyword)
+
+Options: `default_scope=` (recommended) / `default_scopes=` / `field_scope=` /
+`implicit_scope=`.
+**Chosen: `default_scope=`.** A class keyword (next to `projection_bases=`,
+which it mirrors), singular to match the `scoped()` marker and `Model.scope()`.
+Reads as "this model's default scope." `field_scope=` misreads as "the scope of
+*a* field"; `implicit_scope=` advertises the mechanism rather than the thing;
+`default_scopes=` presumes the tuple answer to #28 and clashes with singular
+`.scope()`.
+
+## 28. Multiple defaults → single `ScopeLike`, `|` for unions
+
+Options: single value, `|` for multiple (recommended) / accept a tuple as union
+sugar.
+**Chosen: single `ScopeLike`** (`type[Scope]` or `ScopeExpr`, coerced via the
+existing `as_expr`). "In both Public and Internal" is `default_scope=Public |
+Internal` — the union operator is already load-bearing in tags and `.scope()`,
+so no third spelling of union is introduced. A tuple would also collide visually
+with `projection_bases=(A, B)` while meaning something algebraically different.
+
+## 29. Inheritance → inherits down the MRO; subclass re-defaults its fields
+
+Options: inherit and re-default inherited untagged fields (recommended) /
+resolve each field's default at its declaring class.
+**Chosen: inherit like `projection_bases=`.** The value is a class attribute set
+only when the keyword is given, so MRO lookup supplies it; `default_scope=None`
+clears an inherited default (symmetry with `bases=()`). `_collect` resolves
+*every* field of the class (inherited included) against the class's effective
+default, so a subclass that overrides the default re-scopes inherited *untagged*
+fields too. `__field_scopes__` stays a pure function of the class.
+`projection_bases=` interaction is moot: carried bases are plain pydantic
+classes and cannot carry a `default_scope` (a `ScopedModel` keyword) — the
+default comes only from the `ScopedModel` MRO.
+
+## 30. Merge vs replace → replace (explicit wins, no merge)
+
+Options: replace (recommended) / merge default on top of explicit tags.
+**Chosen: replace.** The default fills *blank* lines only; a field with a
+`scoped(...)` marker ignores it entirely. `scoped(Public)` on a
+`default_scope=Storage` model is `{Public}`, never `{Public, Storage}` — so an
+explicit tag's meaning is self-contained and never silently widened by the class
+default. `scoped(Public, Storage)` is how you ask for both.
+
+## 31. Backward compat → `EmptyProjectionError` unchanged off-feature
+
+**Confirmed.** `default_scope` is purely additive; it changes only classes that
+opt in. On those, formerly-untagged fields resolve to the default and no longer
+trip `EmptyProjectionError`. On every other class — including a model with no
+markers and no default — behavior is byte-for-byte unchanged: untagged → no
+scope → `.scope()` raises `EmptyProjectionError` (the forgotten-tag safety net).
+
+## 32. Introspection → resolved `__field_scopes__` + raw `__prism_default_scope__`
+
+Options: resolved with the default folded in (recommended) / only line-level
+tags.
+**Chosen: resolved, plus expose the default itself.** `__field_scopes__` folds
+in the default (it is the engine's selection map — it must agree with what
+projection does). A new `Model.__prism_default_scope__` ClassVar holds the
+default `ScopeExpr` (or `None`), so explicit-vs-defaulted is reconstructable.
+Resolved-for-behavior, raw-for-provenance — both available.
+
+## 33. `partial=True` interaction → flows through identically
+
+**Confirmed.** Once a field is in `__field_scopes__`, nothing downstream can
+tell whether a marker or the class default put it there. A `default_scope=`
+model projected to a partial scope makes its default-scoped fields optional with
+`None` defaults exactly as explicit ones — no code path special-cases the
+origin.
+
+## 34. Bad `default_scope=` value → `TypeError` at class definition
+
+Options: class-definition time (recommended) / first `.scope()` call.
+**Chosen: class definition.** Scopes are classes, so an undefined scope is a
+`NameError` before prism runs; the reachable misuse is a wrong-typed value,
+which `as_expr()` rejects with a clear `TypeError`. Called eagerly in
+`__init_subclass__`, matching decision 13 (eager structure) and the convention
+that API misuse is `TypeError`, not a `PrismError`. No new error class.
+
+## Round-3 sub-decisions made by fiat
+
+- **Uniform fallback.** The default fills the scope of *any* field lacking a
+  `scoped()` marker, including `ref()`/`backref()` fields (which without a
+  default stay out of every projection per decision 15). "All my untagged fields
+  default to X" carves out nothing; tag a backref `scoped(...)` to exclude it.
+- The default is resolved into `__field_scopes__` at collection time, fully
+  upstream of projection — it is *not* part of the `.scope()` cache key and
+  needs no change to the projection engine, naming, or refs.

@@ -74,6 +74,40 @@ def test_scope_algebra_example() -> None:
         assert "note" not in Document.scope(scope).model_fields
 
 
+# --- "Class-level default scope" -------------------------------------------
+
+
+class Ref(Scope): ...
+
+
+class StoragePublic(Ref): ...  # the README's "Public" under a "Ref" root
+
+
+class StorageScope(StoragePublic): ...  # the README's "Storage"
+
+
+class Screenshot(ScopedModel, default_scope=StorageScope):
+    id: Annotated[UUID, scoped(Ref)]
+    website_id: Annotated[UUID, scoped(StoragePublic)]
+    container_name: str  # implicitly StorageScope
+    blob_path: str  # implicitly StorageScope
+    md5_hash: str  # implicitly StorageScope
+
+
+def test_default_scope_example() -> None:
+    assert list(Screenshot.scope(StorageScope).model_fields) == [
+        "id",
+        "website_id",
+        "container_name",
+        "blob_path",
+        "md5_hash",
+    ]
+    # explicit replaces, not merges: website_id is StoragePublic only
+    assert list(Screenshot.scope(Ref).model_fields) == ["id"]
+    assert repr(Screenshot.__prism_default_scope__) == "StorageScope"
+    assert repr(Screenshot.__field_scopes__["container_name"]) == "StorageScope"
+
+
 # --- "Relationships" -------------------------------------------------------
 
 

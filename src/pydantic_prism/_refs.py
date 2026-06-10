@@ -7,7 +7,7 @@ import types
 from collections import deque
 from collections.abc import Collection, Iterator, Mapping, Sequence, Set
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import StrEnum, unique
 from typing import TYPE_CHECKING, Any, Literal, Union, get_args, get_origin
 
 from ._markers import BackRef, Ref
@@ -22,6 +22,7 @@ __all__ = ["RefGraph", "RefInfo", "RefShape"]
 RefKind = Literal["ref", "backref", "embedded"]
 
 
+@unique
 class RefShape(StrEnum):
     """Storage shape of a relationship field, inferred from its annotation.
 
