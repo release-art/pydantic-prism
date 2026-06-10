@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — round 6 (`with_updates` patch API)
+
+- `instance.with_updates(patch)` on `ScopedModel`: apply a (partial) projection
+  as a PATCH and get back a new, re-validated canonical instance. Only the
+  patch's explicitly-set fields apply (`exclude_unset` — absent means "don't
+  touch", explicit `None` clears an optional field); the result is re-validated,
+  so nested models are reconstructed and field/`@scoped_validator` validators
+  run (unlike the bare `model_copy(update=patch.model_dump(exclude_unset=True))`
+  boilerplate, which leaves nested fields as raw dicts). `patch` must be a
+  projection of this model (any scope; partial `Update` is the usual source) —
+  a projection of a different model raises `TypeError`. `self` is unchanged.
+
 ### Added — round 5 (`@scoped_validator`)
 
 - `@scoped_validator(*scopes, mode=...)`: a model validator that survives

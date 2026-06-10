@@ -193,6 +193,23 @@ def test_round_trips_example() -> None:
     assert back.email == "ada@example.com"
 
 
+# --- "Round trips: with_updates" -------------------------------------------
+
+
+class Account(ScopedModel):
+    name: Annotated[str, scoped(Public)]
+    status: Annotated[str, scoped(Storage)] = "active"
+
+
+def test_with_updates_example() -> None:
+    acct = Account(name="ada")
+    patch = Account.scope(Update)(name="ADA")
+    updated = acct.with_updates(patch)
+    assert updated.name == "ADA"
+    assert updated.status == "active"
+    assert acct.name == "ada"  # original unchanged
+
+
 # --- "Dict-keyed refs" -----------------------------------------------------
 
 

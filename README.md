@@ -292,6 +292,35 @@ back = User.from_projection(                 # widen: supply what's missing
 the canonical model. Both are thin wrappers over `model_validate` — there is
 no hidden state.
 
+### Applying a patch — `with_updates`
+
+A partial (`Update`) projection is a PATCH body; `with_updates` applies one back
+onto a canonical instance (`Update` is the partial scope from "Partial scopes",
+below):
+
+```python
+class Account(ScopedModel):
+    name: Annotated[str, scoped(Public)]
+    status: Annotated[str, scoped(Storage)] = "active"
+
+
+acct = Account(name="ada")                   # status defaults to "active"
+patch = Account.scope(Update)(name="ADA")    # only `name` is set
+
+updated = acct.with_updates(patch)           # Account(name="ADA", status="active")
+```
+
+- Only the patch's **explicitly-set** fields apply (`exclude_unset`): absent
+  means "don't touch"; an explicit `None` clears an optional field. Defaulted-
+  but-unset fields are left alone.
+- The result is **re-validated** — nested models are reconstructed and the
+  canonical's field/`@scoped_validator` validators run. (This is why it is a
+  method and not the bare `model_copy(update=patch.model_dump(exclude_unset=True))`
+  one-liner, which leaves nested fields as raw dicts and skips validation.)
+- `patch` must be a projection of this model (any scope; partial is the usual
+  source) — a projection of a different model raises `TypeError`. `self` is left
+  unchanged; a new instance is returned.
+
 `from_canonical` forwards `mode`, `by_alias` (default `True`, so alias
 generators round-trip), `context`, `exclude_none`, `exclude_unset` and
 `exclude_defaults` to the instance's own `model_dump`; `context` is also
@@ -562,6 +591,7 @@ Methods and attributes on canonical models:
 | `Model.scope(*scopes, name=None, bases=None)` | classmethod | Derive/fetch the cached projection class. `name` and `bases` join the cache key. |
 | `Model.scopes()` | classmethod | `frozenset[type[Scope]]` of the atom scopes used in field tags. |
 | `Model.from_projection(proj, **extra)` | classmethod | Projected instance → canonical instance. |
+| `instance.with_updates(patch)` | method | Apply a (partial) projection's set fields as a PATCH; returns a new re-validated instance. |
 | `Model.__refs__` | ClassVar | The model's `RefGraph`. |
 | `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each field's **resolved** scope expression (the class default folded in for untagged fields). |
 | `Model.__prism_default_scope__` | ClassVar | `ScopeExpr \| None`: the class-level `default_scope=` (inherited down the MRO), or `None`. |
