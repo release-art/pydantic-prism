@@ -186,9 +186,11 @@ class Scope(metaclass=ScopeMeta):
     # Read per-class (via vars()), never inherited.
     __prism_model_schema__: ClassVar[_SchemaMeta] = {}
     # The CamelCase fragment this scope contributes to a derived class's
-    # auto-name (see ScopeExpr.token); None falls back to the class __name__.
-    # Read per-class (via vars()), never inherited.
-    __prism_cls_name_token__: ClassVar[str | None] = None
+    # auto-name (see ScopeExpr.token). __init_subclass__ binds this on every
+    # subclass — to the cls_name_token= keyword, else the class __name__ — so it
+    # is non-nullable and effectively per-class (each subclass shadows it). The
+    # value here is the root Scope's own token.
+    __prism_cls_name_token__: ClassVar[str] = "Scope"
 
     def __init_subclass__(
         cls,
@@ -202,15 +204,18 @@ class Scope(metaclass=ScopeMeta):
         super().__init_subclass__(**kwargs)
         if partial is not None:
             cls.__prism_partial__ = bool(partial)
-        if cls_name_token is not None:
-            if not cls_name_token or not f"_{cls_name_token}".isidentifier():
-                raise TypeError(
-                    f"{cls.__name__}: cls_name_token={cls_name_token!r} must be a "
-                    f"non-empty fragment of a Python identifier; it is concatenated "
-                    f"into generated class names (e.g. '{{Model}}{cls_name_token}'), "
-                    f"so it cannot contain spaces or punctuation"
-                )
-            cls.__prism_cls_name_token__ = cls_name_token
+        if cls_name_token is not None and (
+            not cls_name_token or not f"_{cls_name_token}".isidentifier()
+        ):
+            raise TypeError(
+                f"{cls.__name__}: cls_name_token={cls_name_token!r} must be a "
+                f"non-empty fragment of a Python identifier; it is concatenated "
+                f"into generated class names (e.g. '{{Model}}{cls_name_token}'), "
+                f"so it cannot contain spaces or punctuation"
+            )
+        # Always bind, so the token is non-nullable and never inherited: an
+        # untagged subclass uses its own __name__, not an ancestor's token.
+        cls.__prism_cls_name_token__ = cls_name_token or cls.__name__
         schema: _SchemaMeta = {}
         if description is not None:
             schema["description"] = description
@@ -331,7 +336,7 @@ class _Atom(ScopeExpr):
         return self.scope.__prism_partial__
 
     def token(self) -> str:
-        return vars(self.scope).get("__prism_cls_name_token__") or self.scope.__name__
+        return self.scope.__prism_cls_name_token__
 
     def sort_key(self) -> str:
         return f"{self.scope.__module__}.{self.scope.__qualname__}"
