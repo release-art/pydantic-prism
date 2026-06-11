@@ -159,30 +159,35 @@ def test_same_named_scopes_canonicalize_consistently() -> None:
     scope_src = "from pydantic_prism import Scope\nclass Night(Scope): ...\n"
     s1 = _make_module("prism_test_scopes_1", scope_src).Night
     s2 = _make_module("prism_test_scopes_2", scope_src).Night
+    # Two same-named scopes from different modules stay distinct yet canonicalize
+    # consistently in the *expression* algebra (module-qualified ordering). They
+    # may not, however, share one model — see the next test.
     assert (s1 | s2) == (s2 | s1)
     assert hash(s1 | s2) == hash(s2 | s1)
 
-    class M(ScopedModel):
-        x: Annotated[int, scoped(s1)]
-        y: Annotated[int, scoped(s2)]
 
-    assert M.scope(s1 | s2) is M.scope(s2 | s1)
-
-
-def test_auto_name_collision_raises_projection_name_error() -> None:
+def test_same_token_scopes_on_one_model_are_rejected() -> None:
+    # Two scopes contributing the same projection-name token cannot share a
+    # model: their projections would collide on one class name. Rejected eagerly,
+    # at model definition — not lazily at the second .scope() build.
     scope_src = "from pydantic_prism import Scope\nclass Dusk(Scope): ...\n"
     d1 = _make_module("prism_test_scopes_3", scope_src).Dusk
     d2 = _make_module("prism_test_scopes_4", scope_src).Dusk
+    with pytest.raises(ProjectionNameError, match="would share a class name"):
 
-    class M(ScopedModel):
+        class Collide(ScopedModel):
+            x: Annotated[int, scoped(d1)]
+            y: Annotated[int, scoped(d2)]
+
+    # A distinct cls_name_token= on one scope resolves the clash.
+    class DuskAlt(Scope, cls_name_token="Twilight"): ...
+
+    class Ok(ScopedModel):
         x: Annotated[int, scoped(d1)]
-        y: Annotated[int, scoped(d2)]
+        y: Annotated[int, scoped(DuskAlt)]
 
-    M.scope(d1)  # auto-named "MDusk"
-    with pytest.raises(ProjectionNameError, match="pass name="):
-        M.scope(d2)  # would also be "MDusk", different expression
-    renamed = M.scope(d2, name="MDusk2")  # disambiguation works
-    assert renamed.__name__ == "MDusk2"
+    names = {Ok.scope(d1).__name__, Ok.scope(DuskAlt).__name__}
+    assert names == {"OkDusk", "OkTwilight"}
 
 
 def test_explicit_name_reuse_with_different_expr_raises() -> None:
