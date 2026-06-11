@@ -56,6 +56,27 @@ Calling `.scope()` on a model whose base overrides `model_dump`/`model_validate`
 *without* a declaration warns once; declare `projection_bases=()` to silence it.
 Runnable: [`examples/custom_base`](../../examples/custom_base).
 
+## Where validators live: three tiers
+
+A pydantic validator is bound to the shape it was declared against — pydantic
+only ever carries one to a context with the *same* field set (subclasses add
+fields, never remove them). A prism projection is a **different** shape, so prism
+keeps validator behavior explicit rather than silently inheriting logic written
+for the full model. That gives three tiers — pick by **how far the validator
+should travel**, each backed by a pydantic-native mechanism:
+
+| the validator should… | put it… | how it travels |
+|---|---|---|
+| run on the canonical only | as a plain `@model_validator` on the `ScopedModel` | it doesn't — it's bound to the full shape |
+| **survive onto projections** | on a **carried base** (`projection_bases=`) | pydantic's own inheritance carries it onto the projection — no prism-specific path |
+| travel, but only to some scopes | as a `@scoped_validator(*scopes, ...)` | prism carries it, gated by scope |
+
+The middle tier is the important one: **the pydantic-native way to make a
+before-hook (a decode/normalize step) survive projection is to put it on a
+carried base**, where the projection inherits it the way pydantic intends. A hook
+left on a `ScopedModel` ancestor is *not* carried (the projection is a sibling,
+not a subclass), which is the usual cause of the ordering surprise below.
+
 ## Before-validator ordering with `@scoped_validator`
 
 **The rule:** pydantic v2 runs `mode="before"` model validators **child-first,
