@@ -41,5 +41,4 @@ job. Pick the column that matches what you need right now.
 
 ### Project
 - [Roadmap](../ROADMAP.md) — shipped / planned / declined
-- [Design decisions (ADR archive)](decisions/README.md)
 - [Changelog](../CHANGELOG.md)

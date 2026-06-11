@@ -104,9 +104,11 @@ scopes = ["myapp.models:Public", "myapp.models:Internal"]  # union
 name = "DocumentPublicView"         # optional name override
 ```
 
-| key | meaning |
-|---|---|
-| `output` | Path the stub module is written to. |
-| `modules` | Modules to scan; each scope yields one per-atom projection stub. |
-| `projections` | Extra projections (unions, name overrides) beyond per-atom. |
-| `readme` | Optional path for the generated GitHub model doc. |
+| key | required | meaning |
+|---|---|---|
+| `output` | yes | Path the stub module is written to. |
+| `modules` | one of `modules` / `projections` | Modules to scan; each scope yields one per-atom projection stub. |
+| `projections` | one of `modules` / `projections` | Extra projections (unions, name overrides) beyond per-atom. |
+| `readme` | no | Path for the generated GitHub model doc. |
+
+A config that selects nothing (neither `modules` nor `projections`) is an error.

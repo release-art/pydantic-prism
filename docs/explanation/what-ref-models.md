@@ -31,13 +31,14 @@ declaration is checked at resolution time.
 
 ## What it *does* enforce — consistency, not integrity
 
-Prism validates *declarations*, never *data*. A forward `ref()`'s annotation is
-checked against the target id field's annotation, and a keyed-dict's key type is
-checked against the target id type. These checks run **lazily**, on first
-`__refs__` access (eager structure, lazy resolution), and raise
-`RefResolutionError` — but they never touch a single instance. A `UUID` that
-points nowhere validates fine; referential integrity is a database's job, not a
-schema library's.
+Prism validates *declarations*, never *data*. A keyed-dict `ref()`'s key type is
+checked against the target id field's annotation, and a `backref(via=...)` is
+checked against the matching forward `ref` on its target. These checks run
+**lazily**, on first `__refs__` access (eager structure, lazy resolution), and
+raise `RefResolutionError` — but they never touch a single instance. (A scalar
+or collection `ref()` records its target without comparing field types, and a
+`UUID` that points nowhere validates fine.) Referential integrity is a
+database's job, not a schema library's.
 
 Cardinality follows the same "report, don't act" stance: it is *inferred from
 the annotation* and merely recorded. `UUID` is `SCALAR`, `list[UUID]` is

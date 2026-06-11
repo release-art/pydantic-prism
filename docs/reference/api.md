@@ -1,7 +1,9 @@
 # API reference
 
-Everything `pydantic_prism` exports, with exact spellings. Every symbol below
-appears in `pydantic_prism.__all__`.
+Everything `pydantic_prism` exports, with exact spellings. Every name in the
+import block below is in `pydantic_prism.__all__`. (`Node` / `NodeField` are the
+element types a `Diagram` holds — you reach them through `diagram.nodes`, not a
+top-level import.)
 
 ```python
 from pydantic_prism import (
@@ -57,7 +59,7 @@ Operators (usable in `scoped(...)` tags and in `Model.scope(...)`):
 |---|---|---|
 | `Model.scope(*scopes, name=None, bases=None)` | classmethod | Derive/fetch the cached projection class. `name` and `bases` join the cache key. Multiple args union. |
 | `Model.scopes()` | classmethod | `frozenset[type[Scope]]` of the atom scopes used in field tags. |
-| `Model.from_projection(proj, /, **extra)` | classmethod | Complete projection → canonical instance; missing fields via `**extra` or canonical defaults. Rejects **partial** projections (use `with_updates`). |
+| `Model.from_projection(projection, /, **extra)` | classmethod | Complete projection → canonical instance; missing fields via `**extra` or canonical defaults. Rejects **partial** projections (use `with_updates`). |
 | `instance.with_updates(patch, /)` | method | Apply a (partial) projection's set fields as a PATCH; returns a new, re-validated instance. `self` unchanged. |
 | `Model.__refs__` | ClassVar | The model's `RefGraph`. |
 | `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each field's **resolved** scope (class default folded in for untagged fields). |
@@ -72,7 +74,7 @@ placeholders; the result must be a valid identifier).
 
 | you have | you want | use | missing fields come from |
 |---|---|---|---|
-| a **full** projection | a fresh canonical | `Model.from_projection(proj, **extra)` | `**extra` / canonical defaults |
+| a **full** projection | a fresh canonical | `Model.from_projection(projection, **extra)` | `**extra` / canonical defaults |
 | a **partial** patch + a baseline | the updated canonical | `baseline.with_updates(patch)` | the **baseline** instance |
 | a canonical | a projection | `Projection.from_canonical(instance)` | — (narrows) |
 

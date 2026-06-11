@@ -69,7 +69,3 @@ Two things, and they are the differentiators:
 | validators on derived models | field validators carried; model validators via `@scoped_validator` or carried bases | lost | lost |
 | implicit behavior | none | call-stack sniffing can switch modes | registry monkey-patched onto your class |
 | Python | 3.12+ | 3.9+ (claimed) | 3.13+ |
-
-The full prior-art survey — including the entity-identity and naming-convention
-research behind `ref()` and the scope vocabulary — is preserved in the
-[design-decision archive](../decisions/README.md).

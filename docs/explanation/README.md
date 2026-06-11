@@ -16,5 +16,3 @@ the docs make sense.
   referential integrity, no ORM.
 - **[Compared to prior art](vs-prior-art.md)** — the honest overlap with
   existing projection libraries, and the two things that are genuinely new.
-
-For the decision-by-decision record, see the [ADR archive](../decisions/README.md).
