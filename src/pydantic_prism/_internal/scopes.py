@@ -14,16 +14,29 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypedDict
 
 __all__ = [
-    "Classification",
     "Scope",
     "ScopeExpr",
     "ScopeLike",
     "as_expr",
     "union_all",
 ]
+
+
+class _SchemaMeta(TypedDict, total=False):
+    """The fixed-shape JSON-schema metadata a scope or ``scoped()`` field carries.
+
+    All three keys are optional. ``description`` / ``examples`` land on the
+    field's (or projection's) schema; ``json_schema_extra`` is itself an *open*
+    dict of arbitrary JSON-schema fields, merged in. Used for
+    :attr:`Scope.__prism_model_schema__` and :attr:`markers.Scoped.field_schema`.
+    """
+
+    description: str
+    examples: list[Any]
+    json_schema_extra: dict[str, Any]
 
 
 class ScopeExpr:
@@ -94,6 +107,26 @@ class ScopeExpr:
     def __invert__(self) -> ScopeExpr:
         return _Complement(self)
 
+    # Named, varargs forms of the binary operators — the spelling for
+    # *programmatic* composition over a runtime list of scopes
+    # (``reduce(ScopeExpr.union, scopes)``, ``base.difference(*to_strip)``). For
+    # statically-known scopes, prefer the operators (``A | B``, ``A - B``).
+
+    def union(self, *others: ScopeLike) -> ScopeExpr:
+        """Union with zero or more scopes/expressions — the named form of ``|``."""
+        return union_all([self, *(as_expr(other) for other in others)])
+
+    def intersection(self, *others: ScopeLike) -> ScopeExpr:
+        """Intersection with zero or more scopes — the named form of ``&``."""
+        return intersect_all([self, *(as_expr(other) for other in others)])
+
+    def difference(self, *others: ScopeLike) -> ScopeExpr:
+        """Difference of zero or more scopes — the named form of ``-`` (left-fold)."""
+        result: ScopeExpr = self
+        for other in others:
+            result = result - other
+        return result
+
 
 class ScopeMeta(type):
     """Metaclass giving Scope *classes* the same operators as expressions."""
@@ -118,6 +151,18 @@ class ScopeMeta(type):
 
     def __invert__(cls) -> ScopeExpr:
         return ~as_expr(cls)
+
+    def union(cls, *others: ScopeLike) -> ScopeExpr:
+        """Union with zero or more scopes/expressions — the named form of ``|``."""
+        return as_expr(cls).union(*others)
+
+    def intersection(cls, *others: ScopeLike) -> ScopeExpr:
+        """Intersection with zero or more scopes — the named form of ``&``."""
+        return as_expr(cls).intersection(*others)
+
+    def difference(cls, *others: ScopeLike) -> ScopeExpr:
+        """Difference of zero or more scopes — the named form of ``-``."""
+        return as_expr(cls).difference(*others)
 
 
 class Scope(metaclass=ScopeMeta):
@@ -150,13 +195,30 @@ class Scope(metaclass=ScopeMeta):
     metadata is *not* inherited: a broader subclass does not reuse a narrower
     scope's prose.
 
+    Finally, a scope may set the CamelCase fragment it contributes to a derived
+    class's auto-name, which otherwise defaults to the scope's own ``__name__``::
+
+        # then User.scope(Out) is named "UserReadOnly", not "UserOut"
+        class Out(Direction, cls_name_token="ReadOnly"): ...
+
+    Like the schema metadata, ``cls_name_token`` is read per-class and *not*
+    inherited. This is what lets the shipped ``Out`` / ``In`` scopes free up the
+    ``...Out`` / ``...In`` names for the
+    :meth:`~pydantic_prism.ScopedModel.output` / ``input`` helpers' defaults.
+
     Scopes are only ever used as classes and cannot be instantiated.
     """
 
     __prism_partial__: ClassVar[bool] = False
     # Model-level JSON-schema metadata for projections that select this scope.
     # Read per-class (via vars()), never inherited.
-    __prism_model_schema__: ClassVar[dict[str, Any]] = {}
+    __prism_model_schema__: ClassVar[_SchemaMeta] = {}
+    # The CamelCase fragment this scope contributes to a derived class's
+    # auto-name (see ScopeExpr.token). __init_subclass__ binds this on every
+    # subclass — to the cls_name_token= keyword, else the class __name__ — so it
+    # is non-nullable and effectively per-class (each subclass shadows it). The
+    # value here is the root Scope's own token.
+    __prism_cls_name_token__: ClassVar[str] = "Scope"
 
     def __init_subclass__(
         cls,
@@ -164,12 +226,25 @@ class Scope(metaclass=ScopeMeta):
         description: str | None = None,
         examples: Sequence[Any] | None = None,
         json_schema_extra: dict[str, Any] | None = None,
+        cls_name_token: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
         if partial is not None:
             cls.__prism_partial__ = bool(partial)
-        schema: dict[str, Any] = {}
+        if cls_name_token is not None and (
+            not cls_name_token or not f"_{cls_name_token}".isidentifier()
+        ):
+            raise TypeError(
+                f"{cls.__name__}: cls_name_token={cls_name_token!r} must be a "
+                f"non-empty fragment of a Python identifier; it is concatenated "
+                f"into generated class names (e.g. '{{Model}}{cls_name_token}'), "
+                f"so it cannot contain spaces or punctuation"
+            )
+        # Always bind, so the token is non-nullable and never inherited: an
+        # untagged subclass uses its own __name__, not an ancestor's token.
+        cls.__prism_cls_name_token__ = cls_name_token or cls.__name__
+        schema: _SchemaMeta = {}
         if description is not None:
             schema["description"] = description
         if examples is not None:
@@ -186,28 +261,11 @@ class Scope(metaclass=ScopeMeta):
         )
 
 
-class Classification(Scope):
-    """Base for data-classification tags — an axis orthogonal to visibility.
-
-    A classification *is* a :class:`Scope`: it composes in the same expression
-    algebra (``Internal - Pii``), tags fields through the same ``scoped(...)``
-    marker, and is selected by the same ``matches`` / ``selects`` rules. The
-    distinct base is what lets prism tell the two axes apart — enumerate a
-    model's classifications (:meth:`ScopedModel.classifications`), auto-derive
-    audit-safe views (:meth:`ScopedModel.redacted`), and trace where classified
-    data flows (:meth:`ScopedModel.classified_flow`).
-
-    Declare concrete tags by subclassing::
-
-        class Pii(Classification): ...
-        class Secret(Classification): ...
-
-    prism ships only this base, not a fixed taxonomy — name the classes that fit
-    your compliance regime. Because a classification is an ordinary scope, it may
-    still be requested directly (``Model.scope(Pii)`` is "every PII field"); the
-    governance helpers above are the ergonomic path that keeps the two axes
-    explicit.
-    """
+# The bundled axis taxonomy (Classification, Direction/In/Out) — public API —
+# lives in the sibling ``pydantic_prism.scopes`` module, not here: this module is
+# the scope *machinery* (the base class and the expression algebra). The
+# taxonomy is built from that machinery and imported back by consumers from the
+# public module.
 
 
 type ScopeLike = type[Scope] | ScopeExpr
@@ -220,6 +278,28 @@ def as_expr(value: object) -> ScopeExpr:
     if isinstance(value, type) and issubclass(value, Scope):
         return _Atom(value)
     raise TypeError(f"expected a Scope subclass or a scope expression, got {value!r}")
+
+
+def dimension_root(scope: type[Scope]) -> type[Scope]:
+    """The scope's *axis*: its top ancestor just below :class:`Scope`.
+
+    A dimension (axis) is read purely from the inheritance forest — walk
+    ``__bases__`` up until the parent is ``Scope`` itself. Visibility ladders,
+    the shipped ``Classification`` / ``Direction`` axes, and any user-defined
+    axis are all discovered the same way, with *no* dependence on which base a
+    scope subclasses. The root's name labels the axis. A scope that is a direct
+    subclass of ``Scope`` (or ``Scope`` itself) is its own dimension root.
+    """
+    current = scope
+    while True:
+        parents = [
+            base
+            for base in current.__bases__
+            if issubclass(base, Scope) and base is not Scope
+        ]
+        if not parents:
+            return current
+        current = parents[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -239,7 +319,7 @@ class _Atom(ScopeExpr):
         return self.scope.__prism_partial__
 
     def token(self) -> str:
-        return self.scope.__name__
+        return self.scope.__prism_cls_name_token__
 
     def sort_key(self) -> str:
         return f"{self.scope.__module__}.{self.scope.__qualname__}"

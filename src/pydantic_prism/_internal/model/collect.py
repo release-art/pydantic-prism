@@ -5,13 +5,14 @@ from __future__ import annotations
 import inspect
 from typing import Any, cast, get_args, get_origin
 
-from ..markers import PRISM_MARKERS, BackRef, Ref, Scoped
-from ..refs import Embedded, RawEdge, RefGraph, RefShape, shape_of
-from ..scopes import ScopeExpr, union_all
-from ..validators import (
+from ...errors import ProjectionNameError
+from ...markers import PRISM_MARKERS, BackRef, Ref, Scoped
+from ...model import Projection, ScopedModel
+from ...refs import Embedded, RawEdge, RefGraph, RefShape, shape_of
+from ...validators import (
     _SCOPED_VALIDATOR_SCOPES,  # pyright: ignore[reportPrivateUsage] — intra-package
 )
-from .classes import Projection, ScopedModel
+from ..scopes import Scope, ScopeExpr, as_expr, union_all
 
 __all__ = ["_collect", "_initialize", "_variable_container"]
 
@@ -63,6 +64,7 @@ def _collect(cls: type[ScopedModel]) -> None:
                 shape, optional, key_type = shape_of(info.annotation)
                 raw_refs[field_name] = RawEdge(embedded, shape, optional, key_type)
     cls.__field_scopes__ = field_scopes
+    _check_scope_name_tokens(cls)
     cls.__prism_validator_scopes__ = _collect_validator_scopes(cls)
     existing = cls.__dict__.get("__refs__")
     if isinstance(existing, RefGraph):
@@ -70,6 +72,37 @@ def _collect(cls: type[ScopedModel]) -> None:
         existing._reset(raw_refs)  # pyright: ignore[reportPrivateUsage] — intra-package
     else:
         cls.__refs__ = RefGraph(cls, raw_refs)
+
+
+def _check_scope_name_tokens(cls: type[ScopedModel]) -> None:
+    """Reject a model whose scopes would auto-name two projections identically.
+
+    A projection's auto-name is the model name + the scope expression's token,
+    where each atom contributes its ``cls_name_token`` (else its ``__name__``).
+    Two scopes on one model sharing that token — two same-named scopes from
+    different modules, or a stray duplicate ``cls_name_token=`` — would make
+    ``Model.scope(A)`` and ``Model.scope(B)`` resolve to the same class name.
+    That is confusable, so it is rejected here, at model definition, and fixed at
+    the source (rename one, or give it a distinct ``cls_name_token=``) rather than
+    papered over with ``name=`` at every call site.
+
+    Scoped to *this* model's atoms — there is no global scope registry, since a
+    token only has to be unique within one model's projection namespace; two
+    unrelated modules may each define a ``Public``.
+    """
+    by_token: dict[str, type[Scope]] = {}
+    for scope in sorted(cls.scopes(), key=lambda s: (s.__module__, s.__qualname__)):
+        token = as_expr(scope).token()
+        clash = by_token.get(token)
+        if clash is not None:
+            raise ProjectionNameError(
+                f"{cls.__name__}: scopes {clash.__module__}.{clash.__qualname__} and "
+                f"{scope.__module__}.{scope.__qualname__} both contribute the "
+                f"projection-name token {token!r}, so their projections of "
+                f"{cls.__name__} would share a class name. Rename one, or give it a "
+                f"distinct cls_name_token=."
+            )
+        by_token[token] = scope
 
 
 def _detect_embedded(annotation: Any) -> Embedded | None:

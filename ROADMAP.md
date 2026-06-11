@@ -15,6 +15,7 @@ documented. Links go to the how-to guide.
 | Scope algebra | `\| & - ~` over user-defined `Scope` classes, in tags and at the call site | [Explanation](docs/explanation/scopes-and-the-algebra.md) |
 | Relationship graph | `ref()` / `backref()` markers, `__refs__`, survives projection | [Explanation](docs/explanation/what-ref-models.md) |
 | Partial / PATCH views | `partial=True` scopes (`MISSING`-sentinel), `with_updates` to apply a delta | [Build a PATCH model](docs/how-to/partial-update.md) |
+| Read-only / write-only fields | `In` / `Out` direction axis, `Model.input()` / `output()`, `extra="forbid"` on input — mass-assignment protection by shape | [Prevent mass-assignment](docs/how-to/prevent-mass-assignment.md) |
 | PII classification & redaction | `Classification` axis, `Model.redacted(...)` audit views | [Redact PII](docs/how-to/redact-pii.md) |
 | Data-flow reports | `Model.classified_flow()` → `FlowReport`, `prism flow` CLI | [Trace data flow](docs/how-to/trace-data-flow.md) |
 | Diagram export | scope / projection / ref graphs → Mermaid, DOT, D2, JSON; `prism diagram` | [Export diagrams](docs/how-to/export-diagrams.md) |
@@ -32,10 +33,6 @@ Bets with real demand, listed with the honest boundary that gates each one.
   scope plus per-scope `description`/`examples` — already works. What is
   missing is a blessed convention and possibly a thin `tool_schema()` helper
   that normalizes the schema for OpenAI/Anthropic strict modes.
-- **Read-only / write-only field convention.** `In` / `Out` scopes prevent
-  mass-assignment *by shape, not a runtime check*. The one open decision:
-  whether input projections should default to `extra="forbid"` or expose it
-  on `.scope(...)`.
 - **Entitlement / plan-tier gating docs.** Scope inheritance models a
   Free < Pro < Enterprise ladder cleanly. Boundary: prism gates field
   **presence** only — never numeric limits ("max 5 projects"), rate limits,

@@ -65,7 +65,7 @@ Two things, and they are the differentiators:
 | static typing of derived models | `prism gen` stubs (pyright/Pylance/mypy) + startup drift check | — | — |
 | per-projection schema metadata | per-scope field & model `description` / `examples` / `json_schema_extra` | — | — |
 | diagram export | scope / projection / relationship graphs → Mermaid, DOT, D2, JSON | — | — |
-| classification & data-flow | `Classification` axis, `redacted()`, `classified_flow()` | — | — |
+| classification & data-flow | `Classification` axis, `redacted()`, `data_flow()` | — | — |
 | validators on derived models | field validators carried; model validators via `@scoped_validator` or carried bases | lost | lost |
 | implicit behavior | none | call-stack sniffing can switch modes | registry monkey-patched onto your class |
 | Python | 3.12+ | 3.9+ (claimed) | 3.13+ |

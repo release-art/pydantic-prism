@@ -80,7 +80,7 @@ def test_scope_algebra_example() -> None:
         "body",
         "owner_email",
     ]
-    assert Document.scope(Public | Internal) is Document.scope(Public, Internal)
+    assert Document.scope(Public | Internal) is Document.scope(Internal | Public)
     assert list(Document.scope(~Llm).model_fields) == ["owner_email", "embedding"]
     for scope in (Public, Internal, Storage, Llm):
         assert "note" not in Document.scope(scope).model_fields

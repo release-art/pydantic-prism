@@ -54,9 +54,12 @@ expression. `A - B` and `~A` propagate through inheritance: exclude `Llm` and
 you exclude every scope that extends `Llm` too.
 
 Second, **expressions are reusable values.** `SAFE = Scope - Pii` is a name you
-can put on a field tag and hand to `.scope()` alike. Varargs are just union
-sugar: `scoped(A, B)` is `scoped(A | B)`, and `Model.scope(A, B)` is
-`Model.scope(A | B)`.
+can put on a field tag and hand to `.scope()` alike. The projection methods
+(`.scope()` / `.redacted()` / `.input()` / `.output()`) each take **one** scope
+or expression — compose with the operators (`Model.scope(A | B)`) rather than
+passing several arguments. (The `scoped(...)` field marker still unions its
+varargs, since tagging a field with several scopes at once reads naturally:
+`scoped(A, B)` is `scoped(A | B)`.)
 
 ## A second axis: classification
 
@@ -72,10 +75,55 @@ engine is reused. The only new machinery is the distinct base, which lets prism
 tell the two axes apart by *type* — `issubclass(atom, Classification)` partitions
 a field's tags. That partition is what powers
 [`redacted()`](../how-to/redact-pii.md) (strip the classification atoms, keep the
-visibility view) and [`classified_flow()`](../how-to/trace-data-flow.md).
+visibility view) and [`data_flow()`](../how-to/trace-data-flow.md).
 
 The axes are distinguishable by type but not *forbidden* from mixing:
 `Model.scope(Pii)` stays legal ("give me the PII view" is genuinely useful),
 while the governance helpers are the ergonomic, axis-explicit path. And because
 `redacted()` defaults to stripping *every* classification the model declares, a
 classification added later is auto-redacted — the safe direction.
+
+## A third axis: direction
+
+Read/write *direction* is the same move once more. A field is read-only,
+write-only, or read-write — orthogonal to both visibility and classification.
+Prism ships it as `class Direction(Scope)` with the two members `In` and `Out`
+(a *closed* binary, so prism ships both members, unlike the open classification
+taxonomy). Tag the exceptions: a read-only field unions `Out` onto its
+visibility scope, a write-only field unions `In`; read-write fields carry no
+direction tag.
+
+Here the axis-awareness pays off as a *subtraction* rather than a partition.
+[`input()`](../how-to/prevent-mass-assignment.md) is `union(visible) - Out` (the
+write view drops read-only fields) and `output()` is `union(visible) - In` (the
+read view drops write-only fields) — the same difference operator that powers
+`redacted()`, aimed at the direction atoms. A read-only field is therefore
+simply *absent* from the input projection, which is mass-assignment protection
+by shape: there is no field to over-post. The membership rule does the rest — a
+field tagged `Public | Out` still belongs to `Public`, so the *full*
+`scope(Public)` keeps it; only the directional `input()` removes it.
+
+The one wrinkle is that `input()` forks the projection's `model_config` to
+`extra="forbid"` (a config-distinct class, separately named `{Model}In`), so an
+unknown key is rejected rather than silently dropped — the only thing that
+closes the over-posting hole when the canonical itself allows extra keys. That
+is a deliberate strictness choice on the safety axis, overridable per view.
+
+## Axes are the inheritance forest
+
+Notice the pattern: visibility, classification, and direction are each a *tree*
+in the scope-inheritance forest, hanging off a root just below `Scope` (`Public`,
+`Classification`, `Direction`). That structure is enough to **infer the axes at
+runtime** — `dimension_root(scope)` walks `__bases__` up to the root, and
+[`Model.dimensions()`](../reference/api.md) groups a model's scopes by it. The
+root's *name* labels the axis. Crucially this needs *no* knowledge of the shipped
+`Classification` / `Direction` classes — a user-defined `class Tenancy(Scope)`
+with `Shared` / `Private` members is discovered identically.
+
+Graph generation leans on this: diagrams badge each field with its secondary-axis
+tags (`email [Pii]`) and [`data_flow()`](../how-to/trace-data-flow.md) reports
+every reachable field's scopes per axis — all structural, so a new axis shows up
+automatically. The *semantic* operations stay marker-based, though: `redacted()`
+needs to know an axis *means* "strip me" and `input()`/`output()` that `In`/`Out`
+*mean* a direction — meaning that structure alone can't supply. Structure tells
+you the axes exist; the marker bases tell you what they do.

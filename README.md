@@ -62,6 +62,12 @@ idea your models reference each other. Prism derives every face from one
 source of truth and keeps the references coherent across all of them.
 See [projections, not inheritance](docs/explanation/projections-not-inheritance.md).
 
+In fact prism derives those two faces by name: tag read-only fields `Out` and
+write-only fields `In`, then `User.input(Public)` (a `UserIn` that drops
+read-only fields and forbids unknown keys — mass-assignment-safe *by shape*) and
+`User.output(Public)` (a `UserOut` that never echoes write-only fields). See
+[prevent mass-assignment](docs/how-to/prevent-mass-assignment.md).
+
 ## Install
 
 ```sh

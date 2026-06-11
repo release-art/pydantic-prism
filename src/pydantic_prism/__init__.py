@@ -7,26 +7,8 @@ relationships introspectable across projections.
 
 from pydantic.experimental.missing_sentinel import MISSING
 
-from ._internal.diagram import Diagram, projection_diagram, scope_diagram
-from ._internal.flow import (
-    ClassifiedField,
-    FlowEdge,
-    FlowNode,
-    FlowReport,
-    build_flow_report,
-)
-from ._internal.markers import BackRef, Ref, Scoped, backref, ref, scoped
-from ._internal.model import Projection, ScopedModel
-from ._internal.refs import (
-    BackRefInfo,
-    EmbeddedRefInfo,
-    IdRefInfo,
-    RefGraph,
-    RefInfo,
-    RefShape,
-)
-from ._internal.scopes import Classification, Scope, ScopeExpr
-from ._internal.validators import scoped_validator
+from ._internal.scopes import Scope, ScopeExpr
+from .diagram import Diagram, projection_diagram, scope_diagram
 from .errors import (
     EmptyProjectionError,
     PrismError,
@@ -35,20 +17,42 @@ from .errors import (
     RefResolutionError,
     StaleProjectionStubError,
 )
+from .flow import (
+    FlowEdge,
+    FlowField,
+    FlowNode,
+    FlowReport,
+    build_flow_report,
+)
+from .markers import BackRef, Ref, Scoped, backref, ref, scoped
+from .model import Projection, ScopedModel
+from .refs import (
+    BackRefInfo,
+    EmbeddedRefInfo,
+    IdRefInfo,
+    RefGraph,
+    RefInfo,
+    RefShape,
+)
+from .scopes import Classification, Direction, In, Out
+from .validators import scoped_validator
 
 __all__ = [
     "MISSING",
     "BackRef",
     "BackRefInfo",
     "Classification",
-    "ClassifiedField",
+    "FlowField",
     "Diagram",
+    "Direction",
     "EmbeddedRefInfo",
     "EmptyProjectionError",
     "FlowEdge",
     "FlowNode",
     "FlowReport",
     "IdRefInfo",
+    "In",
+    "Out",
     "PrismError",
     "Projection",
     "ProjectionBaseError",

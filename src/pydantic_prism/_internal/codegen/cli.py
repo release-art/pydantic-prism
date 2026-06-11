@@ -26,7 +26,7 @@ def _resolve_kind(path: str, want: type[Any], label: str) -> Any:
 
 
 def _build_cli_diagram(kind: str, paths: Sequence[str], direction: str) -> Any:
-    from ..diagram import projection_diagram, scope_diagram
+    from ...diagram import projection_diagram, scope_diagram
     from ..model import ScopedModel
     from ..scopes import Scope
 
@@ -83,7 +83,7 @@ def _run_flow(args: argparse.Namespace) -> int:
     except CodegenError as exc:
         print(f"prism: {exc}", file=sys.stderr)
         return 2
-    report = model.classified_flow()
+    report = model.data_flow()
     if args.format == "mermaid":
         rendered = report.to_mermaid(direction=args.direction)
     else:

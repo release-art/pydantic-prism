@@ -2,7 +2,7 @@
 
 import pytest
 
-from pydantic_prism import Scope
+from pydantic_prism import Scope, ScopeExpr
 from pydantic_prism._internal.scopes import as_expr, union_all
 
 
@@ -81,12 +81,37 @@ def test_operators_compose_classes_and_expressions() -> None:
     assert (Public | (Llm & Internal)) == ((Llm & Internal) | Public)
 
 
+def test_named_methods_mirror_the_operators() -> None:
+    from functools import reduce
+
+    # varargs named forms on an expression, equivalent to the operators
+    assert as_expr(Public).union(Internal, Llm) == (Public | Internal | Llm)
+    assert as_expr(Public).intersection(Llm) == (Public & Llm)
+    assert as_expr(Scope).difference(Llm, Internal) == ((Scope - Llm) - Internal)
+    # and on a Scope class (via the metaclass)
+    assert Public.union(Llm) == (Public | Llm)
+    assert Public.intersection(Llm) == (Public & Llm)
+    assert Public.difference(Llm) == (Public - Llm)
+    # zero-arg forms are identity (left side unchanged)
+    assert as_expr(Public).union() == as_expr(Public)
+    assert as_expr(Public).difference() == as_expr(Public)
+    assert as_expr(Public).intersection() == as_expr(Public)
+    # the point: programmatic composition over a runtime list
+    assert reduce(ScopeExpr.union, map(as_expr, [Public, Internal, Llm])) == (
+        Public | Internal | Llm
+    )
+
+
 def test_canonical_equality_and_hash() -> None:
     assert (Public | Llm) == (Llm | Public)
     assert hash(Public | Llm) == hash(Llm | Public)
     assert (Public | (Llm | Storage)) == (Storage | Llm | Public)  # flattens
     assert union_all([as_expr(Public), as_expr(Public)]) == as_expr(Public)  # dedupes
     assert (Public | Llm) != (Public & Llm)
+    # operands sort deterministically by sort_key regardless of kind/order — a
+    # complement inside a union/intersection canonicalizes too
+    assert (~Llm | Public) == (Public | ~Llm)
+    assert (~Llm & Public) == (Public & ~Llm)
 
 
 def test_tokens_used_for_class_names() -> None:
@@ -95,6 +120,26 @@ def test_tokens_used_for_class_names() -> None:
     assert (Public - Llm).token() == "PublicNotLlm"
     assert (~Llm).token() == "NotLlm"
     assert (Public & Llm).token() == "LlmAndPublic"
+
+
+def test_cls_name_token_overrides_class_name() -> None:
+    class Tagged(Scope, cls_name_token="Slug"): ...
+
+    class Sub(Tagged): ...  # the token is per-class, not inherited
+
+    assert as_expr(Tagged).token() == "Slug"  # the override
+    assert as_expr(Sub).token() == "Sub"  # fallback to own __name__
+    assert (Tagged | Llm).token() == "LlmOrSlug"  # composes in expressions
+
+
+def test_cls_name_token_must_be_an_identifier_fragment() -> None:
+    with pytest.raises(TypeError, match="must be a non-empty fragment"):
+
+        class Spaced(Scope, cls_name_token="Read Only"): ...
+
+    with pytest.raises(TypeError, match="must be a non-empty fragment"):
+
+        class Empty(Scope, cls_name_token=""): ...
 
 
 def test_scopes_are_never_instantiated() -> None:

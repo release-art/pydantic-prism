@@ -6,11 +6,13 @@ import copy
 import inspect
 import types
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Annotated,
     Any,
     ForwardRef,
+    Literal,
     Union,
     cast,
     get_args,
@@ -22,18 +24,18 @@ from pydantic.experimental.missing_sentinel import MISSING
 from pydantic.fields import FieldInfo
 
 from ...errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameError
-from ..markers import PRISM_MARKERS
+from ...markers import PRISM_MARKERS
+from ...model import (
+    Projection,
+    ScopedModel,
+    _ProjectionKey,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 from ..scopes import ScopeExpr
 from .bases import _warn_dropped_behavior
-from .classes import Projection, ScopedModel
 from .schema import _apply_field_schema, _apply_model_schema
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
-
-    from .classes import (
-        _ProjectionKey,  # pyright: ignore[reportPrivateUsage] — intra-package
-    )
 
 __all__ = [
     "_BuildContext",
@@ -42,6 +44,23 @@ __all__ = [
     "_rewrite",
     "_validate_name_template",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class _BuildKey:
+    """One projection's key *within a build context*: its owner + projection key.
+
+    A single build context spans every nested model reached from the top-level
+    ``scope()``/``input()`` call, and two different models can share a
+    :class:`_ProjectionKey` (same expr/name/carried/extra), so the owning model
+    must be part of the in-flight key. The ``key`` half is exactly what gets
+    committed to ``owner``'s caches once the whole context finishes building.
+
+    Frozen + slotted so it is hashable and usable as a dict key.
+    """
+
+    owner: type[ScopedModel]
+    key: _ProjectionKey
 
 
 # --- projection naming -----------------------------------------------------
@@ -80,10 +99,10 @@ class _BuildContext:
     """State for one top-level ``scope()`` call, threading through recursion."""
 
     def __init__(self) -> None:
-        # key -> ForwardRef/namespace name, while the class is being built
-        self.pending: dict[tuple[type[ScopedModel], Any, Any, Any], str] = {}
-        # key -> finished (but not yet rebuilt/committed) class
-        self.built: dict[tuple[type[ScopedModel], Any, Any, Any], type[Projection]] = {}
+        # build key -> ForwardRef/namespace name, while the class is being built
+        self.pending: dict[_BuildKey, str] = {}
+        # build key -> finished (but not yet rebuilt/committed) class
+        self.built: dict[_BuildKey, type[Projection]] = {}
         # ForwardRef name -> class; names are unique even when class names collide
         self.namespace: dict[str, type[Projection]] = {}
 
@@ -141,7 +160,13 @@ def _project(
     name: str | None,
     bases: tuple[type[BaseModel], ...] | None,
     ctx: _BuildContext,
+    extra: Literal["allow", "ignore", "forbid"] | None = None,
 ) -> type[Projection] | ForwardRef:
+    # ``extra`` overrides the projection's ``model_config["extra"]`` (e.g.
+    # ``input()`` forces "forbid"); None inherits the canonical's. It applies to
+    # this top-level projection only — nested projections built via ``_rewrite``
+    # pass the default None, so they stay identical to a plain ``scope()`` and
+    # share its cache, never forking a class on the parent's input/output mode.
     if not cls.__pydantic_complete__:
         # Unresolved forward references would make markers invisible and the
         # projection silently wrong; resolve now (raises pydantic's clear
@@ -149,11 +174,11 @@ def _project(
         # via the model_rebuild override.
         cls.model_rebuild()
     carried = _resolve_carried(cls, bases)
-    cache_key: _ProjectionKey = (expr, name, carried)
+    cache_key = _ProjectionKey(expr, name, carried, extra)
     cached = cls.__prism_cache__.get(cache_key)
     if cached is not None:
         return cached
-    key = (cls, expr, name, carried)
+    key = _BuildKey(cls, cache_key)
     if key in ctx.built:
         return ctx.built[key]
     if key in ctx.pending:
@@ -194,6 +219,8 @@ def _project(
 
     model_config = copy.deepcopy(cls.model_config)
     _apply_model_schema(expr, model_config)
+    if extra is not None:
+        model_config["extra"] = extra
     config_base = types.new_class(
         f"_{class_name}Base",
         (*carried, Projection),

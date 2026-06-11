@@ -17,18 +17,18 @@ classDiagram
 classDiagram
     direction TB
     class LlmSnapshot {
-        +UUID id
-        +str taken_at
-        +str prompt
-        +str raw_response
+        +UUID id [Carrier, Public]
+        +str taken_at [Carrier, Public]
+        +str prompt [Public]
+        +str raw_response [Public]
     }
     class LlmSnapshotCarrier {
-        +UUID id
-        +str taken_at
+        +UUID id [Public]
+        +str taken_at [Public]
     }
     class LlmSnapshotPublic {
-        +UUID id
-        +str taken_at
+        +UUID id [Carrier]
+        +str taken_at [Carrier]
         +str prompt
         +str raw_response
     }
@@ -87,10 +87,10 @@ classDiagram
 classDiagram
     direction TB
     class LlmSnapshot {
-        +UUID id
-        +str taken_at
-        +str prompt
-        +str raw_response
+        +UUID id [Carrier, Public]
+        +str taken_at [Carrier, Public]
+        +str prompt [Public]
+        +str raw_response [Public]
     }
     class PageCheck {
         +UUID id

@@ -1,30 +1,33 @@
 """The public ``Projection`` and ``ScopedModel`` classes.
 
-The class methods lazy-import the collection / build / narrow / bases helpers
-from sibling modules: those helpers import these classes at module level, so the
-classes must defer their own imports to call time to break the cycle.
+The projection-building engine lives in :mod:`pydantic_prism._internal.model`
+(``collect`` / ``build`` / ``narrow`` / ``bases`` / ``schema``); those helpers
+import these classes at module level, so the class methods here defer their own
+imports of the engine to call time to break the cycle.
 """
 
 from __future__ import annotations
 
 import threading
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel
 
-from ..refs import RefGraph
-from ..scopes import (
-    Classification,
+from ._internal.scopes import (
     Scope,
     ScopeExpr,
     ScopeLike,
     as_expr,
+    dimension_root,
     union_all,
 )
+from .refs import RefGraph
+from .scopes import Classification, In, Out  # bundled taxonomy
 
 if TYPE_CHECKING:
-    from ..flow import FlowReport
+    from .flow import FlowReport
 
 __all__ = ["Projection", "ScopedModel"]
 
@@ -32,9 +35,29 @@ __all__ = ["Projection", "ScopedModel"]
 # None, which is a legitimate resolved value meaning "no default declared".
 _NO_DEFAULT: Any = object()
 
-# Cache key of one derived projection class: (expression, name override,
-# carried bases). All three participate — changing any yields a new class.
-type _ProjectionKey = tuple[ScopeExpr, str | None, tuple[type[BaseModel], ...]]
+
+@dataclass(frozen=True, slots=True)
+class _ProjectionKey:
+    """Identity of one derived projection class within a model's caches.
+
+    All four fields participate — changing any yields a different class:
+
+    * ``expr`` — the scope expression projected to.
+    * ``name`` — the explicit ``name=`` override, or None for the auto-name.
+    * ``carried`` — the non-``ScopedModel`` bases carried onto the projection.
+    * ``extra`` — the ``model_config["extra"]`` override: None inherits the
+      canonical's config, "forbid" is what ``input()`` forces. It keeps an
+      ``input()`` projection a distinct, separately-named class from the
+      equivalent bare ``scope()``.
+
+    Frozen + slotted so it is hashable and usable as a dict key.
+    """
+
+    expr: ScopeExpr
+    name: str | None
+    carried: tuple[type[BaseModel], ...]
+    extra: Literal["allow", "ignore", "forbid"] | None
+
 
 # RLock: _project recurses for nested models within one build.
 _build_lock = threading.RLock()
@@ -84,7 +107,7 @@ class Projection(BaseModel):
         shape, but the validators carried from your base can. Pass ``narrow=``
         to override this auto-detection in either direction.
         """
-        from .narrow import _narrow
+        from ._internal.model.narrow import _narrow
 
         data: Any = instance.model_dump(
             mode=mode,
@@ -99,6 +122,42 @@ class Projection(BaseModel):
         if narrow and isinstance(data, Mapping):
             data = _narrow(cls, cast(Mapping[str, Any], data))
         return cls.model_validate(data, context=context)
+
+    @classmethod
+    def scope(
+        cls,
+        scope: ScopeLike,
+        *,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+    ) -> type[Projection]:
+        """Re-project: derive a **narrower** projection from this one.
+
+        A projection's fields carry no scope tags (they are stripped at build
+        time), so re-projection delegates to the canonical source with the
+        **intersection** of this projection's scope and ``scope``::
+
+            UserInternal = User.scope(Internal)
+            UserInternal.scope(Public)  # == User.scope(Internal & Public)
+
+        Intersection means re-projection can only ever **narrow** — a view cannot
+        expose more than it has, so re-projecting to a wider scope cannot bring
+        back fields this projection dropped (``UserPublic.scope(Internal)`` has
+        the ``Public`` fields, not Internal-only ones). The result is *another
+        projection of the canonical* (a sibling, not a subclass of this one),
+        consistent with projections-not-inheritance.
+
+        ``bases`` defaults to this projection's carried ``__prism_bases__`` so
+        base behavior survives the narrowing; ``name``/``bases`` forward to
+        :meth:`ScopedModel.scope`. The auto-name comes from the intersected
+        expression (e.g. ``UserInternalAndPublic``) — pass ``name=`` for a
+        stable one. To narrow an *instance*, use :meth:`from_canonical`.
+        """
+        return cls.__prism_source__.scope(
+            cls.__prism_scope__ & as_expr(scope),
+            name=name,
+            bases=cls.__prism_bases__ if bases is None else bases,
+        )
 
 
 class ScopedModel(BaseModel):
@@ -146,8 +205,8 @@ class ScopedModel(BaseModel):
         **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
-        from .bases import _check_bases
-        from .build import _validate_name_template
+        from ._internal.model.bases import _check_bases
+        from ._internal.model.build import _validate_name_template
 
         if projection_bases is not None:
             cls.__prism_projection_bases__ = _check_bases(
@@ -171,7 +230,7 @@ class ScopedModel(BaseModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
-        from .collect import _initialize
+        from ._internal.model.collect import _initialize
 
         cls.__prism_cache__ = {}
         cls.__prism_names__ = {}
@@ -192,7 +251,7 @@ class ScopedModel(BaseModel):
         references at class-definition time: their ``scoped()``/``ref()``
         markers only become visible once the rebuild evaluates them.
         """
-        from .collect import _collect
+        from ._internal.model.collect import _collect
 
         result = super().model_rebuild(
             force=force,
@@ -212,6 +271,23 @@ class ScopedModel(BaseModel):
         for expr in cls.__field_scopes__.values():
             out |= expr.atoms()
         return frozenset(out)
+
+    @classmethod
+    def dimensions(cls) -> dict[type[Scope], frozenset[type[Scope]]]:
+        """The model's scopes grouped by **axis** — the structural view.
+
+        An axis (dimension) is inferred from the inheritance forest: each scope's
+        top ancestor just below ``Scope`` is its :func:`dimension_root`, and the
+        root's name labels the axis. Returns ``{root: scopes-in-that-axis}``,
+        discovering visibility, classification, direction, and any user-defined
+        axis alike — without depending on the :class:`Classification` /
+        :class:`Direction` bases. Contrast :meth:`classifications`, the *semantic*
+        (marker-based) classification slice used by :meth:`redacted`.
+        """
+        out: dict[type[Scope], set[type[Scope]]] = {}
+        for scope in cls.scopes():
+            out.setdefault(dimension_root(scope), set()).add(scope)
+        return {root: frozenset(members) for root, members in out.items()}
 
     @classmethod
     def classifications(cls) -> frozenset[type[Classification]]:
@@ -237,23 +313,26 @@ class ScopedModel(BaseModel):
         return out
 
     @classmethod
-    def classified_flow(cls) -> FlowReport:
-        """Trace classified data reachable from this model across the ref graph.
+    def data_flow(cls) -> FlowReport:
+        """Trace dimensional data reachable from this model across the ref graph.
 
         Walks forward ``ref`` / ``embedded`` edges (BFS, cycle-safe) and reports
-        the classified fields of every model personal data can reach — the
-        compliance artifact: *given this entry point, where does classified data
-        live, via which references?* Render the returned :class:`.FlowReport`
-        with ``.as_dict()`` (JSON) or ``.to_mermaid()``.
+        every **tagged** field of every reachable model, with its scopes grouped
+        by axis — the compliance/architecture artifact: *given this entry point,
+        where does scoped data live (PII and otherwise), via which references?*
+        Axes are inferred structurally (:meth:`dimensions`), so PII surfaces
+        without prism being told which scope is sensitive. Render the returned
+        :class:`.FlowReport` with ``.as_dict()`` (JSON) or ``.to_mermaid()``.
         """
-        from ..flow import build_flow_report
+        from .flow import build_flow_report
 
         return build_flow_report(cls)
 
     @classmethod
     def redacted(
         cls,
-        *visible: ScopeLike,
+        visible: ScopeLike,
+        *,
         strip: ScopeLike | None = None,
         name: str | None = None,
         bases: Sequence[type[BaseModel]] | None = None,
@@ -265,16 +344,13 @@ class ScopedModel(BaseModel):
         default ``strip`` is the union of all classifications declared on the
         model, so a classification added later is auto-redacted. Pass ``strip=``
         (any scope expression, e.g. ``Secret`` or ``Pii | Secret``) to choose
-        which classifications to remove instead. Refs survive, so the
+        which classifications to remove instead. ``visible`` is one scope or
+        expression (compose wider views with ``|``). Refs survive, so the
         relationship graph stays intact.
 
         ``name`` / ``bases`` forward to :meth:`scope`.
         """
-        if not visible:
-            raise TypeError(
-                "redacted() requires at least one visibility scope or expression"
-            )
-        visible_expr = union_all(as_expr(scope) for scope in visible)
+        visible_expr = as_expr(visible)
         if strip is not None:
             strip_expr: ScopeExpr | None = as_expr(strip)
         else:
@@ -288,17 +364,93 @@ class ScopedModel(BaseModel):
         return cls.scope(expr, name=name, bases=bases)
 
     @classmethod
+    def _directional_expr(
+        cls, visible: ScopeLike | None, drop: type[Scope]
+    ) -> ScopeExpr:
+        """The visibility expression for ``input``/``output``, minus a direction.
+
+        ``visible`` falls back to the model's ``default_scope=`` when ``None``
+        (the direction-only case — tag fields ``In``/``Out``/both and let the
+        read-write majority fall back); with no default and no argument it
+        raises, mirroring :meth:`redacted`.
+        """
+        if visible is not None:
+            base = as_expr(visible)
+        elif cls.__prism_default_scope__ is not None:
+            base = cls.__prism_default_scope__
+        else:
+            raise TypeError(
+                f"{cls.__name__}.{'input' if drop is Out else 'output'}() requires a "
+                f"visibility scope, or a default_scope= on the model"
+            )
+        return base - drop
+
+    @classmethod
+    def input(  # noqa: A003 — `input`/`output` name the read/write sides on purpose
+        cls,
+        visible: ScopeLike | None = None,
+        *,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+        extra: Literal["allow", "ignore", "forbid"] = "forbid",
+    ) -> type[Projection]:
+        """The write-side projection: the ``visible`` view minus read-only fields.
+
+        Mass-assignment protection *by shape*: a read-only field (tagged
+        ``scoped(..., Out)``) is simply absent from this projection, so it can
+        never be over-posted. The subtraction is ``visible - Out`` and it is
+        **deep** — nested ``ScopedModel`` fields are projected the same way, so
+        read-only fields drop at every level.
+
+        ``extra`` defaults to ``"forbid"``: unknown keys are rejected outright
+        (a loud 422 rather than a silent drop, and the only thing that closes the
+        hole when the canonical declares ``extra="allow"``). It applies to the
+        top-level projection; nest ``input()`` on a field's model for deep
+        ``forbid``. Pass ``extra="ignore"``/``"allow"`` to opt out. ``visible`` is
+        one scope or expression (compose with ``|``), and falls back to the
+        model's ``default_scope=`` when omitted. ``name`` defaults to
+        ``"{Model}In"``; ``name``/``bases`` forward to :meth:`scope`.
+        """
+        expr = cls._directional_expr(visible, Out)
+        return cls._build_projection(expr, name or f"{cls.__name__}In", bases, extra)
+
+    @classmethod
+    def output(
+        cls,
+        visible: ScopeLike | None = None,
+        *,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+    ) -> type[Projection]:
+        """The read-side projection: the ``visible`` view minus write-only fields.
+
+        The response counterpart to :meth:`input`: a write-only field (tagged
+        ``scoped(..., In)``, e.g. a password) is absent, so it is never echoed
+        back. The subtraction is ``visible - In``; like ``input`` it is deep
+        through nested ``ScopedModel`` fields. ``extra`` is left untouched
+        (server→client; over-posting does not apply). ``visible`` is one scope or
+        expression (compose with ``|``), and falls back to the model's
+        ``default_scope=`` when omitted. ``name`` defaults to ``"{Model}Out"``;
+        ``name``/``bases`` forward to :meth:`scope`.
+        """
+        expr = cls._directional_expr(visible, In)
+        return cls._build_projection(expr, name or f"{cls.__name__}Out", bases, None)
+
+    @classmethod
     def scope(
         cls,
-        *scopes: ScopeLike,
+        scope: ScopeLike,
+        *,
         name: str | None = None,
         bases: Sequence[type[BaseModel]] | None = None,
     ) -> type[Projection]:
         """Derive (or fetch from cache) the projection for a scope expression.
 
-        Multiple arguments union: ``Model.scope(A, B)`` is ``Model.scope(A | B)``.
-        The same expression always returns the same class object. ``name=``
-        overrides the auto-generated class name and is part of the cache key.
+        Takes one scope or scope expression — compose with the algebra
+        (``Model.scope(Public | Internal)``, ``Model.scope(Internal - Pii)``)
+        rather than passing several arguments. The same expression always returns
+        the same class object. ``name=`` overrides the auto-generated class name
+        and is part of the cache key.
 
         ``bases=`` lists non-``ScopedModel`` ancestors of this model to carry
         onto the projection (restoring their custom ``model_dump``/
@@ -310,37 +462,52 @@ class ScopedModel(BaseModel):
         fields) — tagging such a field with a scope the projection does not
         select raises :class:`ProjectionBaseError`.
         """
-        from .bases import _check_bases
-        from .build import _BuildContext, _project
+        return cls._build_projection(as_expr(scope), name, bases, None)
 
-        if not scopes:
-            raise TypeError("scope() requires at least one scope or scope expression")
-        expr = union_all(as_expr(scope) for scope in scopes)
+    @classmethod
+    def _build_projection(
+        cls,
+        expr: ScopeExpr,
+        name: str | None,
+        bases: Sequence[type[BaseModel]] | None,
+        extra: Literal["allow", "ignore", "forbid"] | None,
+    ) -> type[Projection]:
+        """The cached, locked build shared by scope()/input()/output().
+
+        ``extra`` overrides the projection's ``model_config["extra"]`` (None
+        inherits the canonical's) and is part of the cache key, so an input()
+        projection is a distinct class from the equivalent bare scope(). It is
+        kept off scope()'s public signature: a config-forked class must carry a
+        distinct name, which input()/output() supply ("{Model}In"/"{Model}Out").
+        """
+        from ._internal.model.bases import _check_bases
+        from ._internal.model.build import _BuildContext, _project
+
         checked = _check_bases(cls, bases) if bases is not None else None
         carried = (
             checked if checked is not None else (cls.__prism_projection_bases__ or ())
         )
-        cached = cls.__prism_cache__.get((expr, name, carried))
+        cache_key = _ProjectionKey(expr, name, carried, extra)
+        cached = cls.__prism_cache__.get(cache_key)
         if cached is not None:
             return cached
         # Build under a lock so concurrent first calls (free-threaded Python,
         # threaded servers) cannot produce two classes for one expression.
         with _build_lock:
-            cached = cls.__prism_cache__.get((expr, name, carried))
+            cached = cls.__prism_cache__.get(cache_key)
             if cached is not None:
                 return cached
             ctx = _BuildContext()
-            projection = _project(cls, expr, name, checked, ctx)
+            projection = _project(cls, expr, name, checked, ctx, extra)
             assert isinstance(projection, type)  # top-level call is never pending
             # Resolve cycle ForwardRefs first, commit second: the caches only
             # ever hold fully built classes (which keeps the lock-free fast
             # path above safe), and a failed build commits nothing.
             for built in ctx.built.values():
                 built.model_rebuild(_types_namespace=ctx.namespace)
-            for (owner, *owner_key), built in ctx.built.items():
-                key = cast(_ProjectionKey, tuple(owner_key))
-                owner.__prism_cache__[key] = built
-                owner.__prism_names__[built.__name__] = key
+            for build_key, built in ctx.built.items():
+                build_key.owner.__prism_cache__[build_key.key] = built
+                build_key.owner.__prism_names__[built.__name__] = build_key.key
             return projection
 
     @classmethod
@@ -356,7 +523,7 @@ class ScopedModel(BaseModel):
         baseline. Apply it to one with :meth:`with_updates` instead; passing a
         partial projection here raises :class:`TypeError`.
         """
-        from .narrow import _validation_key
+        from ._internal.model.narrow import _validation_key
 
         if (
             isinstance(projection, Projection)

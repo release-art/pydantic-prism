@@ -22,9 +22,11 @@ from typing import TYPE_CHECKING, Any, Union, cast, get_args, get_origin
 
 from pydantic.experimental.missing_sentinel import MISSING
 
+from ._internal.scopes import dimension_root
+
 if TYPE_CHECKING:
+    from ._internal.scopes import Scope
     from .refs import RefGraph
-    from .scopes import Scope
 
 __all__ = ["Diagram", "projection_diagram", "scope_diagram"]
 
@@ -49,6 +51,11 @@ class NodeField:
     name: str
     type: str | None = None
     description: str | None = None
+    # Secondary-axis tags carried by the field (scope names from dimensions other
+    # than the node's own), e.g. ``("Pii", "In")`` — rendered as a ``[Pii, In]``
+    # badge. Empty for single-axis models (nothing to distinguish). See
+    # ``_node_fields`` / ``ScopedModel.dimensions``.
+    axes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,7 +113,12 @@ class Diagram:
                     "kind": n.kind,
                     "description": n.description,
                     "fields": [
-                        {"name": f.name, "type": f.type, "description": f.description}
+                        {
+                            "name": f.name,
+                            "type": f.type,
+                            "description": f.description,
+                            "axes": list(f.axes),
+                        }
                         for f in n.fields
                     ],
                 }
@@ -209,18 +221,25 @@ class Diagram:
 # --- label escaping --------------------------------------------------------
 
 
+def _axes_label(node_field: NodeField) -> str:
+    """The ``[Pii, In]`` secondary-axis badge for a field row, or ``""``."""
+    return f" [{', '.join(node_field.axes)}]" if node_field.axes else ""
+
+
 def _class_member(node_field: NodeField) -> str:
     """A Mermaid classDiagram attribute: ``type name`` (sanitized) or ``name``.
 
     Generics use Mermaid's ``~T~`` syntax; union/optional types contain ``|``
     which the class-member grammar rejects, so those fall back to the name only.
+    A secondary-axis ``[Pii]`` badge is appended when present.
     """
+    badge = _axes_label(node_field)
     if not node_field.type:
-        return node_field.name
+        return node_field.name + badge
     safe = node_field.type.replace("[", "~").replace("]", "~")
     if "|" in safe:
-        return node_field.name
-    return f"{safe} {node_field.name}"
+        return node_field.name + badge
+    return f"{safe} {node_field.name}{badge}"
 
 
 def _class_edge_label(label: str) -> str:
@@ -245,19 +264,21 @@ def _d2(text: str) -> str:
 
 
 def _field_row(node_field: NodeField) -> str:
-    """The visible row for a field: ``name`` or ``name: type``."""
+    """The visible row for a field: ``name`` or ``name: type`` (+ axis badge)."""
+    badge = _axes_label(node_field)
     if node_field.type:
-        return f"{node_field.name}: {node_field.type}"
-    return node_field.name
+        return f"{node_field.name}: {node_field.type}{badge}"
+    return node_field.name + badge
 
 
 def _d2_row(node_field: NodeField) -> str:
     """A D2 class row: ``name`` or ``name: type``, name quoted if non-trivial."""
     raw = node_field.name
     name = raw if raw.isidentifier() else f'"{_d2(raw)}"'
+    badge = _axes_label(node_field)
     if node_field.type:
-        return f"{name}: {_d2(node_field.type)}"
-    return name
+        return f"{name}: {_d2(node_field.type)}{badge}"
+    return name + badge
 
 
 def _type_label(annotation: Any) -> str:
@@ -305,12 +326,41 @@ class _Ids:
 # --- builders --------------------------------------------------------------
 
 
-def _node_fields(model: type[Any]) -> tuple[NodeField, ...]:
-    """Structured fields (name, type label, description) of a model/projection."""
-    return tuple(
-        NodeField(name, _type_label(info.annotation), info.description)
-        for name, info in model.model_fields.items()
+def _node_fields(
+    model: type[Any], exclude_roots: frozenset[type[Scope]] = frozenset()
+) -> tuple[NodeField, ...]:
+    """Structured fields (name, type, description, secondary-axis badge).
+
+    A field's ``axes`` badge lists its scope tags from dimensions *other than*
+    ``exclude_roots`` (the node's own axis), inferred structurally — so PII /
+    direction / any user axis surface automatically. Badges are suppressed
+    entirely when the source model has a single dimension (nothing to
+    distinguish). Projection fields read their tags off the canonical source
+    (``__prism_source__``), whose markers were not stripped.
+    """
+    source = getattr(model, "__prism_source__", model)
+    field_scopes: dict[str, Any] = getattr(source, "__field_scopes__", {})
+    multi_axis = (
+        len({dimension_root(a) for e in field_scopes.values() for a in e.atoms()}) > 1
     )
+    fields: list[NodeField] = []
+    for name, info in model.model_fields.items():
+        axes: tuple[str, ...] = ()
+        expr = field_scopes.get(name)
+        if multi_axis and expr is not None:
+            axes = tuple(
+                sorted(
+                    {
+                        atom.__name__
+                        for atom in expr.atoms()
+                        if dimension_root(atom) not in exclude_roots
+                    }
+                )
+            )
+        fields.append(
+            NodeField(name, _type_label(info.annotation), info.description, axes)
+        )
+    return tuple(fields)
 
 
 def _scope_description(scope: type[Any]) -> str | None:
@@ -361,7 +411,7 @@ def scope_diagram(*scopes: type[Scope], direction: str = "TD") -> Diagram:
         raise ValueError(
             f"direction must be one of {sorted(_DIRECTIONS)}, got {direction!r}"
         )
-    from .scopes import Scope
+    from ._internal.scopes import Scope
 
     if scopes:
         collected: set[type[Scope]] = set()
@@ -411,7 +461,12 @@ def projection_diagram(model: type[Any], *, direction: str = "TD") -> Diagram:
             "partial_projection" if proj.__prism_scope__.is_partial() else "projection"
         )
         pid = ids.make(proj.__name__)
-        nodes.append(Node(pid, proj.__name__, kind, _node_fields(proj), proj.__doc__))
+        # The projection's own axis is implied by the edge label; badge only the
+        # *other* dimensions' tags (e.g. Pii on a visibility projection).
+        own = frozenset({dimension_root(scope)})
+        nodes.append(
+            Node(pid, proj.__name__, kind, _node_fields(proj, own), proj.__doc__)
+        )
         edges.append(Edge(cid, pid, scope.__name__))
     return Diagram(tuple(nodes), tuple(edges), direction)
 

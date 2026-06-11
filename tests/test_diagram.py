@@ -6,6 +6,7 @@ from uuid import UUID
 import pytest
 
 from pydantic_prism import (
+    Classification,
     Diagram,
     Scope,
     ScopedModel,
@@ -15,7 +16,7 @@ from pydantic_prism import (
     scope_diagram,
     scoped,
 )
-from pydantic_prism._internal.diagram import (
+from pydantic_prism.diagram import (
     Edge,
     Node,
     NodeField,
@@ -292,3 +293,47 @@ def test_ids_sanitize_and_disambiguate() -> None:
     assert ids.make("9lives") == "_9lives"  # leading digit
     assert ids.make("") == "n"  # empty name -> fallback
     assert ids.make("a.b-c") == "a_b_c"  # non-word chars
+
+
+# --- round 19: structural axis badges --------------------------------------
+
+
+class Pii(Classification): ...
+
+
+class UserAcct(ScopedModel):
+    id: Annotated[UUID, scoped(Public)]
+    email: Annotated[str, scoped(Internal), scoped(Pii)]  # cross-axis: visibility + PII
+    name: Annotated[str, scoped(Public)]
+
+
+def test_badges_render_in_every_backend() -> None:
+    d = projection_diagram(UserAcct)
+    # canonical node shows the cross-axis PII tag, inferred structurally
+    assert "str email [Internal, Pii]" in d.to_mermaid()
+    assert "email: str [Internal, Pii]" in d.to_dot()
+    assert "email: str [Internal, Pii]" in d.to_d2()
+    email = next(
+        f
+        for n in d.as_dict()["nodes"]
+        if n["label"] == "UserAcct"
+        for f in n["fields"]
+        if f["name"] == "email"
+    )
+    assert email["axes"] == ["Internal", "Pii"]
+
+
+def test_projection_node_excludes_its_own_axis() -> None:
+    # On the Internal (visibility) projection, email is badged with Pii only —
+    # its visibility tag is implied by the edge, not repeated.
+    body = projection_diagram(UserAcct).to_mermaid()
+    assert "str email [Pii]" in body  # the UserAcctInternal node row
+
+
+def test_single_axis_model_has_no_badges() -> None:
+    class VisOnly(ScopedModel):
+        a: Annotated[int, scoped(Public)]
+        b: Annotated[int, scoped(Internal)]
+
+    text = projection_diagram(VisOnly).to_mermaid()
+    assert "[" not in text  # one dimension → nothing to distinguish, no badges

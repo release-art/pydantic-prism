@@ -19,7 +19,7 @@ PrismError(Exception)
 |---|---|
 | `PrismError` | Base class for all prism domain errors; catch this to catch them all. |
 | `EmptyProjectionError` | `Model.scope(...)` selected zero fields — almost always a typo'd scope or a never-tagged model. The message lists the scopes the model defines. |
-| `ProjectionNameError` | Two different scope expressions (or `bases`) would produce one projection class name. Pass `name=` to disambiguate. |
+| `ProjectionNameError` | Two different scope expressions (or `bases`) would produce one projection class name. Pass `name=` to disambiguate. Also raised *at model definition* when two of a model's scopes share a class-name token (their `cls_name_token`, else `__name__`) — there, rename one or give it a distinct `cls_name_token=`. |
 | `ProjectionBaseError` | A field declared on a carried base is tagged with a scope the requested expression does not select — inherited fields can't be removed, so narrowing would leak it. |
 | `RefResolutionError` | A `ref` / `backref` couldn't resolve: a string target names no `ScopedModel` in the owning module, a function-local model, a `backref(via=...)` that doesn't line up with a forward `ref`, or a keyed-dict key type that doesn't match the target id type. Raised lazily, on `__refs__` access. |
 | `StaleProjectionStubError` | A `prism gen`-generated stub no longer matches its canonical model. Raised at import (app startup). Re-run `prism gen`; `prism check` surfaces the same drift as a CI gate. |
@@ -36,6 +36,7 @@ PrismError(Exception)
 | `from_projection()` given a partial projection (a delta, not a record) | `TypeError` | `.from_projection()` call |
 | `redacted()` called with no visibility scope | `TypeError` | `.redacted()` call |
 | projection selects zero fields | `EmptyProjectionError` | `.scope()` call |
+| two of a model's scopes share a class-name token | `ProjectionNameError` | class definition |
 | one projection name for two different expressions (or bases) | `ProjectionNameError` | `.scope()` call |
 | `bases=` / `projection_bases=` entry invalid (not a `BaseModel`, a `ScopedModel`, or not an ancestor) | `TypeError` | `.scope()` call / class definition |
 | carried-base field tagged with a scope the expression does not select | `ProjectionBaseError` | `.scope()` call |

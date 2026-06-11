@@ -25,20 +25,20 @@ classDiagram
 classDiagram
     direction TB
     class Address {
-        +UUID id
-        +str city
-        +str line1
-        +str postcode
+        +UUID id [Public]
+        +str city [Public]
+        +str line1 [Internal, Pii]
+        +str postcode [Internal, Pii]
     }
     class AddressInternal {
         +UUID id
         +str city
-        +str line1
-        +str postcode
+        +str line1 [Pii]
+        +str postcode [Pii]
     }
     class AddressPii {
-        +str line1
-        +str postcode
+        +str line1 [Internal]
+        +str postcode [Internal]
     }
     class AddressPublic {
         +UUID id
@@ -78,21 +78,21 @@ classDiagram
 classDiagram
     direction TB
     class Order {
-        +UUID id
-        +UUID user_id
-        +UUID ship_to_id
-        +str card_last4
-        +Decimal total
+        +UUID id [Public]
+        +UUID user_id [Public]
+        +UUID ship_to_id [Public]
+        +str card_last4 [Internal, Pii]
+        +Decimal total [Internal]
     }
     class OrderInternal {
         +UUID id
         +UUID user_id
         +UUID ship_to_id
-        +str card_last4
+        +str card_last4 [Pii]
         +Decimal total
     }
     class OrderPii {
-        +str card_last4
+        +str card_last4 [Internal]
     }
     class OrderPublic {
         +UUID id
@@ -134,25 +134,25 @@ classDiagram
 classDiagram
     direction TB
     class Address {
-        +UUID id
-        +str city
-        +str line1
-        +str postcode
+        +UUID id [Public]
+        +str city [Public]
+        +str line1 [Internal, Pii]
+        +str postcode [Internal, Pii]
     }
     class Order {
-        +UUID id
-        +UUID user_id
-        +UUID ship_to_id
-        +str card_last4
-        +Decimal total
+        +UUID id [Public]
+        +UUID user_id [Public]
+        +UUID ship_to_id [Public]
+        +str card_last4 [Internal, Pii]
+        +Decimal total [Internal]
     }
     class User {
-        +UUID id
-        +str display_name
-        +str email
-        +str phone
-        +str password_hash
-        +UUID address_id
+        +UUID id [Public]
+        +str display_name [Public]
+        +str email [Pii, Public]
+        +str phone [Internal, Pii]
+        +str password_hash [Secret, Storage]
+        +UUID address_id [Internal]
     }
     Order --> User : user_id ref
     Order --> Address : ship_to_id ref
@@ -165,38 +165,38 @@ classDiagram
 classDiagram
     direction TB
     class User {
-        +UUID id
-        +str display_name
-        +str email
-        +str phone
-        +str password_hash
-        +UUID address_id
+        +UUID id [Public]
+        +str display_name [Public]
+        +str email [Pii, Public]
+        +str phone [Internal, Pii]
+        +str password_hash [Secret, Storage]
+        +UUID address_id [Internal]
     }
     class UserInternal {
         +UUID id
         +str display_name
-        +str email
-        +str phone
+        +str email [Pii]
+        +str phone [Pii]
         +UUID address_id
     }
     class UserPii {
-        +str email
-        +str phone
+        +str email [Public]
+        +str phone [Internal]
     }
     class UserPublic {
         +UUID id
         +str display_name
-        +str email
+        +str email [Pii]
     }
     class UserSecret {
-        +str password_hash
+        +str password_hash [Storage]
     }
     class UserStorage {
         +UUID id
         +str display_name
-        +str email
-        +str phone
-        +str password_hash
+        +str email [Pii]
+        +str phone [Pii]
+        +str password_hash [Secret]
         +UUID address_id
     }
     User --> UserInternal : Internal
@@ -254,18 +254,18 @@ classDiagram
 classDiagram
     direction TB
     class Address {
-        +UUID id
-        +str city
-        +str line1
-        +str postcode
+        +UUID id [Public]
+        +str city [Public]
+        +str line1 [Internal, Pii]
+        +str postcode [Internal, Pii]
     }
     class User {
-        +UUID id
-        +str display_name
-        +str email
-        +str phone
-        +str password_hash
-        +UUID address_id
+        +UUID id [Public]
+        +str display_name [Public]
+        +str email [Pii, Public]
+        +str phone [Internal, Pii]
+        +str password_hash [Secret, Storage]
+        +UUID address_id [Internal]
     }
     User --> Address : address_id ref
 ```

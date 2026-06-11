@@ -9,10 +9,12 @@ and shows the shortest correct way to get it. New to prism? Start with the
 - [Redact PII for an audit view](redact-pii.md) — strip every classification
   from a view with `Model.redacted(...)`.
 - [Trace where classified data flows](trace-data-flow.md) — produce a
-  compliance artifact with `classified_flow()` and `prism flow`.
+  compliance artifact with `data_flow()` and `prism flow`.
 
 ## Shapes & round-trips
 
+- [Prevent mass-assignment with read-only / write-only fields](prevent-mass-assignment.md)
+  — `input()` / `output()` and the `In` / `Out` direction axis.
 - [Build a PATCH / partial-update model](partial-update.md) — all-optional
   views with `partial=True` and `with_updates`.
 - [Vary a field's schema per projection](vary-schema-per-scope.md) — per-scope

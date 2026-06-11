@@ -67,8 +67,8 @@ def test_scoped_requires_scopes() -> None:
 
 
 def test_scope_call_requires_scopes() -> None:
-    with pytest.raises(TypeError, match="at least one scope"):
-        Target.scope()
+    with pytest.raises(TypeError, match="required positional argument"):
+        Target.scope()  # type: ignore[call-arg]  # scope is required
     with pytest.raises(TypeError, match="Scope subclass"):
         Target.scope("public")  # type: ignore[arg-type]
 
@@ -99,6 +99,8 @@ def test_unresolvable_circular_string_ref() -> None:
         Lonely.__refs__["other_id"]
 
 
-def test_projection_classes_cannot_be_rescoped() -> None:
+def test_projection_classes_can_be_rescoped_to_narrow() -> None:
+    # Round 18: projections re-project (narrowing); see test_reprojection.py.
     projected = Target.scope(Public)
-    assert not hasattr(projected, "scope")
+    assert hasattr(projected, "scope")
+    assert projected.scope(Public).__prism_source__ is Target

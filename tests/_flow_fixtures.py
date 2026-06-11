@@ -42,3 +42,9 @@ class Account(ScopedModel):
     id: Annotated[UUID, scoped(Public)]
     user_id: Annotated[UUID, ref(User), scoped(Public)]
     org_id: Annotated[UUID, ref(Org), scoped(Public)]
+
+
+class Bare(ScopedModel):
+    """No tagged fields and no refs — its ``data_flow()`` is empty/falsy."""
+
+    x: int

@@ -14,8 +14,8 @@ so prism can tell the two axes apart and do the governance work first-class:
     with every classification stripped (redaction is set difference; no parallel
     "log model", no hand-maintained excludes).
   * `Model.classified_fields()`    → the per-model PII/Secret inventory.
-  * `Model.classified_flow()`      → a `FlowReport` tracing classified data
-    across the ref graph: *where does personal data flow, through which refs?*
+  * `Model.data_flow()`            → a `FlowReport` tracing scoped data per axis
+    across the ref graph: *where does data (PII and otherwise) flow, via refs?*
     Renders to JSON (`.as_dict()`) or Mermaid (`.to_mermaid()`) for review, and
     from the CLI via `prism flow examples.pii_dataflow.main:Order`.
 """
@@ -135,9 +135,9 @@ def demo() -> None:
     assert "email" not in safe.model_dump()
     assert "password_hash" not in safe.model_dump()
 
-    # --- 3. data-flow: where does classified data go, reachable from Order? --
-    report = Order.classified_flow()
-    print("\nClassified data reachable from Order (follow the refs):")
+    # --- 3. data-flow: where does scoped data go, reachable from Order? ------
+    report = Order.data_flow()
+    print("\nScoped data reachable from Order (follow the refs):")
     for node in report.nodes:
         fields = ", ".join(
             f"{f.field_name} [{'+'.join(f.labels)}]" for f in node.fields

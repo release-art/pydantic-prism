@@ -12,7 +12,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from .diagram import (
+from ..diagram import (
     _node_fields,  # pyright: ignore[reportPrivateUsage] — intra-package
     projection_diagram,
     scope_diagram,

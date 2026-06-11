@@ -10,13 +10,13 @@ from dataclasses import dataclass
 from enum import StrEnum, unique
 from typing import TYPE_CHECKING, Any, Literal, Union, cast, get_args, get_origin
 
-from ..errors import RefResolutionError
+from .errors import RefResolutionError
 from .markers import BackRef, Ref
 
 if TYPE_CHECKING:
+    from ._internal.scopes import ScopeExpr
     from .diagram import Diagram
     from .model import ScopedModel
-    from .scopes import ScopeExpr
 
 __all__ = [
     "BackRefInfo",
