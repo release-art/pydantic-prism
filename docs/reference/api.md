@@ -15,6 +15,7 @@ from pydantic_prism import (
     Diagram, scope_diagram, projection_diagram,
     PrismError, EmptyProjectionError, ProjectionNameError,
     ProjectionBaseError, RefResolutionError, StaleProjectionStubError,
+    PrismWarning, PrismBaseDropWarning, PrismOrderingWarning,
 )
 ```
 
@@ -23,7 +24,7 @@ from pydantic_prism import (
 | name | kind | summary |
 |---|---|---|
 | `scoped(*scopes, description=, examples=, json_schema_extra=)` | marker fn | Tags a field with scopes / a scope expression (varargs union). Optional schema kwargs attach per-scope field schema (one scope per schema-bearing marker). |
-| `scoped_validator(*scopes, mode=...)` | decorator | A `@model_validator` that **also** carries onto projections whose expression selects `scopes`. `mode` is required (`"before" \| "after" \| "wrap"`). |
+| `scoped_validator(*scopes, mode=..., parent_ordering=None)` | decorator | A `@model_validator` that **also** carries onto projections whose expression selects `scopes`. `mode` is required (`"before" \| "after" \| "wrap"`). `parent_ordering` (`mode="before"` only): `"after_parent"` wraps the validator to run inherited before-hooks first; `"acknowledged"` asserts independence. Both silence the [`PrismOrderingWarning`](errors.md). |
 | `ref(target, *, field="id")` | marker fn | Forward FK-style reference. `target`: `ScopedModel` subclass or string name. Keyed-dict shape inferred from a `dict[...]` annotation. |
 | `backref(target, *, via, field="id")` | marker fn | Declared reverse reference; `via` names the forward-`ref` field on `target`. |
 | `Ref` / `BackRef` / `Scoped` | marker types | The frozen-dataclass instances produced by `ref()` / `backref()` / `scoped()`; you rarely name these directly. |
@@ -69,6 +70,7 @@ Prefer the operators for statically-known scopes.
 | `Model.output(visible=None, *, name=None, bases=None)` | classmethod | Read-side projection: `visible - In` (drops write-only fields, deep). Defaults `name="{Model}Out"`; config untouched. `visible` is one scope/expression, falling back to `default_scope=`. |
 | `Model.scopes()` | classmethod | `frozenset[type[Scope]]` of the atom scopes used in field tags. |
 | `Model.from_projection(projection, /, **extra)` | classmethod | Complete projection → canonical instance; missing fields via `**extra` or canonical defaults. Rejects **partial** projections (use `with_updates`). |
+| `Model.run_inherited_before(data)` | classmethod | Run inherited `@model_validator(mode="before")` hooks (nearest ancestor first), threading the result. Call inside a `@scoped_validator(mode="before")` whose logic depends on a base hook's transformation. Inherited hooks must be idempotent (they re-run under pydantic). Also on `Projection`. |
 | `instance.with_updates(patch, /)` | method | Apply a (partial) projection's set fields as a PATCH; returns a new, re-validated instance. `self` unchanged. |
 | `Model.__refs__` | ClassVar | The model's `RefGraph`. |
 | `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each field's **resolved** scope (class default folded in for untagged fields). |
@@ -110,6 +112,19 @@ field set); model validators on a *carried base* do. To make a model validator
 travel, declare it with `@scoped_validator(*scopes, mode=...)` — it carries onto
 every projection whose expression selects one of `scopes`. Field-set safety is
 yours: prism does not check that the touched fields survive there.
+
+**Before-validator ordering.** pydantic runs `mode="before"` validators
+child-first, so a `@scoped_validator(mode="before")` runs *before* a plain
+`@model_validator(mode="before")` inherited from a base — prism emits a
+[`PrismOrderingWarning`](errors.md) at class definition when it spots this. In
+order of preference: (1) if the validator derives a value from already-parsed
+fields, use `mode="after"` and read `self` — no race, no double-run, no warning;
+(2) keep `mode="before"` and pass `parent_ordering="after_parent"` (prism runs
+the inherited hooks first) or call `cls.run_inherited_before(data)` by hand;
+(3) if it doesn't depend on the base hook, `parent_ordering="acknowledged"`. The
+before-phase options re-run the inherited hook, which must therefore be
+idempotent. See
+[before-validator ordering](../how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator).
 
 ## Axes, governance, and data flow
 

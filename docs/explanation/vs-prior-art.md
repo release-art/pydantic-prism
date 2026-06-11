@@ -66,6 +66,12 @@ Two things, and they are the differentiators:
 | per-projection schema metadata | per-scope field & model `description` / `examples` / `json_schema_extra` | — | — |
 | diagram export | scope / projection / relationship graphs → Mermaid, DOT, D2, JSON | — | — |
 | classification & data-flow | `Classification` axis, `redacted()`, `data_flow()` | — | — |
-| validators on derived models | field validators carried; model validators via `@scoped_validator` or carried bases | lost | lost |
+| validators on derived models | field validators carried; model validators via `@scoped_validator` or carried bases [^ordering] | lost | lost |
 | implicit behavior | none | call-stack sniffing can switch modes | registry monkey-patched onto your class |
 | Python | 3.12+ | 3.9+ (claimed) | 3.13+ |
+
+[^ordering]: pydantic runs `mode="before"` validators child-first, so a
+    `@scoped_validator(mode="before")` runs before a `before`-hook inherited
+    from a base. prism warns at class definition and ships
+    `run_inherited_before` to invoke the inherited hooks explicitly — see
+    [before-validator ordering](../how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator).

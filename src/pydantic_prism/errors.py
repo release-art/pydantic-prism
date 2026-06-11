@@ -1,13 +1,18 @@
-"""Exceptions raised by pydantic-prism.
+"""Exceptions and warnings raised by pydantic-prism.
 
 Misuse of the API itself (wrong argument types, markers placed in field
 defaults) raises plain :class:`TypeError`; these classes cover domain errors
-that can only be detected once models and scopes are put together.
+that can only be detected once models and scopes are put together. Diagnostics
+that are advisory rather than fatal are emitted as warnings under
+:class:`PrismWarning`.
 """
 
 __all__ = [
     "EmptyProjectionError",
+    "PrismBaseDropWarning",
     "PrismError",
+    "PrismOrderingWarning",
+    "PrismWarning",
     "ProjectionBaseError",
     "ProjectionNameError",
     "RefResolutionError",
@@ -17,6 +22,39 @@ __all__ = [
 
 class PrismError(Exception):
     """Base class for all pydantic-prism domain errors."""
+
+
+class PrismWarning(UserWarning):
+    """Base class for all pydantic-prism advisory warnings.
+
+    A :class:`UserWarning` subclass, so existing ``UserWarning`` filters keep
+    working; filter on this class to silence (or escalate) *every* prism
+    diagnostic at once, or on a concrete subclass for one kind in particular.
+    """
+
+
+class PrismBaseDropWarning(PrismWarning):
+    """A projection would drop pydantic behavior from an un-carried base.
+
+    Emitted once per canonical model by ``Model.scope(...)`` when a
+    non-``ScopedModel`` base overrides ``model_dump``/``model_validate`` (or
+    declares model validators/serializers) but is not carried. Declare
+    ``projection_bases=(Base,)`` to carry it, or ``projection_bases=()`` to
+    silence the warning.
+    """
+
+
+class PrismOrderingWarning(PrismWarning):
+    """A ``@scoped_validator(mode="before")`` may run before a base's hook.
+
+    Emitted at class definition when a model declares a
+    ``@scoped_validator(mode="before")`` while inheriting a plain
+    ``@model_validator(mode="before")`` from a non-``ScopedModel`` base.
+    pydantic v2 runs the scoped validator *first* (child-first), so if it
+    depends on the base hook's transformation it sees untransformed data. Fix
+    by calling :meth:`ScopedModel.run_inherited_before` inside the validator, or
+    assert independence with ``parent_ordering="acknowledged"`` to silence it.
+    """
 
 
 class EmptyProjectionError(PrismError, ValueError):
