@@ -1,7 +1,7 @@
 [project]
 name = "pydantic-prism"
 version = "0.1.0"
-description = "Derive filtered subsets of pydantic models by tagging fields with role/visibility annotations, and keep cross-model references (id ↔ id) coherent across the projected views. One source-of-truth schema, many narrowed faces (API response, storage row, LLM tool-input, audit log) without hand-maintained parallel classes."
+description = "One canonical pydantic model, many scoped projections — with a relationship graph that survives them."
 authors = [
     {name = "Ilja Orlovs",email = "IljaOrlovs@users.noreply.github.com"},
 ]
@@ -9,6 +9,43 @@ dependencies = ["pydantic>=2.12"]
 requires-python = ">=3.12"
 readme = "README.md"
 license = "MIT"
+keywords = [
+    "pydantic",
+    "schema",
+    "projection",
+    "scopes",
+    "dto",
+    "serialization",
+    "validation",
+    "json-schema",
+    "fastapi",
+    "data-classification",
+    "pii",
+    "code-generation",
+    "type-safety",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Code Generators",
+    "Framework :: Pydantic",
+    "Framework :: Pydantic :: 2",
+    "Framework :: FastAPI",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/release-art/pydantic-prism"
+Documentation = "https://github.com/release-art/pydantic-prism/blob/main/docs/README.md"
+Repository = "https://github.com/release-art/pydantic-prism"
+Changelog = "https://github.com/release-art/pydantic-prism/blob/main/CHANGELOG.md"
+Issues = "https://github.com/release-art/pydantic-prism/issues"
 
 [project.scripts]
 prism = "pydantic_prism._internal.codegen:main"
