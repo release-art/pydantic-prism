@@ -15,7 +15,8 @@ map at collection time.
 
 from __future__ import annotations
 
-from typing import Any, Callable, Literal, cast
+import functools
+from typing import Any, Callable, Literal, cast, get_args
 from weakref import WeakKeyDictionary
 
 from pydantic import model_validator
@@ -29,9 +30,11 @@ __all__ = ["scoped_validator"]
 _SCOPED_VALIDATOR_SCOPES: WeakKeyDictionary[Callable[..., Any], ScopeExpr] = (
     WeakKeyDictionary()
 )
-# raw function -> its parent_ordering acknowledgement, if any. Only recorded when
-# the author passed parent_ordering=; absence means "not declared" (warn).
-ParentOrdering = Literal["acknowledged"]
+# raw function -> its declared parent_ordering, if any. Only recorded when the
+# author passed parent_ordering=; absence means "not declared" (warn). Both
+# values silence the ordering warning; "after_parent" *also* wraps the validator
+# to run the inherited before-hooks first (see the decorator below).
+ParentOrdering = Literal["acknowledged", "after_parent"]
 _SCOPED_VALIDATOR_PARENT_ORDERING: WeakKeyDictionary[
     Callable[..., Any], ParentOrdering
 ] = WeakKeyDictionary()
@@ -54,33 +57,51 @@ def scoped_validator(
     a ``mode="after"`` validator reading a dropped field raises at validation).
 
     ``parent_ordering`` concerns ``mode="before"`` validators on a model that
-    inherits a plain ``@model_validator(mode="before")`` from a non-``ScopedModel``
-    base. pydantic runs this (child) validator *first*, so it sees data the base
-    hook has not yet transformed; prism warns about this at class definition
-    (:class:`~pydantic_prism.PrismOrderingWarning`). Pass
-    ``parent_ordering="acknowledged"`` to assert this validator does **not**
-    depend on the base hook's output and silence the warning. To instead *depend*
-    on it, call :meth:`ScopedModel.run_inherited_before` inside the validator.
+    inherits a plain ``@model_validator(mode="before")`` from a base. pydantic
+    runs this (child) validator *first*, so it sees data the base hook has not
+    yet transformed; prism warns about this at class definition
+    (:class:`~pydantic_prism.PrismOrderingWarning`). Three ways to resolve it:
+
+    * **Often best — don't use ``mode="before"`` at all.** If the validator
+      derives a value from *already-parsed* fields, write it as ``mode="after"``
+      and read ``self``: the base before-hook has already run during core
+      validation, so there is no ordering race, no double-run, and no warning.
+      (Give the derived field a default so the record passes core validation.)
+    * ``parent_ordering="after_parent"`` (``mode="before"`` only) — prism wraps
+      this validator to run the inherited before-hooks *first*
+      (:meth:`ScopedModel.run_inherited_before`), so its body sees transformed
+      data. Use when you genuinely need the before-phase. The inherited hooks
+      must be idempotent (they re-run under pydantic's pipeline).
+    * ``parent_ordering="acknowledged"`` — assert this validator does **not**
+      depend on the base hook's output, silencing the warning with no behavior
+      change.
 
     Usage::
 
-        class Webpage(ScopedModel):
+        class Webpage(AzureTableBase, ScopedModel):
             url: Annotated[str, scoped(Public)]
             hostname: Annotated[str, scoped(Public)] = ""
 
-            @scoped_validator(Update, mode="before")
+            @scoped_validator(Update, mode="before", parent_ordering="after_parent")
             @classmethod
             def derive_hostname(cls, data: Any) -> Any:
-                ...
+                ...  # data already decoded by the inherited before-hook
     """
     if not scopes:
         raise TypeError(
             "scoped_validator() requires at least one scope or scope expression"
         )
-    if parent_ordering is not None and parent_ordering != "acknowledged":
+    if parent_ordering is not None and parent_ordering not in get_args(ParentOrdering):
         raise ValueError(
-            f"scoped_validator(parent_ordering=) accepts only 'acknowledged' or "
-            f"None; got {parent_ordering!r}"
+            f"scoped_validator(parent_ordering=) accepts only "
+            f"{', '.join(map(repr, get_args(ParentOrdering)))} or None; "
+            f"got {parent_ordering!r}"
+        )
+    if parent_ordering == "after_parent" and mode != "before":
+        raise ValueError(
+            f"scoped_validator(parent_ordering='after_parent') only applies to "
+            f"mode='before' (it runs the inherited before-hooks first); got "
+            f"mode={mode!r}"
         )
     expr = union_all(as_expr(scope) for scope in scopes)
     make = cast(Callable[..., Callable[[Any], Any]], model_validator)
@@ -89,6 +110,20 @@ def scoped_validator(
         # classmethod/staticmethod (before/wrap) carry __func__; a plain
         # function (after) is its own raw form.
         raw: Any = getattr(func, "__func__", func)
+        if parent_ordering == "after_parent":
+            # Wrap so the inherited before-hooks run before the user body. The
+            # wrapper is what pydantic stores, so it is what we register; it is a
+            # before-mode classmethod regardless of how `func` was wrapped.
+            # `inner` is a distinct, never-reassigned binding — closing over
+            # `raw` (which we rebind below) would make the wrapper call itself.
+            inner = raw
+
+            @functools.wraps(inner)
+            def after_parent_wrapper(cls: Any, data: Any) -> Any:
+                return inner(cls, cls.run_inherited_before(data))
+
+            func = classmethod(after_parent_wrapper)
+            raw = after_parent_wrapper
         _SCOPED_VALIDATOR_SCOPES[raw] = expr
         if parent_ordering is not None:
             _SCOPED_VALIDATOR_PARENT_ORDERING[raw] = parent_ordering

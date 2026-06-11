@@ -105,10 +105,13 @@ Tests that pass native lists never hit it; real encoded data breaks at runtime.
 prism warns about this shape at class definition
 ([`PrismOrderingWarning`](../reference/errors.md)).
 
-**The fix — run the inherited hook explicitly.** Call
-[`run_inherited_before`](../reference/api.md) at the top of the child validator
-to apply the inherited `before`-hooks *first*, then operate on the transformed
-data:
+### Preferred fix — derive in `mode="after"`
+
+The trap is a property of the **before**-phase. If the validator computes a value
+from *already-parsed* fields, write it as `mode="after"` and read `self`: by then
+the base before-hook has already run during core validation, so there is **no
+ordering race, no double-run, and no warning**. Give the derived field a default
+so the record passes core validation, then fill it in:
 
 ```python
 class WebsiteRow(DecodingBase, ScopedModel, projection_bases=(DecodingBase,),
@@ -116,13 +119,11 @@ class WebsiteRow(DecodingBase, ScopedModel, projection_bases=(DecodingBase,),
     webpages: Annotated[list[str], scoped(Public)] = []
     first: Annotated[str, scoped(Storage)] = ""
 
-    @scoped_validator(Storage, mode="before")
-    @classmethod
-    def derive_first(cls, data):
-        data = cls.run_inherited_before(data)  # decode now; webpages is a list
-        if data.get("webpages") and not data.get("first"):
-            data = {**data, "first": data["webpages"][0]}
-        return data
+    @scoped_validator(Storage, mode="after")
+    def derive_first(self):
+        if self.webpages and not self.first:   # webpages is already a list[str]
+            self.first = self.webpages[0]
+        return self
 
 
 row = WebsiteRow(webpages=json.dumps(["http://a.com"]))
@@ -132,18 +133,45 @@ assert WebsiteRow.scope(Storage).model_validate(  # survives onto projections
 ).first == "http://p.com"
 ```
 
-`run_inherited_before` runs every inherited `before`-validator (nearest ancestor
-first, parent-most last) and is the friendly replacement for the
-`Base.decode.__func__(cls, data)` descriptor dance. It also keeps working once
-the validator is carried onto a projection.
+Reach for the before-phase only when you genuinely need *pre-validation* data —
+e.g. the derived field is **required** (so the record can't pass core validation
+until you fill it) or you must choose among raw input keys before type coercion.
+
+### Before-phase fix — `parent_ordering="after_parent"`
+
+When you do need `mode="before"`, declare `parent_ordering="after_parent"`: prism
+wraps the validator to run the inherited before-hooks *first*, so its body sees
+transformed data — no manual call, no warning:
+
+```python
+class WebsiteRowReq(DecodingBase, ScopedModel, projection_bases=(DecodingBase,),
+                    default_scope=Storage):
+    webpages: Annotated[list[str], scoped(Public)] = []
+    first: Annotated[str, scoped(Storage)]   # required — must be filled pre-validation
+
+    @scoped_validator(Storage, mode="before", parent_ordering="after_parent")
+    @classmethod
+    def derive_first(cls, data):
+        if data.get("webpages") and not data.get("first"):
+            data = {**data, "first": data["webpages"][0]}  # webpages already decoded
+        return data
+
+
+assert WebsiteRowReq(webpages=json.dumps(["http://a.com"])).first == "http://a.com"
+```
+
+The lower-level [`run_inherited_before`](../reference/api.md) helper does the same
+by hand — `data = cls.run_inherited_before(data)` at the top of the validator —
+for when you want to interleave it with other logic. It is the friendly
+replacement for the `Base.decode.__func__(cls, data)` descriptor dance.
 
 > [!IMPORTANT]
-> The inherited hook still runs again afterwards under pydantic's own pipeline,
-> so it must be **idempotent** — guard it on the input shape
+> Both before-phase fixes re-run the inherited hook afterwards under pydantic's
+> own pipeline, so it must be **idempotent** — guard it on the input shape
 > (`if isinstance(v, str): ...`), which decode hooks already do. A hook that
-> transforms unconditionally would run twice.
+> transforms unconditionally would run twice. `mode="after"` has no such caveat.
 
-**If the child does *not* depend on the inherited hook**, assert that and
+**If the validator does *not* depend on the inherited hook**, assert that and
 silence the warning with `parent_ordering="acknowledged"`:
 
 ```python

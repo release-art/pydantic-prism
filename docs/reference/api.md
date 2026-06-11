@@ -24,7 +24,7 @@ from pydantic_prism import (
 | name | kind | summary |
 |---|---|---|
 | `scoped(*scopes, description=, examples=, json_schema_extra=)` | marker fn | Tags a field with scopes / a scope expression (varargs union). Optional schema kwargs attach per-scope field schema (one scope per schema-bearing marker). |
-| `scoped_validator(*scopes, mode=..., parent_ordering=None)` | decorator | A `@model_validator` that **also** carries onto projections whose expression selects `scopes`. `mode` is required (`"before" \| "after" \| "wrap"`). `parent_ordering="acknowledged"` silences the [`PrismOrderingWarning`](errors.md) for a `before` validator that does not depend on an inherited base hook. |
+| `scoped_validator(*scopes, mode=..., parent_ordering=None)` | decorator | A `@model_validator` that **also** carries onto projections whose expression selects `scopes`. `mode` is required (`"before" \| "after" \| "wrap"`). `parent_ordering` (`mode="before"` only): `"after_parent"` wraps the validator to run inherited before-hooks first; `"acknowledged"` asserts independence. Both silence the [`PrismOrderingWarning`](errors.md). |
 | `ref(target, *, field="id")` | marker fn | Forward FK-style reference. `target`: `ScopedModel` subclass or string name. Keyed-dict shape inferred from a `dict[...]` annotation. |
 | `backref(target, *, via, field="id")` | marker fn | Declared reverse reference; `via` names the forward-`ref` field on `target`. |
 | `Ref` / `BackRef` / `Scoped` | marker types | The frozen-dataclass instances produced by `ref()` / `backref()` / `scoped()`; you rarely name these directly. |
@@ -116,9 +116,14 @@ yours: prism does not check that the touched fields survive there.
 **Before-validator ordering.** pydantic runs `mode="before"` validators
 child-first, so a `@scoped_validator(mode="before")` runs *before* a plain
 `@model_validator(mode="before")` inherited from a base — prism emits a
-[`PrismOrderingWarning`](errors.md) at class definition when it spots this. If
-the child depends on the base hook, call `cls.run_inherited_before(data)` first;
-if not, pass `parent_ordering="acknowledged"` to silence the warning. See
+[`PrismOrderingWarning`](errors.md) at class definition when it spots this. In
+order of preference: (1) if the validator derives a value from already-parsed
+fields, use `mode="after"` and read `self` — no race, no double-run, no warning;
+(2) keep `mode="before"` and pass `parent_ordering="after_parent"` (prism runs
+the inherited hooks first) or call `cls.run_inherited_before(data)` by hand;
+(3) if it doesn't depend on the base hook, `parent_ordering="acknowledged"`. The
+before-phase options re-run the inherited hook, which must therefore be
+idempotent. See
 [before-validator ordering](../how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator).
 
 ## Axes, governance, and data flow
