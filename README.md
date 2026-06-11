@@ -1,12 +1,12 @@
 # pydantic-prism
 
-![Tests](https://raw.githubusercontent.com/release-art/pydantic-prism/main/badges/tests.svg)
-![Coverage](https://raw.githubusercontent.com/release-art/pydantic-prism/main/badges/coverage.svg)
-![Skipped](https://raw.githubusercontent.com/release-art/pydantic-prism/main/badges/skipped.svg)
-![XFailed](https://raw.githubusercontent.com/release-art/pydantic-prism/main/badges/xfailed.svg)
-![Warnings](https://raw.githubusercontent.com/release-art/pydantic-prism/main/badges/warnings.svg)
-![Duration](https://raw.githubusercontent.com/release-art/pydantic-prism/main/badges/duration.svg)
-![Last run](https://raw.githubusercontent.com/release-art/pydantic-prism/main/badges/last-run.svg)
+![Tests](https://raw.githubusercontent.com/release-art/pydantic-prism/main/docs/badges/tests.svg)
+![Coverage](https://raw.githubusercontent.com/release-art/pydantic-prism/main/docs/badges/coverage.svg)
+![Skipped](https://raw.githubusercontent.com/release-art/pydantic-prism/main/docs/badges/skipped.svg)
+![XFailed](https://raw.githubusercontent.com/release-art/pydantic-prism/main/docs/badges/xfailed.svg)
+![Warnings](https://raw.githubusercontent.com/release-art/pydantic-prism/main/docs/badges/warnings.svg)
+![Duration](https://raw.githubusercontent.com/release-art/pydantic-prism/main/docs/badges/duration.svg)
+![Last run](https://raw.githubusercontent.com/release-art/pydantic-prism/main/docs/badges/last-run.svg)
 
 Project one canonical pydantic model along any axis — and keep the
 relationship graph that survives the projection.
