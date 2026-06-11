@@ -83,7 +83,8 @@ your need fits:
 - **[Tutorial: your first scoped model](docs/tutorial/first-scoped-model.md)** —
   one hand-held lesson, one model to two projections.
 - **[How-to guides](docs/how-to/README.md)** — short recipes: redact PII,
-  trace data flow, PATCH models, FastAPI, ORM bridge, editor stubs, diagrams.
+  trace data flow, PATCH models, LLM tool schemas, FastAPI, ORM bridge, editor
+  stubs, diagrams.
 - **[Reference](docs/reference/README.md)** — the [API](docs/reference/api.md),
   the [`pydantic-prism` CLI](docs/reference/cli.md), and the [error table](docs/reference/errors.md).
 - **[Explanation](docs/explanation/README.md)** — the scope algebra, why

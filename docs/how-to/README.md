@@ -22,6 +22,11 @@ and shows the shortest correct way to get it. New to prism? Start with the
 
 ## Integration
 
+- [Derive an LLM tool / function schema](derive-llm-tool-schema.md) — emit an
+  OpenAI / Anthropic / Mistral tool schema that hides internal fields, with
+  `tool_schema()`.
+- [Use projections with Pydantic AI](use-with-pydantic-ai.md) — hand an agent a
+  narrowed view as `output_type` or a tool argument.
 - [Use projections with FastAPI](use-with-fastapi.md) — one object, many
   documented response shapes.
 - [Bridge a SQLModel or SQLAlchemy ORM](bridge-an-orm.md) — make the table the

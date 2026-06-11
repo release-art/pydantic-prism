@@ -24,15 +24,13 @@ documented. Links go to the how-to guide.
 | FastAPI integration | Projections as `response_model=`; one object, many documented shapes | [Use with FastAPI](docs/how-to/use-with-fastapi.md) |
 | ORM / SQLModel bridge | Make a SQLModel table or SQLAlchemy row the canonical; derive the DTO faces | [Bridge an ORM](docs/how-to/bridge-an-orm.md) |
 | Per-projection schema metadata | Per-scope `description` / `examples` / `json_schema_extra` | [Vary a field's schema](docs/how-to/vary-schema-per-scope.md) |
+| LLM tool / function schemas | `Model.tool_schema(...)` / `Projection.tool_schema(...)`: OpenAI / Anthropic / Mistral tool envelopes (`envelope=False` for the bare schema), strict-mode normalization, `ToolSchemaDepthWarning` | [Derive an LLM tool schema](docs/how-to/derive-llm-tool-schema.md) |
+| Pydantic AI integration | Projections as agent `output_type` / typed tool args; bare schema for `ToolDefinition.parameters_json_schema` | [Use with Pydantic AI](docs/how-to/use-with-pydantic-ai.md) |
 
 ## Planned
 
 Bets with real demand, listed with the honest boundary that gates each one.
 
-- **A first-class LLM tool-schema scope.** The mechanism — a field-filtering
-  scope plus per-scope `description`/`examples` — already works. What is
-  missing is a blessed convention and possibly a thin `tool_schema()` helper
-  that normalizes the schema for OpenAI/Anthropic strict modes.
 - **Entitlement / plan-tier gating docs.** Scope inheritance models a
   Free < Pro < Enterprise ladder cleanly. Boundary: prism gates field
   **presence** only — never numeric limits ("max 5 projects"), rate limits,

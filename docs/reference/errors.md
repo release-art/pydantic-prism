@@ -56,7 +56,8 @@ concrete subclass for one kind.
 ```
 PrismWarning(UserWarning)
 ├── PrismBaseDropWarning
-└── PrismOrderingWarning
+├── PrismOrderingWarning
+└── ToolSchemaDepthWarning
 ```
 
 | warning | emitted when |
@@ -64,3 +65,4 @@ PrismWarning(UserWarning)
 | `PrismWarning` | Base class for all prism advisory warnings; filter this to catch them all. |
 | `PrismBaseDropWarning` | `Model.scope(...)` would drop a non-`ScopedModel` base's overridden `model_dump`/`model_validate` (or its model validators/serializers) because the base isn't carried. Declare `projection_bases=(Base,)` to carry it, or `projection_bases=()` to silence. One-shot per model. |
 | `PrismOrderingWarning` | A `@scoped_validator(mode="before")` coexists with a plain `@model_validator(mode="before")` inherited from a base. pydantic runs the scoped one first (child-first), so a child that depends on the base hook sees untransformed data. Best fix: use `mode="after"` if the value derives from already-parsed fields. Otherwise call `cls.run_inherited_before(data)` at the top of the validator (the inherited hook re-runs, so must be idempotent), or `parent_ordering="acknowledged"` to assert independence. One-shot per `(class, validator)`. See [before-validator ordering](../how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator). |
+| `ToolSchemaDepthWarning` | `tool_schema(provider="openai", strict=True)` produced object nesting deeper than OpenAI's 5-level limit for strict structured outputs, or a recursive (self-referential) model whose depth is unbounded. The schema is returned unchanged; the API will likely reject it. Project to a shallower scope, or drop `strict=True`. See [derive an LLM tool schema](../how-to/derive-llm-tool-schema.md#depth-limit). |
