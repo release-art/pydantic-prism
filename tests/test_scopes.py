@@ -2,7 +2,7 @@
 
 import pytest
 
-from pydantic_prism import Scope
+from pydantic_prism import Scope, ScopeExpr
 from pydantic_prism._internal.scopes import as_expr, union_all
 
 
@@ -79,6 +79,27 @@ def test_operators_compose_classes_and_expressions() -> None:
     assert (Public - Llm) == (as_expr(Public) - Llm)
     # reflected: expression on the right of a class
     assert (Public | (Llm & Internal)) == ((Llm & Internal) | Public)
+
+
+def test_named_methods_mirror_the_operators() -> None:
+    from functools import reduce
+
+    # varargs named forms on an expression, equivalent to the operators
+    assert as_expr(Public).union(Internal, Llm) == (Public | Internal | Llm)
+    assert as_expr(Public).intersection(Llm) == (Public & Llm)
+    assert as_expr(Scope).difference(Llm, Internal) == ((Scope - Llm) - Internal)
+    # and on a Scope class (via the metaclass)
+    assert Public.union(Llm) == (Public | Llm)
+    assert Public.intersection(Llm) == (Public & Llm)
+    assert Public.difference(Llm) == (Public - Llm)
+    # zero-arg forms are identity (left side unchanged)
+    assert as_expr(Public).union() == as_expr(Public)
+    assert as_expr(Public).difference() == as_expr(Public)
+    assert as_expr(Public).intersection() == as_expr(Public)
+    # the point: programmatic composition over a runtime list
+    assert reduce(ScopeExpr.union, map(as_expr, [Public, Internal, Llm])) == (
+        Public | Internal | Llm
+    )
 
 
 def test_canonical_equality_and_hash() -> None:

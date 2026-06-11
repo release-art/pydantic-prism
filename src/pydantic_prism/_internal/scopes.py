@@ -107,6 +107,26 @@ class ScopeExpr:
     def __invert__(self) -> ScopeExpr:
         return _Complement(self)
 
+    # Named, varargs forms of the binary operators — the spelling for
+    # *programmatic* composition over a runtime list of scopes
+    # (``reduce(ScopeExpr.union, scopes)``, ``base.difference(*to_strip)``). For
+    # statically-known scopes, prefer the operators (``A | B``, ``A - B``).
+
+    def union(self, *others: ScopeLike) -> ScopeExpr:
+        """Union with zero or more scopes/expressions — the named form of ``|``."""
+        return union_all([self, *(as_expr(other) for other in others)])
+
+    def intersection(self, *others: ScopeLike) -> ScopeExpr:
+        """Intersection with zero or more scopes — the named form of ``&``."""
+        return intersect_all([self, *(as_expr(other) for other in others)])
+
+    def difference(self, *others: ScopeLike) -> ScopeExpr:
+        """Difference of zero or more scopes — the named form of ``-`` (left-fold)."""
+        result: ScopeExpr = self
+        for other in others:
+            result = result - other
+        return result
+
 
 class ScopeMeta(type):
     """Metaclass giving Scope *classes* the same operators as expressions."""
@@ -131,6 +151,18 @@ class ScopeMeta(type):
 
     def __invert__(cls) -> ScopeExpr:
         return ~as_expr(cls)
+
+    def union(cls, *others: ScopeLike) -> ScopeExpr:
+        """Union with zero or more scopes/expressions — the named form of ``|``."""
+        return as_expr(cls).union(*others)
+
+    def intersection(cls, *others: ScopeLike) -> ScopeExpr:
+        """Intersection with zero or more scopes — the named form of ``&``."""
+        return as_expr(cls).intersection(*others)
+
+    def difference(cls, *others: ScopeLike) -> ScopeExpr:
+        """Difference of zero or more scopes — the named form of ``-``."""
+        return as_expr(cls).difference(*others)
 
 
 class Scope(metaclass=ScopeMeta):

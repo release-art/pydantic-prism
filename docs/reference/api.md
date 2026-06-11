@@ -41,7 +41,7 @@ below the top-level `Annotated`, raises `TypeError` at class definition.
 | `Scope` | class | Subclass to declare a scope; subclass a scope to **broaden** it. The root is the wildcard. Never instantiated. Class keywords: `partial=True`; `description=` / `examples=` / `json_schema_extra=` (model-level schema for projections that select it); `cls_name_token=` (the CamelCase fragment this scope contributes to a derived class's auto-name, defaulting to its `__name__`). All *not* inherited. |
 | `Classification` | class | Subclass of `Scope` for data-classification tags — an axis orthogonal to visibility. Composes in the same algebra; the distinct base is what lets prism enumerate, redact, and trace classified data. |
 | `Direction` / `In` / `Out` | classes | The read/write **direction** axis — a closed binary prism ships whole (both `In`/`Out`). Tag a read-only field `scoped(..., Out)`, a write-only field `scoped(..., In)`; drive `Model.input()` / `Model.output()`. See [prevent mass-assignment](../how-to/prevent-mass-assignment.md). |
-| `ScopeExpr` | class | A scope expression, built from scopes with `\| & - ~`. Methods: `.matches(scope)`, `.selects(tag)`, `.atoms()`, `.is_partial()`. |
+| `ScopeExpr` | class | A scope expression, built from scopes with `\| & - ~`. Methods: `.matches(scope)`, `.selects(tag)`, `.atoms()`, `.is_partial()`; varargs `.union(*s)` / `.intersection(*s)` / `.difference(*s)` (named forms of `\| & -`). |
 
 Operators (usable in `scoped(...)` tags and in `Model.scope(...)`):
 
@@ -51,6 +51,11 @@ Operators (usable in `scoped(...)` tags and in `Model.scope(...)`):
 | `A & B` | intersection — in both |
 | `A - B` | difference — in A and not in B |
 | `~A` | complement — not in A |
+
+For *programmatic* composition over a runtime list, the operators also have
+named varargs forms on both scope classes and expressions —
+`A.union(B, C)`, `base.difference(*to_strip)`, `reduce(ScopeExpr.union, scopes)`.
+Prefer the operators for statically-known scopes.
 
 `A - B` and `~A` propagate through scope inheritance: a field tagged
 `scoped(Scope - Llm)` is excluded from `Llm` and every scope that extends it.
