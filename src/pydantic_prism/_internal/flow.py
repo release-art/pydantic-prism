@@ -14,9 +14,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from ..scopes import Classification  # bundled taxonomy (public module)
     from .diagram import Diagram
     from .model import ScopedModel
-    from .scopes import Classification
 
 __all__ = [
     "ClassifiedField",

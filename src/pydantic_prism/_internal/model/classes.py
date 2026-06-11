@@ -14,17 +14,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel
 
+from ...scopes import Classification, In, Out  # bundled taxonomy (public module)
 from ..refs import RefGraph
-from ..scopes import (
-    Classification,
-    In,
-    Out,
-    Scope,
-    ScopeExpr,
-    ScopeLike,
-    as_expr,
-    union_all,
-)
+from ..scopes import Scope, ScopeExpr, ScopeLike, as_expr, union_all  # algebra
 
 if TYPE_CHECKING:
     from ..flow import FlowReport

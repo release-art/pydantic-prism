@@ -25,14 +25,7 @@ from ._internal.refs import (
     RefInfo,
     RefShape,
 )
-from ._internal.scopes import (
-    Classification,
-    Direction,
-    In,
-    Out,
-    Scope,
-    ScopeExpr,
-)
+from ._internal.scopes import Scope, ScopeExpr
 from ._internal.validators import scoped_validator
 from .errors import (
     EmptyProjectionError,
@@ -42,6 +35,7 @@ from .errors import (
     RefResolutionError,
     StaleProjectionStubError,
 )
+from .scopes import Classification, Direction, In, Out
 
 __all__ = [
     "MISSING",
