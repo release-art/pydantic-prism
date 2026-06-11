@@ -520,6 +520,25 @@ def test_import_lines_grouping() -> None:
     ]
 
 
+def test_imports_alias_on_base_name_collision() -> None:
+    # Two distinct modules exporting the same top-level name: the first keeps
+    # the bare name, later ones are bound to a module-stem alias so generated
+    # references resolve to the right type instead of being silently shadowed.
+    imp = _Imports()
+    assert imp.add_typing("a.mod", "Status") == "Status"
+    assert imp.add_typing("b.mod", "Status") == "mod_Status"
+    # the stem alias itself collides -> numeric suffix
+    assert imp.add_typing("c.mod", "Status") == "mod_Status_2"
+    # a nested qualname keeps the bound base and re-appends the rest
+    assert imp.add_typing("a.mod", "Status.Inner") == "Status.Inner"
+    # repeated request returns the established binding, never a fresh alias
+    assert imp.add_typing("b.mod", "Status") == "mod_Status"
+    lines = _import_lines(imp.typing_only, "", imp.bound)
+    assert "from a.mod import Status" in lines
+    assert "from b.mod import Status as mod_Status" in lines
+    assert "from c.mod import Status as mod_Status_2" in lines
+
+
 def test_field_suffix_branches() -> None:
     imp = _Imports()
     fields = fx.Screenshot.scope(fx.Public).model_fields

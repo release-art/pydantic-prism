@@ -6,7 +6,13 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from pydantic_prism import MISSING, Scope, ScopedModel, scoped
+from pydantic_prism import (
+    MISSING,
+    Classification,
+    Scope,
+    ScopedModel,
+    scoped,
+)
 
 
 class Public(Scope): ...
@@ -104,6 +110,36 @@ def test_partial_union_of_partials_is_partial() -> None:
 
     projected = Row.scope(Update | OtherUpdate, name="RowEitherUpdate")
     assert projected() is not None
+
+
+def test_partial_survives_classification_subtraction() -> None:
+    """A partial scope minus a classification stays a sparse PATCH model.
+
+    Regression: ``is_partial`` once conjoined *all* atoms, so the non-partial
+    classification on the subtracted side flipped the projection back to a
+    required shape — silently breaking redacted sparse-update models.
+    """
+
+    class Pii(Classification): ...
+
+    class Account(ScopedModel):
+        account_id: Annotated[int, scoped(Storage)]
+        email: Annotated[str, scoped(Storage), scoped(Pii)]
+
+    assert (Update - Pii).is_partial()
+    sparse = Account.scope(Update - Pii)
+    assert sparse().account_id is MISSING  # type: ignore[attr-defined]
+    assert "required" not in sparse.model_json_schema()
+
+    # redacted() builds the very same difference under the hood
+    redacted = Account.redacted(Update)
+    assert redacted().account_id is MISSING  # type: ignore[attr-defined]
+    assert "required" not in redacted.model_json_schema()
+
+
+def test_complement_projection_is_never_partial() -> None:
+    """A complement carries no positive scope, so it never forces optionality."""
+    assert not (~Update).is_partial()
 
 
 def test_partial_propagates_into_nested_models() -> None:

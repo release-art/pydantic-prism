@@ -50,11 +50,15 @@ class ScopeExpr:
     def is_partial(self) -> bool:
         """Whether projections to this expression make every field optional.
 
-        An expression is partial iff *all* of its atoms are partial scopes —
-        the conservative rule: mixing a partial scope with a regular one
-        yields a regular projection.
+        Evaluated over the atoms that actually *contribute* surviving fields:
+        a union/intersection is partial iff every operand is (the conservative
+        rule — mixing a partial scope with a regular one yields a regular
+        projection), a difference takes its partiality from the left (kept)
+        side alone, and a complement is never partial (no positive scope
+        declares the shape). Subtracted/negated atoms never make a projection
+        partial.
         """
-        return all(scope.__prism_partial__ for scope in self.atoms())
+        raise NotImplementedError
 
     def token(self) -> str:
         """CamelCase fragment used to auto-name derived classes."""
@@ -226,6 +230,9 @@ class _Atom(ScopeExpr):
     def atoms(self) -> frozenset[type[Scope]]:
         return frozenset((self.scope,))
 
+    def is_partial(self) -> bool:
+        return self.scope.__prism_partial__
+
     def token(self) -> str:
         return self.scope.__name__
 
@@ -250,6 +257,9 @@ class _Union(ScopeExpr):
         return frozenset(
             scope for operand in self.operands for scope in operand.atoms()
         )
+
+    def is_partial(self) -> bool:
+        return all(operand.is_partial() for operand in self.operands)
 
     def token(self) -> str:
         return "Or".join(operand.token() for operand in self.operands)
@@ -276,6 +286,9 @@ class _Intersection(ScopeExpr):
             scope for operand in self.operands for scope in operand.atoms()
         )
 
+    def is_partial(self) -> bool:
+        return all(operand.is_partial() for operand in self.operands)
+
     def token(self) -> str:
         return "And".join(operand.token() for operand in self.operands)
 
@@ -300,6 +313,11 @@ class _Difference(ScopeExpr):
     def atoms(self) -> frozenset[type[Scope]]:
         return self.left.atoms() | self.right.atoms()
 
+    def is_partial(self) -> bool:
+        # Only the kept (left) side contributes surviving fields; the
+        # subtracted side merely removes them and never sets the shape.
+        return self.left.is_partial()
+
     def token(self) -> str:
         return f"{self.left.token()}Not{self.right.token()}"
 
@@ -322,6 +340,11 @@ class _Complement(ScopeExpr):
 
     def atoms(self) -> frozenset[type[Scope]]:
         return self.operand.atoms()
+
+    def is_partial(self) -> bool:
+        # A complement selects the fields *not* tagged by its operand; no
+        # positive scope declares a partial shape, so stay conservative.
+        return False
 
     def token(self) -> str:
         return f"Not{self.operand.token()}"

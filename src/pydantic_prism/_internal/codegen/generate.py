@@ -51,7 +51,7 @@ def generate(config: Config) -> str:
         )
 
     imports = _Imports()
-    imports.runtime.add(("pydantic_prism._internal.drift", "assert_fresh"))
+    imports.add_runtime("pydantic_prism._internal.drift", "assert_fresh")
     imports.add_typing("pydantic_prism", "Projection")
 
     class_blocks: list[str] = []
@@ -73,10 +73,10 @@ def generate(config: Config) -> str:
     ]
     out.append("from typing import TYPE_CHECKING")
     out.append("")
-    out.extend(_import_lines(imports.runtime, ""))
+    out.extend(_import_lines(imports.runtime, "", imports.bound))
     out.append("")
     out.append("if TYPE_CHECKING:")
-    out.extend(_import_lines(imports.typing_only, "    "))
+    out.extend(_import_lines(imports.typing_only, "    ", imports.bound))
     out.append("")
     out.append("\n\n".join(class_blocks))
     out.append("else:")
@@ -102,11 +102,9 @@ def _render_class(proj: type[Projection], imports: _Imports) -> str:
 
 def _render_alias(proj: type[Projection], imports: _Imports) -> str:
     source = proj.__prism_source__
-    imports.add_runtime(source.__module__, source.__qualname__.split(".")[0])
+    source_ref = imports.add_runtime(source.__module__, source.__qualname__)
     expr_src = _render_scope_expr(proj.__prism_scope__, imports)
     auto_name = _auto_name(source, proj.__prism_scope__)
     if proj.__name__ == auto_name:
-        return f"{proj.__name__} = {source.__name__}.scope({expr_src})"
-    return (
-        f"{proj.__name__} = {source.__name__}.scope({expr_src}, name={proj.__name__!r})"
-    )
+        return f"{proj.__name__} = {source_ref}.scope({expr_src})"
+    return f"{proj.__name__} = {source_ref}.scope({expr_src}, name={proj.__name__!r})"

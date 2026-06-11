@@ -39,26 +39,73 @@ def _empty_import_set() -> set[tuple[str, str]]:
     return set()
 
 
+def _empty_bindings() -> dict[tuple[str, str], str]:
+    return {}
+
+
 @dataclass
 class _Imports:
+    """Collected imports plus the bound name each is referenced by.
+
+    ``runtime`` / ``typing_only`` hold ``(module, top_level_name)`` pairs. When
+    two distinct modules export the same top-level name, the second is bound to
+    an alias so the generated file references the right type — ``bound`` maps
+    each ``(module, name)`` to the identifier actually used in source.
+    """
+
     runtime: set[tuple[str, str]] = field(default_factory=_empty_import_set)
     typing_only: set[tuple[str, str]] = field(default_factory=_empty_import_set)
+    bound: dict[tuple[str, str], str] = field(default_factory=_empty_bindings)
 
-    def add_runtime(self, module: str, name: str) -> None:
-        self.runtime.add((module, name))
+    def add_runtime(self, module: str, qualname: str) -> str:
+        return self._bind(self.runtime, module, qualname)
 
-    def add_typing(self, module: str, name: str) -> None:
-        self.typing_only.add((module, name))
+    def add_typing(self, module: str, qualname: str) -> str:
+        return self._bind(self.typing_only, module, qualname)
+
+    def _bind(self, bucket: set[tuple[str, str]], module: str, qualname: str) -> str:
+        base, _, rest = qualname.partition(".")
+        key = (module, base)
+        name = self.bound.get(key)
+        if name is None:
+            name = base if not self._taken(base) else self._alias(module, base)
+            self.bound[key] = name
+        bucket.add(key)
+        return f"{name}.{rest}" if rest else name
+
+    def _taken(self, name: str) -> bool:
+        return name in self.bound.values()
+
+    def _alias(self, module: str, base: str) -> str:
+        stem = module.rsplit(".", 1)[-1]
+        candidate = f"{stem}_{base}"
+        suffix = 2
+        while self._taken(candidate):
+            candidate = f"{stem}_{base}_{suffix}"
+            suffix += 1
+        return candidate
 
 
-def _import_lines(pairs: set[tuple[str, str]], indent: str) -> list[str]:
+def _import_lines(
+    pairs: set[tuple[str, str]],
+    indent: str,
+    bound: dict[tuple[str, str], str] | None = None,
+) -> list[str]:
     by_module: dict[str, set[str]] = {}
     for module, name in pairs:
         by_module.setdefault(module, set()).add(name)
     return [
-        f"{indent}from {module} import {', '.join(sorted(by_module[module]))}"
-        for module in sorted(by_module)
+        f"{indent}from {module} import "
+        + ", ".join(_import_clause(module, name, bound) for name in sorted(names))
+        for module, names in sorted(by_module.items())
     ]
+
+
+def _import_clause(
+    module: str, name: str, bound: dict[tuple[str, str], str] | None
+) -> str:
+    alias = bound.get((module, name)) if bound else None
+    return f"{name} as {alias}" if alias and alias != name else name
 
 
 # --- annotation rendering --------------------------------------------------
@@ -76,8 +123,8 @@ def _render_annotation(annotation: Any, imports: _Imports) -> str:
         return " | ".join(_render_annotation(a, imports) for a in get_args(annotation))
     if origin is Literal:
         rendered = ", ".join(_render_literal(v, imports) for v in get_args(annotation))
-        imports.add_typing("typing", "Literal")
-        return f"Literal[{rendered}]"
+        literal = imports.add_typing("typing", "Literal")
+        return f"{literal}[{rendered}]"
     name = _render_type_ref(origin, imports)
     args = get_args(annotation)
     parts = [
@@ -88,12 +135,10 @@ def _render_annotation(annotation: Any, imports: _Imports) -> str:
 
 def _render_bare(annotation: Any, imports: _Imports) -> str:
     if annotation is Any:
-        imports.add_typing("typing", "Any")
-        return "Any"
+        return imports.add_typing("typing", "Any")
     if annotation is MISSING:
         # the partial-scope optional marker (pydantic 2.12 sentinel)
-        imports.add_typing("pydantic.experimental.missing_sentinel", "MISSING")
-        return "MISSING"
+        return imports.add_typing("pydantic.experimental.missing_sentinel", "MISSING")
     if isinstance(annotation, type):
         return _render_type_ref(annotation, imports)
     raise CodegenError(
@@ -109,8 +154,7 @@ def _render_type_ref(tp: type[Any], imports: _Imports) -> str:
     qualname = tp.__qualname__
     if module == "builtins":
         return qualname
-    imports.add_typing(module, qualname.split(".")[0])
-    return qualname
+    return imports.add_typing(module, qualname)
 
 
 def _render_literal(value: Any, imports: _Imports) -> str:
@@ -118,8 +162,8 @@ def _render_literal(value: Any, imports: _Imports) -> str:
         return "None"
     if isinstance(value, enum.Enum):
         cls = type(value)
-        imports.add_typing(cls.__module__, cls.__qualname__.split(".")[0])
-        return f"{cls.__qualname__}.{value.name}"
+        ref = imports.add_typing(cls.__module__, cls.__qualname__)
+        return f"{ref}.{value.name}"
     if isinstance(value, (bool, int, float, str, bytes)):
         return repr(value)
     raise CodegenError(f"cannot render Literal value {value!r} to source")
@@ -131,8 +175,7 @@ def _render_literal(value: Any, imports: _Imports) -> str:
 def _render_scope_expr(expr: ScopeExpr, imports: _Imports) -> str:
     if isinstance(expr, _Atom):
         scope = expr.scope
-        imports.add_runtime(scope.__module__, scope.__qualname__.split(".")[0])
-        return scope.__qualname__
+        return imports.add_runtime(scope.__module__, scope.__qualname__)
     if isinstance(expr, _Union):
         return (
             "("
@@ -172,13 +215,13 @@ def _field_suffix(info: Any, imports: _Imports) -> str:
     if info.is_required():
         return ""
     if info.default is MISSING:  # partial-scope field
-        imports.add_typing("pydantic.experimental.missing_sentinel", "MISSING")
-        return " = MISSING"
+        name = imports.add_typing("pydantic.experimental.missing_sentinel", "MISSING")
+        return f" = {name}"
     if info.default_factory is not None:
         for factory in _FACTORIES:
             if info.default_factory is factory:
-                imports.add_typing("pydantic", "Field")
-                return f" = Field(default_factory={factory.__name__})"
+                field_ref = imports.add_typing("pydantic", "Field")
+                return f" = {field_ref}(default_factory={factory.__name__})"
         return ""
     default = info.default
     if default is None:
