@@ -13,6 +13,8 @@ and shows the shortest correct way to get it. New to prism? Start with the
 
 ## Shapes & round-trips
 
+- [Prevent mass-assignment with read-only / write-only fields](prevent-mass-assignment.md)
+  — `input()` / `output()` and the `In` / `Out` direction axis.
 - [Build a PATCH / partial-update model](partial-update.md) — all-optional
   views with `partial=True` and `with_updates`.
 - [Vary a field's schema per projection](vary-schema-per-scope.md) — per-scope

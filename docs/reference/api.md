@@ -7,7 +7,8 @@ top-level import.)
 
 ```python
 from pydantic_prism import (
-    MISSING, Scope, ScopeExpr, Classification, ScopedModel, Projection,
+    MISSING, Scope, ScopeExpr, Classification, Direction, In, Out,
+    ScopedModel, Projection,
     scoped, scoped_validator, ref, backref, Ref, BackRef, Scoped, RefShape,
     RefGraph, RefInfo, IdRefInfo, BackRefInfo, EmbeddedRefInfo,
     FlowReport, FlowNode, FlowEdge, ClassifiedField, build_flow_report,
@@ -39,6 +40,7 @@ below the top-level `Annotated`, raises `TypeError` at class definition.
 |---|---|---|
 | `Scope` | class | Subclass to declare a scope; subclass a scope to **broaden** it. The root is the wildcard. Never instantiated. Class keywords: `partial=True`; `description=` / `examples=` / `json_schema_extra=` (model-level schema for projections that select it — *not* inherited). |
 | `Classification` | class | Subclass of `Scope` for data-classification tags — an axis orthogonal to visibility. Composes in the same algebra; the distinct base is what lets prism enumerate, redact, and trace classified data. |
+| `Direction` / `In` / `Out` | classes | The read/write **direction** axis — a closed binary prism ships whole (both `In`/`Out`). Tag a read-only field `scoped(..., Out)`, a write-only field `scoped(..., In)`; drive `Model.input()` / `Model.output()`. See [prevent mass-assignment](../how-to/prevent-mass-assignment.md). |
 | `ScopeExpr` | class | A scope expression, built from scopes with `\| & - ~`. Methods: `.matches(scope)`, `.selects(tag)`, `.atoms()`, `.is_partial()`. |
 
 Operators (usable in `scoped(...)` tags and in `Model.scope(...)`):
@@ -58,6 +60,8 @@ Operators (usable in `scoped(...)` tags and in `Model.scope(...)`):
 | name | kind | summary |
 |---|---|---|
 | `Model.scope(*scopes, name=None, bases=None)` | classmethod | Derive/fetch the cached projection class. `name` and `bases` join the cache key. Multiple args union. |
+| `Model.input(*visible, name=None, bases=None, extra="forbid")` | classmethod | Write-side projection: `union(visible) - Out` (drops read-only fields, deep). Defaults `name="{Model}In"` and `extra="forbid"`. `visible` falls back to `default_scope=` when omitted. |
+| `Model.output(*visible, name=None, bases=None)` | classmethod | Read-side projection: `union(visible) - In` (drops write-only fields, deep). Defaults `name="{Model}Out"`; config untouched. `visible` falls back to `default_scope=`. |
 | `Model.scopes()` | classmethod | `frozenset[type[Scope]]` of the atom scopes used in field tags. |
 | `Model.from_projection(projection, /, **extra)` | classmethod | Complete projection → canonical instance; missing fields via `**extra` or canonical defaults. Rejects **partial** projections (use `with_updates`). |
 | `instance.with_updates(patch, /)` | method | Apply a (partial) projection's set fields as a PATCH; returns a new, re-validated instance. `self` unchanged. |

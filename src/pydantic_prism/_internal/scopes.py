@@ -18,6 +18,9 @@ from typing import Any, ClassVar
 
 __all__ = [
     "Classification",
+    "Direction",
+    "In",
+    "Out",
     "Scope",
     "ScopeExpr",
     "ScopeLike",
@@ -157,6 +160,12 @@ class Scope(metaclass=ScopeMeta):
     # Model-level JSON-schema metadata for projections that select this scope.
     # Read per-class (via vars()), never inherited.
     __prism_model_schema__: ClassVar[dict[str, Any]] = {}
+    # Override for the CamelCase fragment used to auto-name derived classes (see
+    # ScopeExpr.token). Read per-class (via vars(), never inherited), falling
+    # back to the class __name__. In/Out set it so scope(Out) auto-names
+    # "...ReadOnly", leaving the "...Out" / "...In" forms free for the output() /
+    # input() helpers' default names.
+    __prism_token__: ClassVar[str | None] = None
 
     def __init_subclass__(
         cls,
@@ -210,6 +219,52 @@ class Classification(Scope):
     """
 
 
+class Direction(Scope):
+    """Base for the read/write *direction* axis — orthogonal to visibility.
+
+    A field's direction says which side of the API it travels on, independent of
+    *who* may see it (the visibility ladder ``Public < Internal < ...``). prism
+    ships the whole axis, since — unlike :class:`Classification` (an open
+    taxonomy) — direction is a closed binary: there are only ever the two members
+    :class:`In` and :class:`Out`. A :class:`Direction` *is* a :class:`Scope`, so
+    it composes in the same expression algebra and tags through the same
+    ``scoped(...)`` marker; the distinct base is what lets prism tell the
+    direction axis apart from visibility and drive
+    :meth:`~pydantic_prism.ScopedModel.input` / ``output``.
+
+    You annotate only the *exceptions* — a read-only field with :class:`Out`, a
+    write-only field with :class:`In`; the read-write majority carries no
+    direction tag at all (the DRF / Marshmallow model).
+    """
+
+
+class In(Direction):
+    """Write-only direction: a field accepted as **input** but never echoed back.
+
+    Tag a write-only field by unioning :class:`In` onto its visibility scope —
+    ``scoped(Public, In)`` — exactly as a classification is unioned on. The field
+    then survives :meth:`~pydantic_prism.ScopedModel.input` (and a plain
+    :meth:`~pydantic_prism.ScopedModel.scope`) but is dropped from
+    :meth:`~pydantic_prism.ScopedModel.output`. Passwords are the canonical case.
+    """
+
+    __prism_token__: ClassVar[str | None] = "WriteOnly"
+
+
+class Out(Direction):
+    """Read-only direction: a field returned as **output** but never accepted in.
+
+    Tag a read-only field by unioning :class:`Out` onto its visibility scope —
+    ``scoped(Public, Out)``. The field survives
+    :meth:`~pydantic_prism.ScopedModel.output` (and a plain
+    :meth:`~pydantic_prism.ScopedModel.scope`) but is dropped from
+    :meth:`~pydantic_prism.ScopedModel.input`, so it can never be mass-assigned.
+    Server-controlled ``id`` / ``created_at`` are the canonical cases.
+    """
+
+    __prism_token__: ClassVar[str | None] = "ReadOnly"
+
+
 type ScopeLike = type[Scope] | ScopeExpr
 
 
@@ -239,7 +294,7 @@ class _Atom(ScopeExpr):
         return self.scope.__prism_partial__
 
     def token(self) -> str:
-        return self.scope.__name__
+        return vars(self.scope).get("__prism_token__") or self.scope.__name__
 
     def sort_key(self) -> str:
         return f"{self.scope.__module__}.{self.scope.__qualname__}"

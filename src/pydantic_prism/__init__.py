@@ -25,7 +25,14 @@ from ._internal.refs import (
     RefInfo,
     RefShape,
 )
-from ._internal.scopes import Classification, Scope, ScopeExpr
+from ._internal.scopes import (
+    Classification,
+    Direction,
+    In,
+    Out,
+    Scope,
+    ScopeExpr,
+)
 from ._internal.validators import scoped_validator
 from .errors import (
     EmptyProjectionError,
@@ -43,12 +50,15 @@ __all__ = [
     "Classification",
     "ClassifiedField",
     "Diagram",
+    "Direction",
     "EmbeddedRefInfo",
     "EmptyProjectionError",
     "FlowEdge",
     "FlowNode",
     "FlowReport",
     "IdRefInfo",
+    "In",
+    "Out",
     "PrismError",
     "Projection",
     "ProjectionBaseError",

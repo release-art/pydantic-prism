@@ -79,3 +79,29 @@ The axes are distinguishable by type but not *forbidden* from mixing:
 while the governance helpers are the ergonomic, axis-explicit path. And because
 `redacted()` defaults to stripping *every* classification the model declares, a
 classification added later is auto-redacted — the safe direction.
+
+## A third axis: direction
+
+Read/write *direction* is the same move once more. A field is read-only,
+write-only, or read-write — orthogonal to both visibility and classification.
+Prism ships it as `class Direction(Scope)` with the two members `In` and `Out`
+(a *closed* binary, so prism ships both members, unlike the open classification
+taxonomy). Tag the exceptions: a read-only field unions `Out` onto its
+visibility scope, a write-only field unions `In`; read-write fields carry no
+direction tag.
+
+Here the axis-awareness pays off as a *subtraction* rather than a partition.
+[`input()`](../how-to/prevent-mass-assignment.md) is `union(visible) - Out` (the
+write view drops read-only fields) and `output()` is `union(visible) - In` (the
+read view drops write-only fields) — the same difference operator that powers
+`redacted()`, aimed at the direction atoms. A read-only field is therefore
+simply *absent* from the input projection, which is mass-assignment protection
+by shape: there is no field to over-post. The membership rule does the rest — a
+field tagged `Public | Out` still belongs to `Public`, so the *full*
+`scope(Public)` keeps it; only the directional `input()` removes it.
+
+The one wrinkle is that `input()` forks the projection's `model_config` to
+`extra="forbid"` (a config-distinct class, separately named `{Model}In`), so an
+unknown key is rejected rather than silently dropped — the only thing that
+closes the over-posting hole when the canonical itself allows extra keys. That
+is a deliberate strictness choice on the safety axis, overridable per view.

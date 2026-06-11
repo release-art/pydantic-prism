@@ -57,6 +57,7 @@ _RUNNABLE = [
     "docs/how-to/redact-pii.md",
     "docs/how-to/trace-data-flow.md",
     "docs/how-to/partial-update.md",
+    "docs/how-to/prevent-mass-assignment.md",
     "docs/how-to/carry-a-custom-base.md",
     "docs/how-to/vary-schema-per-scope.md",
     "docs/how-to/export-diagrams.md",

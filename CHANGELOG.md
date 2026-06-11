@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Read-only / write-only fields** — a `Direction` axis (`In` / `Out`) for
+  tagging read-only and write-only fields, with `Model.input()` / `Model.output()`
+  helpers deriving the request / response faces. `input()` drops read-only fields
+  (mass-assignment protection by shape) and defaults to `extra="forbid"`;
+  `output()` drops write-only fields. See
+  [prevent mass-assignment](docs/how-to/prevent-mass-assignment.md).
+
 ## [0.1.0] - 2026-06-10
 
 First public release. Requires Python >= 3.12 and pydantic >= 2.12. See the

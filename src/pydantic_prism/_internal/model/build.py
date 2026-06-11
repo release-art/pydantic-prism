@@ -11,6 +11,7 @@ from typing import (
     Annotated,
     Any,
     ForwardRef,
+    Literal,
     Union,
     cast,
     get_args,
@@ -81,9 +82,11 @@ class _BuildContext:
 
     def __init__(self) -> None:
         # key -> ForwardRef/namespace name, while the class is being built
-        self.pending: dict[tuple[type[ScopedModel], Any, Any, Any], str] = {}
+        self.pending: dict[tuple[type[ScopedModel], Any, Any, Any, Any], str] = {}
         # key -> finished (but not yet rebuilt/committed) class
-        self.built: dict[tuple[type[ScopedModel], Any, Any, Any], type[Projection]] = {}
+        self.built: dict[
+            tuple[type[ScopedModel], Any, Any, Any, Any], type[Projection]
+        ] = {}
         # ForwardRef name -> class; names are unique even when class names collide
         self.namespace: dict[str, type[Projection]] = {}
 
@@ -141,7 +144,13 @@ def _project(
     name: str | None,
     bases: tuple[type[BaseModel], ...] | None,
     ctx: _BuildContext,
+    extra: Literal["allow", "ignore", "forbid"] | None = None,
 ) -> type[Projection] | ForwardRef:
+    # ``extra`` overrides the projection's ``model_config["extra"]`` (e.g.
+    # ``input()`` forces "forbid"); None inherits the canonical's. It applies to
+    # this top-level projection only — nested projections built via ``_rewrite``
+    # pass the default None, so they stay identical to a plain ``scope()`` and
+    # share its cache, never forking a class on the parent's input/output mode.
     if not cls.__pydantic_complete__:
         # Unresolved forward references would make markers invisible and the
         # projection silently wrong; resolve now (raises pydantic's clear
@@ -149,11 +158,11 @@ def _project(
         # via the model_rebuild override.
         cls.model_rebuild()
     carried = _resolve_carried(cls, bases)
-    cache_key: _ProjectionKey = (expr, name, carried)
+    cache_key: _ProjectionKey = (expr, name, carried, extra)
     cached = cls.__prism_cache__.get(cache_key)
     if cached is not None:
         return cached
-    key = (cls, expr, name, carried)
+    key = (cls, expr, name, carried, extra)
     if key in ctx.built:
         return ctx.built[key]
     if key in ctx.pending:
@@ -194,6 +203,8 @@ def _project(
 
     model_config = copy.deepcopy(cls.model_config)
     _apply_model_schema(expr, model_config)
+    if extra is not None:
+        model_config["extra"] = extra
     config_base = types.new_class(
         f"_{class_name}Base",
         (*carried, Projection),

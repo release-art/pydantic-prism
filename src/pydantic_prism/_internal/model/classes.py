@@ -16,6 +16,8 @@ from pydantic import BaseModel
 from ..refs import RefGraph
 from ..scopes import (
     Classification,
+    In,
+    Out,
     Scope,
     ScopeExpr,
     ScopeLike,
@@ -33,8 +35,13 @@ __all__ = ["Projection", "ScopedModel"]
 _NO_DEFAULT: Any = object()
 
 # Cache key of one derived projection class: (expression, name override,
-# carried bases). All three participate — changing any yields a new class.
-type _ProjectionKey = tuple[ScopeExpr, str | None, tuple[type[BaseModel], ...]]
+# carried bases, extra-config override). All four participate — changing any
+# yields a new class. ``extra`` is None for plain scope()/output() (inherit the
+# canonical's config) and "forbid" for input(); it keeps an input() projection a
+# distinct, separately-named class from the equivalent bare scope().
+type _ProjectionKey = tuple[
+    ScopeExpr, str | None, tuple[type[BaseModel], ...], str | None
+]
 
 # RLock: _project recurses for nested models within one build.
 _build_lock = threading.RLock()
@@ -288,6 +295,76 @@ class ScopedModel(BaseModel):
         return cls.scope(expr, name=name, bases=bases)
 
     @classmethod
+    def _directional_expr(
+        cls, visible: tuple[ScopeLike, ...], drop: type[Scope]
+    ) -> ScopeExpr:
+        """The visibility expression for ``input``/``output``, minus a direction.
+
+        ``visible`` defaults to the model's ``default_scope=`` when empty (the
+        direction-only case — tag fields ``In``/``Out``/both and let the
+        read-write majority fall back); with no default and no argument it
+        raises, mirroring :meth:`redacted`.
+        """
+        if visible:
+            base = union_all(as_expr(scope) for scope in visible)
+        elif cls.__prism_default_scope__ is not None:
+            base = cls.__prism_default_scope__
+        else:
+            raise TypeError(
+                f"{cls.__name__}.{'input' if drop is Out else 'output'}() requires at "
+                f"least one visibility scope, or a default_scope= on the model"
+            )
+        return base - drop
+
+    @classmethod
+    def input(  # noqa: A003 — `input`/`output` name the read/write sides on purpose
+        cls,
+        *visible: ScopeLike,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+        extra: Literal["allow", "ignore", "forbid"] = "forbid",
+    ) -> type[Projection]:
+        """The write-side projection: the ``visible`` view minus read-only fields.
+
+        Mass-assignment protection *by shape*: a read-only field (tagged
+        ``scoped(..., Out)``) is simply absent from this projection, so it can
+        never be over-posted. The subtraction is ``union(visible) - Out`` and it
+        is **deep** — nested ``ScopedModel`` fields are projected the same way, so
+        read-only fields drop at every level.
+
+        ``extra`` defaults to ``"forbid"``: unknown keys are rejected outright
+        (a loud 422 rather than a silent drop, and the only thing that closes the
+        hole when the canonical declares ``extra="allow"``). It applies to the
+        top-level projection; nest ``input()`` on a field's model for deep
+        ``forbid``. Pass ``extra="ignore"``/``"allow"`` to opt out. ``name``
+        defaults to ``"{Model}In"``; ``visible`` falls back to the model's
+        ``default_scope=`` when omitted. ``name``/``bases`` forward to
+        :meth:`scope`.
+        """
+        expr = cls._directional_expr(visible, Out)
+        return cls._build_projection(expr, name or f"{cls.__name__}In", bases, extra)
+
+    @classmethod
+    def output(
+        cls,
+        *visible: ScopeLike,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+    ) -> type[Projection]:
+        """The read-side projection: the ``visible`` view minus write-only fields.
+
+        The response counterpart to :meth:`input`: a write-only field (tagged
+        ``scoped(..., In)``, e.g. a password) is absent, so it is never echoed
+        back. The subtraction is ``union(visible) - In``; like ``input`` it is
+        deep through nested ``ScopedModel`` fields. ``extra`` is left untouched
+        (server→client; over-posting does not apply). ``name`` defaults to
+        ``"{Model}Out"``; ``visible`` falls back to the model's ``default_scope=``
+        when omitted. ``name``/``bases`` forward to :meth:`scope`.
+        """
+        expr = cls._directional_expr(visible, In)
+        return cls._build_projection(expr, name or f"{cls.__name__}Out", bases, None)
+
+    @classmethod
     def scope(
         cls,
         *scopes: ScopeLike,
@@ -310,27 +387,45 @@ class ScopedModel(BaseModel):
         fields) — tagging such a field with a scope the projection does not
         select raises :class:`ProjectionBaseError`.
         """
-        from .bases import _check_bases
-        from .build import _BuildContext, _project
-
         if not scopes:
             raise TypeError("scope() requires at least one scope or scope expression")
         expr = union_all(as_expr(scope) for scope in scopes)
+        return cls._build_projection(expr, name, bases, None)
+
+    @classmethod
+    def _build_projection(
+        cls,
+        expr: ScopeExpr,
+        name: str | None,
+        bases: Sequence[type[BaseModel]] | None,
+        extra: Literal["allow", "ignore", "forbid"] | None,
+    ) -> type[Projection]:
+        """The cached, locked build shared by scope()/input()/output().
+
+        ``extra`` overrides the projection's ``model_config["extra"]`` (None
+        inherits the canonical's) and is part of the cache key, so an input()
+        projection is a distinct class from the equivalent bare scope(). It is
+        kept off scope()'s public signature: a config-forked class must carry a
+        distinct name, which input()/output() supply ("{Model}In"/"{Model}Out").
+        """
+        from .bases import _check_bases
+        from .build import _BuildContext, _project
+
         checked = _check_bases(cls, bases) if bases is not None else None
         carried = (
             checked if checked is not None else (cls.__prism_projection_bases__ or ())
         )
-        cached = cls.__prism_cache__.get((expr, name, carried))
+        cached = cls.__prism_cache__.get((expr, name, carried, extra))
         if cached is not None:
             return cached
         # Build under a lock so concurrent first calls (free-threaded Python,
         # threaded servers) cannot produce two classes for one expression.
         with _build_lock:
-            cached = cls.__prism_cache__.get((expr, name, carried))
+            cached = cls.__prism_cache__.get((expr, name, carried, extra))
             if cached is not None:
                 return cached
             ctx = _BuildContext()
-            projection = _project(cls, expr, name, checked, ctx)
+            projection = _project(cls, expr, name, checked, ctx, extra)
             assert isinstance(projection, type)  # top-level call is never pending
             # Resolve cycle ForwardRefs first, commit second: the caches only
             # ever hold fully built classes (which keeps the lock-free fast
