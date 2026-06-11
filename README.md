@@ -92,6 +92,15 @@ your need fits:
 [**ROADMAP.md**](ROADMAP.md) lists what is shipped, planned, and deliberately
 out of scope.
 
+## Gotchas
+
+- **Before-validator ordering.** A `@scoped_validator(mode="before")` runs
+  *before* a plain `@model_validator(mode="before")` it inherits from a base
+  (pydantic is child-first). If the child depends on the base hook's
+  transformation, call `cls.run_inherited_before(data)` first — prism warns at
+  class definition when it spots this shape. See
+  [carry a custom base](docs/how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator).
+
 ## Develop
 
 ```sh

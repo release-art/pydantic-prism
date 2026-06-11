@@ -29,10 +29,18 @@ __all__ = ["scoped_validator"]
 _SCOPED_VALIDATOR_SCOPES: WeakKeyDictionary[Callable[..., Any], ScopeExpr] = (
     WeakKeyDictionary()
 )
+# raw function -> its parent_ordering acknowledgement, if any. Only recorded when
+# the author passed parent_ordering=; absence means "not declared" (warn).
+ParentOrdering = Literal["acknowledged"]
+_SCOPED_VALIDATOR_PARENT_ORDERING: WeakKeyDictionary[
+    Callable[..., Any], ParentOrdering
+] = WeakKeyDictionary()
 
 
 def scoped_validator(
-    *scopes: ScopeLike, mode: Literal["before", "after", "wrap"]
+    *scopes: ScopeLike,
+    mode: Literal["before", "after", "wrap"],
+    parent_ordering: ParentOrdering | None = None,
 ) -> Callable[[Any], Any]:
     """Declare a model validator that survives projection to the given scopes.
 
@@ -44,6 +52,15 @@ def scoped_validator(
     The carried validator runs against the narrowed projection; listing a scope
     asserts the fields it touches survive there (prism does not check this —
     a ``mode="after"`` validator reading a dropped field raises at validation).
+
+    ``parent_ordering`` concerns ``mode="before"`` validators on a model that
+    inherits a plain ``@model_validator(mode="before")`` from a non-``ScopedModel``
+    base. pydantic runs this (child) validator *first*, so it sees data the base
+    hook has not yet transformed; prism warns about this at class definition
+    (:class:`~pydantic_prism.PrismOrderingWarning`). Pass
+    ``parent_ordering="acknowledged"`` to assert this validator does **not**
+    depend on the base hook's output and silence the warning. To instead *depend*
+    on it, call :meth:`ScopedModel.run_inherited_before` inside the validator.
 
     Usage::
 
@@ -60,6 +77,11 @@ def scoped_validator(
         raise TypeError(
             "scoped_validator() requires at least one scope or scope expression"
         )
+    if parent_ordering is not None and parent_ordering != "acknowledged":
+        raise ValueError(
+            f"scoped_validator(parent_ordering=) accepts only 'acknowledged' or "
+            f"None; got {parent_ordering!r}"
+        )
     expr = union_all(as_expr(scope) for scope in scopes)
     make = cast(Callable[..., Callable[[Any], Any]], model_validator)
 
@@ -68,6 +90,8 @@ def scoped_validator(
         # function (after) is its own raw form.
         raw: Any = getattr(func, "__func__", func)
         _SCOPED_VALIDATOR_SCOPES[raw] = expr
+        if parent_ordering is not None:
+            _SCOPED_VALIDATOR_PARENT_ORDERING[raw] = parent_ordering
         return make(mode=mode)(func)
 
     return decorator

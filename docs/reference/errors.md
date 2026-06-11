@@ -48,3 +48,22 @@ PrismError(Exception)
 Models whose annotations were forward references at definition time are handled:
 `.scope()` resolves them (or raises pydantic's clear error), and an explicit
 `model_rebuild()` refreshes marker collection too.
+
+## Warnings
+
+Advisory diagnostics — non-fatal — are emitted as warnings under `PrismWarning`
+(a `UserWarning` subclass). Filter on `PrismWarning` to silence (or, with
+`filterwarnings("error")`, escalate) every prism warning at once, or on a
+concrete subclass for one kind.
+
+```
+PrismWarning(UserWarning)
+├── PrismBaseDropWarning
+└── PrismOrderingWarning
+```
+
+| warning | emitted when |
+|---|---|
+| `PrismWarning` | Base class for all prism advisory warnings; filter this to catch them all. |
+| `PrismBaseDropWarning` | `Model.scope(...)` would drop a non-`ScopedModel` base's overridden `model_dump`/`model_validate` (or its model validators/serializers) because the base isn't carried. Declare `projection_bases=(Base,)` to carry it, or `projection_bases=()` to silence. One-shot per model. |
+| `PrismOrderingWarning` | A `@scoped_validator(mode="before")` coexists with a plain `@model_validator(mode="before")` inherited from a base. pydantic runs the scoped one first (child-first), so a child that depends on the base hook sees untransformed data. Call `cls.run_inherited_before(data)` inside the validator, or pass `parent_ordering="acknowledged"` to assert independence. One-shot per `(class, validator)`. See [before-validator ordering](../how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator). |

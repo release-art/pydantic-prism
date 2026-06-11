@@ -13,7 +13,10 @@ from ._internal.scopes import Scope, ScopeExpr
 from .diagram import Diagram, projection_diagram, scope_diagram
 from .errors import (
     EmptyProjectionError,
+    PrismBaseDropWarning,
     PrismError,
+    PrismOrderingWarning,
+    PrismWarning,
     ProjectionBaseError,
     ProjectionNameError,
     RefResolutionError,
@@ -60,7 +63,10 @@ __all__ = [
     "IdRefInfo",
     "In",
     "Out",
+    "PrismBaseDropWarning",
     "PrismError",
+    "PrismOrderingWarning",
+    "PrismWarning",
     "Projection",
     "ProjectionBaseError",
     "ProjectionNameError",

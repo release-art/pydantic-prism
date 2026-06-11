@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from pydantic import BaseModel
 
+from ...errors import PrismBaseDropWarning
 from ...model import ScopedModel
 
 __all__ = ["_check_bases", "_warn_dropped_behavior"]
@@ -87,4 +88,4 @@ def _warn_dropped_behavior(cls: type[ScopedModel]) -> None:
     cls.__prism_base_warned__ = True
     message = _droppable_behavior(cls)
     if message is not None:
-        warnings.warn(message, UserWarning, stacklevel=2)
+        warnings.warn(message, PrismBaseDropWarning, stacklevel=2)

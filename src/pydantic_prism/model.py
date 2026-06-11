@@ -79,6 +79,21 @@ class Projection(BaseModel):
     __refs__: ClassVar[RefGraph]
 
     @classmethod
+    def run_inherited_before(cls, data: Any) -> Any:
+        """Run inherited ``@model_validator(mode="before")`` hooks, in pydantic order.
+
+        The projection-side counterpart to
+        :meth:`ScopedModel.run_inherited_before` — so a ``@scoped_validator``
+        that calls ``cls.run_inherited_before(data)`` keeps working once it is
+        carried onto a projection (whose inherited hooks come from carried,
+        non-``ScopedModel`` bases). See that method for the full contract,
+        including the idempotency requirement.
+        """
+        from ._internal.model.ordering import _run_inherited_before
+
+        return _run_inherited_before(cls, data)
+
+    @classmethod
     def from_canonical(
         cls,
         instance: BaseModel,
@@ -231,10 +246,12 @@ class ScopedModel(BaseModel):
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
         from ._internal.model.collect import _initialize
+        from ._internal.model.ordering import _warn_ordering_trap
 
         cls.__prism_cache__ = {}
         cls.__prism_names__ = {}
         _initialize(cls)
+        _warn_ordering_trap(cls)
 
     @classmethod
     def model_rebuild(
@@ -263,6 +280,37 @@ class ScopedModel(BaseModel):
         if result:
             _collect(cls)
         return result
+
+    @classmethod
+    def run_inherited_before(cls, data: Any) -> Any:
+        """Run inherited ``@model_validator(mode="before")`` hooks, in pydantic order.
+
+        The friendly replacement for the ``Base.hook.__func__(cls, data)``
+        descriptor dance. Call it at the top of a ``@scoped_validator(mode="before")``
+        whose logic depends on a transformation a non-``ScopedModel`` base hook
+        applies (e.g. JSON-decoding columns)::
+
+            @scoped_validator(Storage, mode="before")
+            @classmethod
+            def derive_hostname(cls, data: Any) -> Any:
+                data = cls.run_inherited_before(data)  # base hook ran; data is decoded
+                ...
+
+        pydantic runs this child validator *before* the inherited base hook
+        (child-first), so without this call the child sees raw data — see
+        :class:`~pydantic_prism.PrismOrderingWarning`. Every ``before`` validator
+        defined on a strict, non-prism ancestor is invoked as
+        ``validator(cls, data)``, nearest ancestor first and parent-most last,
+        with each return threaded into the next; the transformed data is returned.
+
+        Because the inherited hook still runs again afterwards under pydantic's own
+        pipeline, it must be **idempotent** (the type-guarded norm — e.g.
+        ``if isinstance(v, str): json.loads(v)``). A hook that transforms
+        unconditionally would run twice; guard it on the input shape.
+        """
+        from ._internal.model.ordering import _run_inherited_before
+
+        return _run_inherited_before(cls, data)
 
     @classmethod
     def scopes(cls) -> frozenset[type[Scope]]:
