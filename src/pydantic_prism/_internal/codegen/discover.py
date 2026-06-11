@@ -15,7 +15,7 @@ from .config import CodegenError, Config
 __all__ = ["_build_workset", "_discover", "_projections_in", "_reject_name_clashes"]
 
 
-@dataclass
+@dataclass(slots=True)
 class _Plan:
     source: type[ScopedModel]
     expr: ScopeExpr

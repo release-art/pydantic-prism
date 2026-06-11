@@ -45,7 +45,7 @@ class RefShape(StrEnum):
     KEYED_DICT = "keyed_dict"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Embedded:
     """Internal pseudo-marker for auto-detected embedded-model edges.
 
@@ -60,7 +60,7 @@ class Embedded:
     target_field: str = "id"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RawEdge:
     """One unresolved relationship edge as collected from a field."""
 
@@ -70,7 +70,7 @@ class RawEdge:
     key_type: Any = None
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, slots=True)
 class RefInfo:
     """One resolved relationship edge — the base of the three edge kinds.
 
@@ -107,12 +107,12 @@ class RefInfo:
         return self.shape is not RefShape.SCALAR
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, slots=True)
 class IdRefInfo(RefInfo):
     """A forward, id-valued reference edge (``kind="ref"``)."""
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, slots=True)
 class BackRefInfo(RefInfo):
     """A declared reverse-reference edge (``kind="backref"``).
 
@@ -122,7 +122,7 @@ class BackRefInfo(RefInfo):
     via: str
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, slots=True)
 class EmbeddedRefInfo(RefInfo):
     """An embedded-model edge: a carrier projection or composition.
 

@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ClassifiedField:
     """One classified field: its name and the classifications it carries."""
 
@@ -40,7 +40,7 @@ class ClassifiedField:
         return tuple(sorted(c.__name__ for c in self.classifications))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FlowNode:
     """A reached model that holds classified data, with its classified fields."""
 
@@ -48,7 +48,7 @@ class FlowNode:
     fields: tuple[ClassifiedField, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FlowEdge:
     """One forward edge on the path classified data travels (``ref``/``embedded``)."""
 
@@ -58,7 +58,7 @@ class FlowEdge:
     kind: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FlowReport:
     """Where classified data reachable from ``root`` lives, and how it is reached.
 

@@ -35,7 +35,7 @@ _DIRECTIONS = {
 }
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NodeField:
     """One field on a model/projection node, with its metadata preserved.
 
@@ -51,7 +51,7 @@ class NodeField:
     description: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Node:
     """A diagram node: a model, projection, or scope."""
 
@@ -66,7 +66,7 @@ class Node:
         return self.kind.startswith("partial")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Edge:
     """A directed diagram edge.
 
@@ -82,7 +82,7 @@ class Edge:
     relation: str = "association"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Diagram:
     """A rendered-on-demand directed graph of prism structure.
 
@@ -284,7 +284,7 @@ def _empty_str_set() -> set[str]:
     return set()
 
 
-@dataclass
+@dataclass(slots=True)
 class _Ids:
     """Allocates unique, format-safe node ids from arbitrary names."""
 

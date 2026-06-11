@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 __all__ = ["BackRef", "Ref", "Scoped", "backref", "ref", "scoped"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Scoped:
     """Marker produced by :func:`scoped`. Holds the field's scope expression.
 
@@ -33,7 +33,7 @@ class Scoped:
     field_schema: Mapping[str, Any] | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Ref:
     """Marker produced by :func:`ref`. A forward, FK-style reference."""
 
@@ -41,7 +41,7 @@ class Ref:
     target_field: str = "id"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BackRef:
     """Marker produced by :func:`backref`. A declared reverse reference."""
 

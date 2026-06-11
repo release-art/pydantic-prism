@@ -15,7 +15,7 @@ class CodegenError(Exception):
     """A stub-generation request could not be fulfilled (bad config or input)."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ProjectionSpec:
     """One opt-in projection beyond a model's per-atom defaults.
 
@@ -28,7 +28,7 @@ class ProjectionSpec:
     name: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Config:
     """Resolved ``[tool.pydantic-prism]`` configuration."""
 

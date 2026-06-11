@@ -37,6 +37,11 @@ class ScopeExpr:
       expression ``tag`` survive a projection requested with this expression?
     """
 
+    # Empty slots so the ``slots=True`` dataclass subclasses below carry no
+    # instance ``__dict__`` — without this the inherited dict would defeat
+    # their slots entirely.
+    __slots__ = ()
+
     def matches(self, scope: type[Scope]) -> bool:
         raise NotImplementedError
 
@@ -217,7 +222,7 @@ def as_expr(value: object) -> ScopeExpr:
     raise TypeError(f"expected a Scope subclass or a scope expression, got {value!r}")
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Atom(ScopeExpr):
     scope: type[Scope]
 
@@ -243,7 +248,7 @@ class _Atom(ScopeExpr):
         return self.scope.__name__
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Union(ScopeExpr):
     operands: tuple[ScopeExpr, ...]
 
@@ -271,7 +276,7 @@ class _Union(ScopeExpr):
         return "(" + " | ".join(repr(operand) for operand in self.operands) + ")"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Intersection(ScopeExpr):
     operands: tuple[ScopeExpr, ...]
 
@@ -299,7 +304,7 @@ class _Intersection(ScopeExpr):
         return "(" + " & ".join(repr(operand) for operand in self.operands) + ")"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Difference(ScopeExpr):
     left: ScopeExpr
     right: ScopeExpr
@@ -328,7 +333,7 @@ class _Difference(ScopeExpr):
         return f"({self.left!r} - {self.right!r})"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _Complement(ScopeExpr):
     operand: ScopeExpr
 

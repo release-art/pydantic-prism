@@ -43,7 +43,7 @@ def _empty_bindings() -> dict[tuple[str, str], str]:
     return {}
 
 
-@dataclass
+@dataclass(slots=True)
 class _Imports:
     """Collected imports plus the bound name each is referenced by.
 
