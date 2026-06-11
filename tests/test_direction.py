@@ -52,6 +52,15 @@ def test_directions_excluded_from_classifications() -> None:
     assert User.classifications() == frozenset()
 
 
+def test_direction_atoms_carry_a_distinct_name_token() -> None:
+    # token= keeps a direct scope(Out)/scope(In) from stealing the "...Out" /
+    # "...In" names the output()/input() helpers default to.
+    assert User.scope(Out).__name__ == "UserReadOnly"
+    assert User.scope(In).__name__ == "UserWriteOnly"
+    assert User.output(Public).__name__ == "UserOut"  # no collision
+    assert User.input(Public).__name__ == "UserIn"
+
+
 # --- shape: read-only / write-only / read-write ----------------------------
 
 

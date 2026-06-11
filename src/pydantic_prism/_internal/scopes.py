@@ -153,6 +153,17 @@ class Scope(metaclass=ScopeMeta):
     metadata is *not* inherited: a broader subclass does not reuse a narrower
     scope's prose.
 
+    Finally, a scope may set the CamelCase fragment it contributes to a derived
+    class's auto-name, which otherwise defaults to the scope's own ``__name__``::
+
+        # then User.scope(Out) is named "UserReadOnly", not "UserOut"
+        class Out(Direction, cls_name_token="ReadOnly"): ...
+
+    Like the schema metadata, ``cls_name_token`` is read per-class and *not*
+    inherited. This is what lets the shipped ``Out`` / ``In`` scopes free up the
+    ``...Out`` / ``...In`` names for the
+    :meth:`~pydantic_prism.ScopedModel.output` / ``input`` helpers' defaults.
+
     Scopes are only ever used as classes and cannot be instantiated.
     """
 
@@ -160,12 +171,10 @@ class Scope(metaclass=ScopeMeta):
     # Model-level JSON-schema metadata for projections that select this scope.
     # Read per-class (via vars()), never inherited.
     __prism_model_schema__: ClassVar[dict[str, Any]] = {}
-    # Override for the CamelCase fragment used to auto-name derived classes (see
-    # ScopeExpr.token). Read per-class (via vars(), never inherited), falling
-    # back to the class __name__. In/Out set it so scope(Out) auto-names
-    # "...ReadOnly", leaving the "...Out" / "...In" forms free for the output() /
-    # input() helpers' default names.
-    __prism_token__: ClassVar[str | None] = None
+    # The CamelCase fragment this scope contributes to a derived class's
+    # auto-name (see ScopeExpr.token); None falls back to the class __name__.
+    # Read per-class (via vars()), never inherited.
+    __prism_cls_name_token__: ClassVar[str | None] = None
 
     def __init_subclass__(
         cls,
@@ -173,11 +182,21 @@ class Scope(metaclass=ScopeMeta):
         description: str | None = None,
         examples: Sequence[Any] | None = None,
         json_schema_extra: dict[str, Any] | None = None,
+        cls_name_token: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
         if partial is not None:
             cls.__prism_partial__ = bool(partial)
+        if cls_name_token is not None:
+            if not cls_name_token or not f"_{cls_name_token}".isidentifier():
+                raise TypeError(
+                    f"{cls.__name__}: cls_name_token={cls_name_token!r} must be a "
+                    f"non-empty fragment of a Python identifier; it is concatenated "
+                    f"into generated class names (e.g. '{{Model}}{cls_name_token}'), "
+                    f"so it cannot contain spaces or punctuation"
+                )
+            cls.__prism_cls_name_token__ = cls_name_token
         schema: dict[str, Any] = {}
         if description is not None:
             schema["description"] = description
@@ -238,7 +257,7 @@ class Direction(Scope):
     """
 
 
-class In(Direction):
+class In(Direction, cls_name_token="WriteOnly"):
     """Write-only direction: a field accepted as **input** but never echoed back.
 
     Tag a write-only field by unioning :class:`In` onto its visibility scope —
@@ -246,12 +265,14 @@ class In(Direction):
     then survives :meth:`~pydantic_prism.ScopedModel.input` (and a plain
     :meth:`~pydantic_prism.ScopedModel.scope`) but is dropped from
     :meth:`~pydantic_prism.ScopedModel.output`. Passwords are the canonical case.
+
+    The ``cls_name_token="WriteOnly"`` keyword frees the ``...In`` auto-name for
+    the ``input()`` helper: a direct ``Model.scope(In)`` is named
+    ``{Model}WriteOnly``.
     """
 
-    __prism_token__: ClassVar[str | None] = "WriteOnly"
 
-
-class Out(Direction):
+class Out(Direction, cls_name_token="ReadOnly"):
     """Read-only direction: a field returned as **output** but never accepted in.
 
     Tag a read-only field by unioning :class:`Out` onto its visibility scope —
@@ -260,9 +281,11 @@ class Out(Direction):
     :meth:`~pydantic_prism.ScopedModel.scope`) but is dropped from
     :meth:`~pydantic_prism.ScopedModel.input`, so it can never be mass-assigned.
     Server-controlled ``id`` / ``created_at`` are the canonical cases.
-    """
 
-    __prism_token__: ClassVar[str | None] = "ReadOnly"
+    The ``cls_name_token="ReadOnly"`` keyword frees the ``...Out`` auto-name for
+    the ``output()`` helper: a direct ``Model.scope(Out)`` is named
+    ``{Model}ReadOnly``.
+    """
 
 
 type ScopeLike = type[Scope] | ScopeExpr
@@ -294,7 +317,7 @@ class _Atom(ScopeExpr):
         return self.scope.__prism_partial__
 
     def token(self) -> str:
-        return vars(self.scope).get("__prism_token__") or self.scope.__name__
+        return vars(self.scope).get("__prism_cls_name_token__") or self.scope.__name__
 
     def sort_key(self) -> str:
         return f"{self.scope.__module__}.{self.scope.__qualname__}"

@@ -97,6 +97,26 @@ def test_tokens_used_for_class_names() -> None:
     assert (Public & Llm).token() == "LlmAndPublic"
 
 
+def test_cls_name_token_overrides_class_name() -> None:
+    class Tagged(Scope, cls_name_token="Slug"): ...
+
+    class Sub(Tagged): ...  # the token is per-class, not inherited
+
+    assert as_expr(Tagged).token() == "Slug"  # the override
+    assert as_expr(Sub).token() == "Sub"  # fallback to own __name__
+    assert (Tagged | Llm).token() == "LlmOrSlug"  # composes in expressions
+
+
+def test_cls_name_token_must_be_an_identifier_fragment() -> None:
+    with pytest.raises(TypeError, match="must be a non-empty fragment"):
+
+        class Spaced(Scope, cls_name_token="Read Only"): ...
+
+    with pytest.raises(TypeError, match="must be a non-empty fragment"):
+
+        class Empty(Scope, cls_name_token=""): ...
+
+
 def test_scopes_are_never_instantiated() -> None:
     with pytest.raises(TypeError, match="never instantiated"):
         Public()
