@@ -8,11 +8,17 @@ constraints).
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .scopes import ScopeExpr, ScopeLike, as_expr, union_all
+from .scopes import (
+    ScopeExpr,
+    ScopeLike,
+    _SchemaMeta,  # pyright: ignore[reportPrivateUsage] — intra-package
+    as_expr,
+    union_all,
+)
 
 if TYPE_CHECKING:
     from .model import ScopedModel
@@ -30,7 +36,7 @@ class Scoped:
     """
 
     expr: ScopeExpr
-    field_schema: Mapping[str, Any] | None = None
+    field_schema: _SchemaMeta | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +88,7 @@ def scoped(
     if not scopes:
         raise TypeError("scoped() requires at least one scope or scope expression")
     expr = union_all(as_expr(scope) for scope in scopes)
-    schema: dict[str, Any] = {}
+    schema: _SchemaMeta = {}
     if description is not None:
         schema["description"] = description
     if examples is not None:

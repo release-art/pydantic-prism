@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypedDict
 
 __all__ = [
     "Classification",
@@ -27,6 +27,20 @@ __all__ = [
     "as_expr",
     "union_all",
 ]
+
+
+class _SchemaMeta(TypedDict, total=False):
+    """The fixed-shape JSON-schema metadata a scope or ``scoped()`` field carries.
+
+    All three keys are optional. ``description`` / ``examples`` land on the
+    field's (or projection's) schema; ``json_schema_extra`` is itself an *open*
+    dict of arbitrary JSON-schema fields, merged in. Used for
+    :attr:`Scope.__prism_model_schema__` and :attr:`markers.Scoped.field_schema`.
+    """
+
+    description: str
+    examples: list[Any]
+    json_schema_extra: dict[str, Any]
 
 
 class ScopeExpr:
@@ -170,7 +184,7 @@ class Scope(metaclass=ScopeMeta):
     __prism_partial__: ClassVar[bool] = False
     # Model-level JSON-schema metadata for projections that select this scope.
     # Read per-class (via vars()), never inherited.
-    __prism_model_schema__: ClassVar[dict[str, Any]] = {}
+    __prism_model_schema__: ClassVar[_SchemaMeta] = {}
     # The CamelCase fragment this scope contributes to a derived class's
     # auto-name (see ScopeExpr.token); None falls back to the class __name__.
     # Read per-class (via vars()), never inherited.
@@ -197,7 +211,7 @@ class Scope(metaclass=ScopeMeta):
                     f"so it cannot contain spaces or punctuation"
                 )
             cls.__prism_cls_name_token__ = cls_name_token
-        schema: dict[str, Any] = {}
+        schema: _SchemaMeta = {}
         if description is not None:
             schema["description"] = description
         if examples is not None:

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from pydantic.fields import FieldInfo
 
 from ..markers import Scoped
-from ..scopes import Scope, ScopeExpr
+from ..scopes import (
+    Scope,
+    ScopeExpr,
+    _SchemaMeta,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 
 if TYPE_CHECKING:
     from .classes import ScopedModel
@@ -32,14 +35,14 @@ def _merge_json_schema_extra(original: Any, extra: dict[str, Any]) -> Any:
 
 def _resolve_field_schema(
     cls: type[ScopedModel], field_name: str, expr: ScopeExpr
-) -> Mapping[str, Any] | None:
+) -> _SchemaMeta | None:
     """The per-scope field schema that applies in projection ``expr``, if any.
 
     Markers whose scope ``expr`` selects are candidates; the most-derived scope
     (a subclass of every other candidate) wins. Candidates with no subclass
     relation are ambiguous and raise.
     """
-    candidates: list[tuple[type[Scope], Mapping[str, Any]]] = []
+    candidates: list[tuple[type[Scope], _SchemaMeta]] = []
     for marker in cls.model_fields[field_name].metadata:
         if (
             isinstance(marker, Scoped)
@@ -85,7 +88,7 @@ def _apply_model_schema(expr: ScopeExpr, model_config: Any) -> None:
     """Merge the model-level schema of ``expr``'s scopes into ``model_config``."""
     extra: dict[str, Any] = {}
     for atom in sorted(expr.atoms(), key=lambda scope: scope.__name__):
-        schema = vars(atom).get("__prism_model_schema__")
+        schema: _SchemaMeta | None = vars(atom).get("__prism_model_schema__")
         if not schema:
             continue
         if "description" in schema:
