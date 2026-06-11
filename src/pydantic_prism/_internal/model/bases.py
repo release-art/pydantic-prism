@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from pydantic import BaseModel
 
-from .classes import ScopedModel
+from ...model import ScopedModel
 
 __all__ = ["_check_bases", "_warn_dropped_behavior"]
 

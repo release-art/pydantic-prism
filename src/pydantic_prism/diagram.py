@@ -23,8 +23,8 @@ from typing import TYPE_CHECKING, Any, Union, cast, get_args, get_origin
 from pydantic.experimental.missing_sentinel import MISSING
 
 if TYPE_CHECKING:
+    from ._internal.scopes import Scope
     from .refs import RefGraph
-    from .scopes import Scope
 
 __all__ = ["Diagram", "projection_diagram", "scope_diagram"]
 
@@ -361,7 +361,7 @@ def scope_diagram(*scopes: type[Scope], direction: str = "TD") -> Diagram:
         raise ValueError(
             f"direction must be one of {sorted(_DIRECTIONS)}, got {direction!r}"
         )
-    from .scopes import Scope
+    from ._internal.scopes import Scope
 
     if scopes:
         collected: set[type[Scope]] = set()

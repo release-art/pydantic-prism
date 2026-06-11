@@ -22,8 +22,8 @@ from pydantic_prism._internal.model import (
     _rewrite,
     _variable_container,
 )
-from pydantic_prism._internal.refs import shape_of
 from pydantic_prism._internal.scopes import as_expr, intersect_all, union_all
+from pydantic_prism.refs import shape_of
 
 
 class Public(Scope): ...

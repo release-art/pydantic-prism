@@ -1,8 +1,9 @@
 """The public ``Projection`` and ``ScopedModel`` classes.
 
-The class methods lazy-import the collection / build / narrow / bases helpers
-from sibling modules: those helpers import these classes at module level, so the
-classes must defer their own imports to call time to break the cycle.
+The projection-building engine lives in :mod:`pydantic_prism._internal.model`
+(``collect`` / ``build`` / ``narrow`` / ``bases`` / ``schema``); those helpers
+import these classes at module level, so the class methods here defer their own
+imports of the engine to call time to break the cycle.
 """
 
 from __future__ import annotations
@@ -14,12 +15,12 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel
 
-from ...scopes import Classification, In, Out  # bundled taxonomy (public module)
-from ..refs import RefGraph
-from ..scopes import Scope, ScopeExpr, ScopeLike, as_expr, union_all  # algebra
+from ._internal.scopes import Scope, ScopeExpr, ScopeLike, as_expr, union_all
+from .refs import RefGraph
+from .scopes import Classification, In, Out  # bundled taxonomy
 
 if TYPE_CHECKING:
-    from ..flow import FlowReport
+    from .flow import FlowReport
 
 __all__ = ["Projection", "ScopedModel"]
 
@@ -99,7 +100,7 @@ class Projection(BaseModel):
         shape, but the validators carried from your base can. Pass ``narrow=``
         to override this auto-detection in either direction.
         """
-        from .narrow import _narrow
+        from ._internal.model.narrow import _narrow
 
         data: Any = instance.model_dump(
             mode=mode,
@@ -161,8 +162,8 @@ class ScopedModel(BaseModel):
         **kwargs: Any,
     ) -> None:
         super().__init_subclass__(**kwargs)
-        from .bases import _check_bases
-        from .build import _validate_name_template
+        from ._internal.model.bases import _check_bases
+        from ._internal.model.build import _validate_name_template
 
         if projection_bases is not None:
             cls.__prism_projection_bases__ = _check_bases(
@@ -186,7 +187,7 @@ class ScopedModel(BaseModel):
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         super().__pydantic_init_subclass__(**kwargs)
-        from .collect import _initialize
+        from ._internal.model.collect import _initialize
 
         cls.__prism_cache__ = {}
         cls.__prism_names__ = {}
@@ -207,7 +208,7 @@ class ScopedModel(BaseModel):
         references at class-definition time: their ``scoped()``/``ref()``
         markers only become visible once the rebuild evaluates them.
         """
-        from .collect import _collect
+        from ._internal.model.collect import _collect
 
         result = super().model_rebuild(
             force=force,
@@ -261,7 +262,7 @@ class ScopedModel(BaseModel):
         live, via which references?* Render the returned :class:`.FlowReport`
         with ``.as_dict()`` (JSON) or ``.to_mermaid()``.
         """
-        from ..flow import build_flow_report
+        from .flow import build_flow_report
 
         return build_flow_report(cls)
 
@@ -416,8 +417,8 @@ class ScopedModel(BaseModel):
         kept off scope()'s public signature: a config-forked class must carry a
         distinct name, which input()/output() supply ("{Model}In"/"{Model}Out").
         """
-        from .bases import _check_bases
-        from .build import _BuildContext, _project
+        from ._internal.model.bases import _check_bases
+        from ._internal.model.build import _BuildContext, _project
 
         checked = _check_bases(cls, bases) if bases is not None else None
         carried = (
@@ -459,7 +460,7 @@ class ScopedModel(BaseModel):
         baseline. Apply it to one with :meth:`with_updates` instead; passing a
         partial projection here raises :class:`TypeError`.
         """
-        from .narrow import _validation_key
+        from ._internal.model.narrow import _validation_key
 
         if (
             isinstance(projection, Projection)

@@ -26,7 +26,7 @@ def _resolve_kind(path: str, want: type[Any], label: str) -> Any:
 
 
 def _build_cli_diagram(kind: str, paths: Sequence[str], direction: str) -> Any:
-    from ..diagram import projection_diagram, scope_diagram
+    from ...diagram import projection_diagram, scope_diagram
     from ..model import ScopedModel
     from ..scopes import Scope
 

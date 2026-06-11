@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from .scopes import (
+from ._internal.scopes import (
     ScopeExpr,
     ScopeLike,
     _SchemaMeta,  # pyright: ignore[reportPrivateUsage] — intra-package

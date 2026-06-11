@@ -20,7 +20,7 @@ from weakref import WeakKeyDictionary
 
 from pydantic import model_validator
 
-from .scopes import ScopeExpr, ScopeLike, as_expr, union_all
+from ._internal.scopes import ScopeExpr, ScopeLike, as_expr, union_all
 
 __all__ = ["scoped_validator"]
 
