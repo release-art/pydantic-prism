@@ -158,11 +158,12 @@ Reach for the before-phase only when you genuinely need *pre-validation* data �
 e.g. the derived field is **required** (so the record can't pass core validation
 until you fill it) or you must choose among raw input keys before type coercion.
 
-### Before-phase fix — `parent_ordering="after_parent"`
+### Before-phase fix — `run_inherited_before`
 
-When you do need `mode="before"`, declare `parent_ordering="after_parent"`: prism
-wraps the validator to run the inherited before-hooks *first*, so its body sees
-transformed data — no manual call, no warning:
+When you genuinely need `mode="before"` (e.g. the derived field is **required**,
+so the record can't pass core validation until you fill it), call
+[`run_inherited_before`](../reference/api.md) at the top of the validator to run
+the inherited before-hooks first, then operate on the transformed data:
 
 ```python
 class WebsiteRowReq(DecodingBase, ScopedModel, projection_bases=(DecodingBase,),
@@ -170,27 +171,28 @@ class WebsiteRowReq(DecodingBase, ScopedModel, projection_bases=(DecodingBase,),
     webpages: Annotated[list[str], scoped(Public)] = []
     first: Annotated[str, scoped(Storage)]   # required — must be filled pre-validation
 
-    @scoped_validator(Storage, mode="before", parent_ordering="after_parent")
+    @scoped_validator(Storage, mode="before")
     @classmethod
     def derive_first(cls, data):
+        data = cls.run_inherited_before(data)  # decode now; webpages is a list
         if data.get("webpages") and not data.get("first"):
-            data = {**data, "first": data["webpages"][0]}  # webpages already decoded
+            data = {**data, "first": data["webpages"][0]}
         return data
 
 
 assert WebsiteRowReq(webpages=json.dumps(["http://a.com"])).first == "http://a.com"
 ```
 
-The lower-level [`run_inherited_before`](../reference/api.md) helper does the same
-by hand — `data = cls.run_inherited_before(data)` at the top of the validator —
-for when you want to interleave it with other logic. It is the friendly
-replacement for the `Base.decode.__func__(cls, data)` descriptor dance.
+It is the friendly replacement for the `Base.decode.__func__(cls, data)`
+descriptor dance, and keeps working once carried onto a projection.
 
 > [!IMPORTANT]
-> Both before-phase fixes re-run the inherited hook afterwards under pydantic's
-> own pipeline, so it must be **idempotent** — guard it on the input shape
+> The inherited hook still re-runs afterwards under pydantic's own pipeline, so
+> it must be **idempotent** — guard it on the input shape
 > (`if isinstance(v, str): ...`), which decode hooks already do. A hook that
-> transforms unconditionally would run twice. `mode="after"` has no such caveat.
+> transforms unconditionally would run twice and corrupt or raise. The call is
+> explicit precisely so that double-run is visible in your code; `mode="after"`
+> avoids it entirely and is the preferred fix where the derivation allows.
 
 **If the validator does *not* depend on the inherited hook**, assert that and
 silence the warning with `parent_ordering="acknowledged"`:

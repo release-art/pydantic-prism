@@ -16,11 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   transformation; it replaces the brittle `Base.hook.__func__(cls, data)`
   descriptor dance and works on projections too. Pure addition. See
   [before-validator ordering](docs/how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator).
-- **`parent_ordering=` on `@scoped_validator`** — `"after_parent"`
-  (`mode="before"` only) wraps the validator to run the inherited before-hooks
-  first, so its body sees transformed data with no manual call;
-  `"acknowledged"` asserts a `before` validator does *not* depend on an inherited
-  base hook. Both silence the new ordering warning. Pure addition.
+- **`parent_ordering="acknowledged"` on `@scoped_validator`** — assert a
+  `before` validator does *not* depend on an inherited base hook, silencing the
+  new ordering warning. Pure addition.
 - **`PrismWarning`** base class for prism's advisory warnings (a `UserWarning`
   subclass), with `PrismBaseDropWarning` (the existing carried-base drop
   warning, now a dedicated subclass) and `PrismOrderingWarning` under it. Filter
@@ -41,8 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   validator *first*, so a child depending on the base hook's transformation sees
   untransformed data. **Best fix: use `mode="after"`** when the value derives
   from already-parsed fields — no ordering race, no double-run, no warning.
-  Otherwise pass `parent_ordering="after_parent"` / call `run_inherited_before`,
-  or silence with `parent_ordering="acknowledged"`. **Migration:** anyone using
+  Otherwise call `run_inherited_before` at the top of the validator, or silence
+  with `parent_ordering="acknowledged"`. **Migration:** anyone using
   the `@scoped_validator(mode="before")` + custom-base pattern should review
   whether their child validators depend on the parent's transformation — and
   prefer `mode="after"` where the derivation allows it.

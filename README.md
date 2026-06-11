@@ -98,7 +98,7 @@ out of scope.
   *before* a plain `@model_validator(mode="before")` it inherits from a base
   (pydantic is child-first), so a child depending on the base hook's
   transformation sees raw data. prism warns at class definition. Prefer
-  `mode="after"` (no race); else `parent_ordering="after_parent"`. See
+  `mode="after"` (no race); else call `run_inherited_before` in the validator. See
   [carry a custom base](docs/how-to/carry-a-custom-base.md#before-validator-ordering-with-scoped_validator).
 
 ## Develop

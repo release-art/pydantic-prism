@@ -90,11 +90,10 @@ def _scoped_before_validators(cls: type[ScopedModel]) -> list[str]:
 
 
 def _ordering_declared(cls: type[ScopedModel], name: str) -> bool:
-    """True if the scoped validator declared any ``parent_ordering=``.
+    """True if the scoped validator declared ``parent_ordering="acknowledged"``.
 
-    Both ``"acknowledged"`` (independence asserted) and ``"after_parent"`` (prism
-    wraps it to run the inherited hooks first) mean the author has handled the
-    ordering, so the warning is silenced either way.
+    The author asserted the validator does not depend on the inherited hook, so
+    the warning is silenced.
     """
     raw = _raw_func(cls.__pydantic_decorators__.model_validators[name])
     return raw in _SCOPED_VALIDATOR_PARENT_ORDERING
@@ -129,10 +128,10 @@ def _warn_ordering_trap(cls: type[ScopedModel]) -> None:
             f"it depends on {parent_name}'s transformation the data is not yet "
             f"processed. Best fix: if {name} derives a value from already-parsed "
             f"fields, use mode='after' and read self (the base hook has run by "
-            f"then) — no ordering race. If you need the before-phase, pass "
-            f"parent_ordering='after_parent' (prism runs the inherited hooks "
-            f"first) or call {cls.__name__}.run_inherited_before(data) inside "
-            f"{name}. If {name} does not depend on {parent_name}, pass "
+            f"then) — no ordering race. If you need the before-phase, call "
+            f"{cls.__name__}.run_inherited_before(data) at the top of {name} "
+            f"(its inherited hooks must be idempotent — they re-run). If {name} "
+            f"does not depend on {parent_name}, pass "
             f"parent_ordering='acknowledged' to silence this.",
             category=PrismOrderingWarning,
             stacklevel=2,

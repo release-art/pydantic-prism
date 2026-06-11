@@ -339,61 +339,13 @@ def test_warning_for_plain_base_hook() -> None:
     assert row.webpages == ["http://b.com"]  # the carried base hook still decodes
 
 
-# --- declarative parent_ordering="after_parent" -------------------------------
+# --- parent_ordering rejects unknown values -----------------------------------
 
 
-class AfterParentRow(
-    CarriedBase,
-    ScopedModel,
-    default_scope=Storage,
-    projection_bases=(CarriedBase,),
-):
-    webpages: Annotated[list[str], scoped(Public)] = []
-    hostname: Annotated[str, scoped(Internal)] = ""
-
-    @scoped_validator(Storage, mode="before", parent_ordering="after_parent")
-    @classmethod
-    def derive_hostname(cls, data: Any) -> Any:
-        # No explicit run_inherited_before — prism wraps this to run it first.
-        if isinstance(data, dict) and data.get("webpages") and not data.get("hostname"):
-            data = {**data, "hostname": data["webpages"][0]}
-        return data
-
-
-def test_after_parent_runs_inherited_hook_first() -> None:
-    row = AfterParentRow(webpages=json.dumps(["http://a.com"]))
-    assert row.hostname == "http://a.com"
-    assert row.webpages == ["http://a.com"]
-
-
-def test_after_parent_works_on_projection() -> None:
-    proj = AfterParentRow.scope(Storage, name="AfterParentStorage")
-    inst = proj.model_validate({"webpages": json.dumps(["http://p.com"])})
-    assert inst.hostname == "http://p.com"
-
-
-def test_after_parent_silences_the_warning() -> None:
-    with warnings.catch_warnings():
-        warnings.simplefilter("error", PrismOrderingWarning)
-
-        class Row(AzureTableModel, default_scope=Storage):
-            webpages: Annotated[list[str], scoped(Public)] = []
-            hostname: Annotated[str, scoped(Internal)] = ""
-
-            @scoped_validator(Storage, mode="before", parent_ordering="after_parent")
-            @classmethod
-            def derive(cls, data: Any) -> Any:
-                if isinstance(data, dict) and data.get("webpages"):
-                    data = {**data, "hostname": data["webpages"][0]}
-                return data
-
-        row = Row(webpages=json.dumps(["http://a.com"]))
-        assert row.hostname == "http://a.com"
-
-
-def test_after_parent_rejects_non_before_mode() -> None:
-    with pytest.raises(ValueError, match="mode='before'"):
-        scoped_validator(Storage, mode="after", parent_ordering="after_parent")
+def test_parent_ordering_rejects_after_parent() -> None:
+    """``after_parent`` was removed — only ``acknowledged`` / None are accepted."""
+    with pytest.raises(ValueError, match="acknowledged"):
+        scoped_validator(Storage, mode="before", parent_ordering="after_parent")  # type: ignore[arg-type]
 
 
 # --- the ergonomic alternative: mode="after" sidesteps the trap ---------------
