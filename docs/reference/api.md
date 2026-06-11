@@ -59,9 +59,9 @@ Operators (usable in `scoped(...)` tags and in `Model.scope(...)`):
 
 | name | kind | summary |
 |---|---|---|
-| `Model.scope(*scopes, name=None, bases=None)` | classmethod | Derive/fetch the cached projection class. `name` and `bases` join the cache key. Multiple args union. |
-| `Model.input(*visible, name=None, bases=None, extra="forbid")` | classmethod | Write-side projection: `union(visible) - Out` (drops read-only fields, deep). Defaults `name="{Model}In"` and `extra="forbid"`. `visible` falls back to `default_scope=` when omitted. |
-| `Model.output(*visible, name=None, bases=None)` | classmethod | Read-side projection: `union(visible) - In` (drops write-only fields, deep). Defaults `name="{Model}Out"`; config untouched. `visible` falls back to `default_scope=`. |
+| `Model.scope(scope, *, name=None, bases=None)` | classmethod | Derive/fetch the cached projection class for one scope or expression (compose with `\| & - ~`). `name` and `bases` join the cache key. |
+| `Model.input(visible=None, *, name=None, bases=None, extra="forbid")` | classmethod | Write-side projection: `visible - Out` (drops read-only fields, deep). Defaults `name="{Model}In"` and `extra="forbid"`. `visible` is one scope/expression, falling back to `default_scope=` when omitted. |
+| `Model.output(visible=None, *, name=None, bases=None)` | classmethod | Read-side projection: `visible - In` (drops write-only fields, deep). Defaults `name="{Model}Out"`; config untouched. `visible` is one scope/expression, falling back to `default_scope=`. |
 | `Model.scopes()` | classmethod | `frozenset[type[Scope]]` of the atom scopes used in field tags. |
 | `Model.from_projection(projection, /, **extra)` | classmethod | Complete projection → canonical instance; missing fields via `**extra` or canonical defaults. Rejects **partial** projections (use `with_updates`). |
 | `instance.with_updates(patch, /)` | method | Apply a (partial) projection's set fields as a PATCH; returns a new, re-validated instance. `self` unchanged. |
@@ -114,7 +114,7 @@ A classification *is* a scope, so it can be requested directly
 |---|---|---|
 | `Model.classifications()` | classmethod | `frozenset[type[Classification]]` declared on the model (the classification slice of `scopes()`). |
 | `Model.classified_fields()` | classmethod | `dict[str, frozenset[type[Classification]]]`: field → classifications it carries. |
-| `Model.redacted(*visible, strip=None, name=None, bases=None)` | classmethod | The `visible` projection with classifications stripped (set difference). `strip` defaults to **all** declared classifications. Requires ≥1 visibility scope. |
+| `Model.redacted(visible, *, strip=None, name=None, bases=None)` | classmethod | The `visible` projection (one scope/expression) with classifications stripped (set difference). `strip` defaults to **all** declared classifications. |
 | `Model.classified_flow()` | classmethod | A `FlowReport` of classified data reachable across the ref graph (BFS, cycle-safe). |
 | `build_flow_report(root)` | function | The underlying builder; `classified_flow()` calls it. |
 | `FlowReport` | dataclass | `.root`, `.nodes`, `.edges`; `.as_dict()` (JSON artifact), `.to_mermaid(direction="TD")`. Truthy iff any classified data is reachable. |

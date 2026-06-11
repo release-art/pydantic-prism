@@ -78,8 +78,8 @@ def test_redacted_forwards_name() -> None:
 
 
 def test_redacted_requires_a_visibility_scope() -> None:
-    with pytest.raises(TypeError, match="at least one visibility scope"):
-        fx.User.redacted()
+    with pytest.raises(TypeError, match="required positional argument"):
+        fx.User.redacted()  # type: ignore[call-arg]  # visible is required
 
 
 # --- classified_flow() / FlowReport ----------------------------------------

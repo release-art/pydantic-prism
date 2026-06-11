@@ -187,9 +187,11 @@ def test_no_arg_falls_back_to_default_scope() -> None:
 
 
 def test_no_arg_without_default_raises() -> None:
-    with pytest.raises(TypeError, match=r"User\.input\(\) requires at least one"):
+    with pytest.raises(TypeError, match=r"User\.input\(\) requires a visibility scope"):
         User.input()
-    with pytest.raises(TypeError, match=r"User\.output\(\) requires at least one"):
+    with pytest.raises(
+        TypeError, match=r"User\.output\(\) requires a visibility scope"
+    ):
         User.output()
 
 

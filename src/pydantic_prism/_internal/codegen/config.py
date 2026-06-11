@@ -20,7 +20,7 @@ class ProjectionSpec:
     """One opt-in projection beyond a model's per-atom defaults.
 
     ``model`` and each ``scopes`` entry are ``"package.module:Name"`` paths; the
-    scopes union together (like ``scoped(A, B)`` / ``.scope(A, B)``).
+    scopes union together (equivalent to ``.scope(A | B)``).
     """
 
     model: str

@@ -65,7 +65,6 @@ def test_wildcard_root_scope() -> None:
 def test_caching_identity() -> None:
     assert User.scope(Public) is User.scope(Public)
     assert User.scope(Public | Internal) is User.scope(Internal | Public)
-    assert User.scope(Public, Internal) is User.scope(Public | Internal)
     assert User.scope(Public) is not User.scope(Public, name="Custom")
 
 

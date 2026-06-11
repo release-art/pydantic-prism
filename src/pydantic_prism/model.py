@@ -269,7 +269,8 @@ class ScopedModel(BaseModel):
     @classmethod
     def redacted(
         cls,
-        *visible: ScopeLike,
+        visible: ScopeLike,
+        *,
         strip: ScopeLike | None = None,
         name: str | None = None,
         bases: Sequence[type[BaseModel]] | None = None,
@@ -281,16 +282,13 @@ class ScopedModel(BaseModel):
         default ``strip`` is the union of all classifications declared on the
         model, so a classification added later is auto-redacted. Pass ``strip=``
         (any scope expression, e.g. ``Secret`` or ``Pii | Secret``) to choose
-        which classifications to remove instead. Refs survive, so the
+        which classifications to remove instead. ``visible`` is one scope or
+        expression (compose wider views with ``|``). Refs survive, so the
         relationship graph stays intact.
 
         ``name`` / ``bases`` forward to :meth:`scope`.
         """
-        if not visible:
-            raise TypeError(
-                "redacted() requires at least one visibility scope or expression"
-            )
-        visible_expr = union_all(as_expr(scope) for scope in visible)
+        visible_expr = as_expr(visible)
         if strip is not None:
             strip_expr: ScopeExpr | None = as_expr(strip)
         else:
@@ -305,30 +303,31 @@ class ScopedModel(BaseModel):
 
     @classmethod
     def _directional_expr(
-        cls, visible: tuple[ScopeLike, ...], drop: type[Scope]
+        cls, visible: ScopeLike | None, drop: type[Scope]
     ) -> ScopeExpr:
         """The visibility expression for ``input``/``output``, minus a direction.
 
-        ``visible`` defaults to the model's ``default_scope=`` when empty (the
-        direction-only case — tag fields ``In``/``Out``/both and let the
+        ``visible`` falls back to the model's ``default_scope=`` when ``None``
+        (the direction-only case — tag fields ``In``/``Out``/both and let the
         read-write majority fall back); with no default and no argument it
         raises, mirroring :meth:`redacted`.
         """
-        if visible:
-            base = union_all(as_expr(scope) for scope in visible)
+        if visible is not None:
+            base = as_expr(visible)
         elif cls.__prism_default_scope__ is not None:
             base = cls.__prism_default_scope__
         else:
             raise TypeError(
-                f"{cls.__name__}.{'input' if drop is Out else 'output'}() requires at "
-                f"least one visibility scope, or a default_scope= on the model"
+                f"{cls.__name__}.{'input' if drop is Out else 'output'}() requires a "
+                f"visibility scope, or a default_scope= on the model"
             )
         return base - drop
 
     @classmethod
     def input(  # noqa: A003 — `input`/`output` name the read/write sides on purpose
         cls,
-        *visible: ScopeLike,
+        visible: ScopeLike | None = None,
+        *,
         name: str | None = None,
         bases: Sequence[type[BaseModel]] | None = None,
         extra: Literal["allow", "ignore", "forbid"] = "forbid",
@@ -337,18 +336,18 @@ class ScopedModel(BaseModel):
 
         Mass-assignment protection *by shape*: a read-only field (tagged
         ``scoped(..., Out)``) is simply absent from this projection, so it can
-        never be over-posted. The subtraction is ``union(visible) - Out`` and it
-        is **deep** — nested ``ScopedModel`` fields are projected the same way, so
+        never be over-posted. The subtraction is ``visible - Out`` and it is
+        **deep** — nested ``ScopedModel`` fields are projected the same way, so
         read-only fields drop at every level.
 
         ``extra`` defaults to ``"forbid"``: unknown keys are rejected outright
         (a loud 422 rather than a silent drop, and the only thing that closes the
         hole when the canonical declares ``extra="allow"``). It applies to the
         top-level projection; nest ``input()`` on a field's model for deep
-        ``forbid``. Pass ``extra="ignore"``/``"allow"`` to opt out. ``name``
-        defaults to ``"{Model}In"``; ``visible`` falls back to the model's
-        ``default_scope=`` when omitted. ``name``/``bases`` forward to
-        :meth:`scope`.
+        ``forbid``. Pass ``extra="ignore"``/``"allow"`` to opt out. ``visible`` is
+        one scope or expression (compose with ``|``), and falls back to the
+        model's ``default_scope=`` when omitted. ``name`` defaults to
+        ``"{Model}In"``; ``name``/``bases`` forward to :meth:`scope`.
         """
         expr = cls._directional_expr(visible, Out)
         return cls._build_projection(expr, name or f"{cls.__name__}In", bases, extra)
@@ -356,7 +355,8 @@ class ScopedModel(BaseModel):
     @classmethod
     def output(
         cls,
-        *visible: ScopeLike,
+        visible: ScopeLike | None = None,
+        *,
         name: str | None = None,
         bases: Sequence[type[BaseModel]] | None = None,
     ) -> type[Projection]:
@@ -364,11 +364,12 @@ class ScopedModel(BaseModel):
 
         The response counterpart to :meth:`input`: a write-only field (tagged
         ``scoped(..., In)``, e.g. a password) is absent, so it is never echoed
-        back. The subtraction is ``union(visible) - In``; like ``input`` it is
-        deep through nested ``ScopedModel`` fields. ``extra`` is left untouched
-        (server→client; over-posting does not apply). ``name`` defaults to
-        ``"{Model}Out"``; ``visible`` falls back to the model's ``default_scope=``
-        when omitted. ``name``/``bases`` forward to :meth:`scope`.
+        back. The subtraction is ``visible - In``; like ``input`` it is deep
+        through nested ``ScopedModel`` fields. ``extra`` is left untouched
+        (server→client; over-posting does not apply). ``visible`` is one scope or
+        expression (compose with ``|``), and falls back to the model's
+        ``default_scope=`` when omitted. ``name`` defaults to ``"{Model}Out"``;
+        ``name``/``bases`` forward to :meth:`scope`.
         """
         expr = cls._directional_expr(visible, In)
         return cls._build_projection(expr, name or f"{cls.__name__}Out", bases, None)
@@ -376,15 +377,18 @@ class ScopedModel(BaseModel):
     @classmethod
     def scope(
         cls,
-        *scopes: ScopeLike,
+        scope: ScopeLike,
+        *,
         name: str | None = None,
         bases: Sequence[type[BaseModel]] | None = None,
     ) -> type[Projection]:
         """Derive (or fetch from cache) the projection for a scope expression.
 
-        Multiple arguments union: ``Model.scope(A, B)`` is ``Model.scope(A | B)``.
-        The same expression always returns the same class object. ``name=``
-        overrides the auto-generated class name and is part of the cache key.
+        Takes one scope or scope expression — compose with the algebra
+        (``Model.scope(Public | Internal)``, ``Model.scope(Internal - Pii)``)
+        rather than passing several arguments. The same expression always returns
+        the same class object. ``name=`` overrides the auto-generated class name
+        and is part of the cache key.
 
         ``bases=`` lists non-``ScopedModel`` ancestors of this model to carry
         onto the projection (restoring their custom ``model_dump``/
@@ -396,10 +400,7 @@ class ScopedModel(BaseModel):
         fields) — tagging such a field with a scope the projection does not
         select raises :class:`ProjectionBaseError`.
         """
-        if not scopes:
-            raise TypeError("scope() requires at least one scope or scope expression")
-        expr = union_all(as_expr(scope) for scope in scopes)
-        return cls._build_projection(expr, name, bases, None)
+        return cls._build_projection(as_expr(scope), name, bases, None)
 
     @classmethod
     def _build_projection(

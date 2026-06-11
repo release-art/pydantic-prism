@@ -67,8 +67,8 @@ def test_scoped_requires_scopes() -> None:
 
 
 def test_scope_call_requires_scopes() -> None:
-    with pytest.raises(TypeError, match="at least one scope"):
-        Target.scope()
+    with pytest.raises(TypeError, match="required positional argument"):
+        Target.scope()  # type: ignore[call-arg]  # scope is required
     with pytest.raises(TypeError, match="Scope subclass"):
         Target.scope("public")  # type: ignore[arg-type]
 

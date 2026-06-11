@@ -54,9 +54,12 @@ expression. `A - B` and `~A` propagate through inheritance: exclude `Llm` and
 you exclude every scope that extends `Llm` too.
 
 Second, **expressions are reusable values.** `SAFE = Scope - Pii` is a name you
-can put on a field tag and hand to `.scope()` alike. Varargs are just union
-sugar: `scoped(A, B)` is `scoped(A | B)`, and `Model.scope(A, B)` is
-`Model.scope(A | B)`.
+can put on a field tag and hand to `.scope()` alike. The projection methods
+(`.scope()` / `.redacted()` / `.input()` / `.output()`) each take **one** scope
+or expression — compose with the operators (`Model.scope(A | B)`) rather than
+passing several arguments. (The `scoped(...)` field marker still unions its
+varargs, since tagging a field with several scopes at once reads naturally:
+`scoped(A, B)` is `scoped(A | B)`.)
 
 ## A second axis: classification
 

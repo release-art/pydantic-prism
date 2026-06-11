@@ -87,6 +87,10 @@ def test_canonical_equality_and_hash() -> None:
     assert (Public | (Llm | Storage)) == (Storage | Llm | Public)  # flattens
     assert union_all([as_expr(Public), as_expr(Public)]) == as_expr(Public)  # dedupes
     assert (Public | Llm) != (Public & Llm)
+    # operands sort deterministically by sort_key regardless of kind/order — a
+    # complement inside a union/intersection canonicalizes too
+    assert (~Llm | Public) == (Public | ~Llm)
+    assert (~Llm & Public) == (Public & ~Llm)
 
 
 def test_tokens_used_for_class_names() -> None:
