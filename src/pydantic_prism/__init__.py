@@ -5,6 +5,8 @@ derive real pydantic model subclasses per scope, and keep FK-style
 relationships introspectable across projections.
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from pydantic.experimental.missing_sentinel import MISSING
 
 from ._internal.scopes import Scope, ScopeExpr
@@ -36,6 +38,11 @@ from .refs import (
 )
 from .scopes import Classification, Direction, In, Out
 from .validators import scoped_validator
+
+try:
+    __version__ = version("pydantic-prism")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "0.0.0.dev0"
 
 __all__ = [
     "MISSING",
@@ -74,4 +81,5 @@ __all__ = [
     "scope_diagram",
     "scoped",
     "scoped_validator",
+    "__version__",
 ]
