@@ -49,9 +49,12 @@ regenerate it, don't hand-edit.
 $ prism check        # exit 1 if the stub is out of date
 ```
 
-Each stub records a signature; at import (app startup) it is re-checked and
-raises [`StaleProjectionStubError`](../reference/errors.md) if the model changed
-without a regenerate. Wire `prism check` into CI so a stale stub fails the build.
+`prism check` regenerates the module in memory and byte-diffs it against the file
+on disk, so any model change that the stub doesn't reflect fails the check. Wire
+it into CI so a stale stub fails the build. (There is no runtime check: the
+`.scope()` alias is recomputed live every import, so it is never itself stale —
+only the static stub the type checker reads can drift, and that is exactly what
+`prism check` catches.)
 
 Both commands are also available as `python -m pydantic_prism gen|check`. To
 also emit a GitHub-rendered model doc beside the stub, see

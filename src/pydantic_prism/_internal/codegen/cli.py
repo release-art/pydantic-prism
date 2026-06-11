@@ -157,7 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "gen":
         config.output.write_text(text, encoding="utf-8")
-        count = text.count("assert_fresh(")
+        count = text.count("\n    class ")  # one TYPE_CHECKING stub per projection
         print(f"prism: wrote {count} projection stub(s) to {config.output}")
         if readme_path is not None and readme_text is not None:
             readme_path.write_text(readme_text, encoding="utf-8")

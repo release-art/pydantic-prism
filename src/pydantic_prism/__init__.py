@@ -20,7 +20,6 @@ from .errors import (
     ProjectionBaseError,
     ProjectionNameError,
     RefResolutionError,
-    StaleProjectionStubError,
 )
 from .flow import (
     FlowEdge,
@@ -79,7 +78,6 @@ __all__ = [
     "ScopeExpr",
     "Scoped",
     "ScopedModel",
-    "StaleProjectionStubError",
     "backref",
     "build_flow_report",
     "projection_diagram",

@@ -17,7 +17,6 @@ from uuid import UUID
 
 import pytest
 
-from pydantic_prism import StaleProjectionStubError
 from pydantic_prism._internal.codegen import (
     CodegenError,
     Config,
@@ -35,7 +34,6 @@ from pydantic_prism._internal.codegen import (
     load_config,
     main,
 )
-from pydantic_prism._internal.drift import assert_fresh, projection_signature
 from pydantic_prism._internal.scopes import ScopeExpr, as_expr
 
 from . import _codegen_fixtures as fx
@@ -208,22 +206,6 @@ def test_field_descriptions_become_attribute_docstrings(tmp_path: Path) -> None:
     text = generate(_config(tmp_path, modules=(), projections=(spec,)))
     # Screenshot.container_name carries a description (see fixtures) -> docstring
     assert "'A storage container name.'" in text
-
-
-def test_description_change_shifts_drift_signature() -> None:
-    from pydantic import Field
-
-    from pydantic_prism._internal.drift import projection_signature
-
-    class M(fx.ScopedModel):
-        x: Annotated[str, fx.scoped(fx.Public), Field(description="one")]
-
-    sig_one = projection_signature(M.scope(fx.Public))
-
-    class N(fx.ScopedModel):
-        x: Annotated[str, fx.scoped(fx.Public), Field(description="two")]
-
-    assert projection_signature(N.scope(fx.Public)) != sig_one  # desc is in the sig
 
 
 def test_generated_module_imports_with_identity(
@@ -426,18 +408,6 @@ def test_module_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "argv", ["prism"])  # no subcommand -> argparse exits 2
     with pytest.raises(SystemExit):
         runpy.run_module("pydantic_prism", run_name="__main__")
-
-
-# --- drift signature -------------------------------------------------------
-
-
-def test_signature_stable_and_assert_fresh() -> None:
-    proj = fx.Screenshot.scope(fx.Ref)
-    sig = projection_signature(proj)
-    assert sig == projection_signature(proj)  # deterministic
-    assert_fresh(proj, sig)  # no raise
-    with pytest.raises(StaleProjectionStubError, match="stale"):
-        assert_fresh(proj, "0000000000000000")
 
 
 # --- rendering helpers -----------------------------------------------------

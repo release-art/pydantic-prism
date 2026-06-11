@@ -14,7 +14,7 @@ from pydantic_prism import (
     FlowReport, FlowNode, FlowEdge, FlowField, build_flow_report,
     Diagram, scope_diagram, projection_diagram,
     PrismError, EmptyProjectionError, ProjectionNameError,
-    ProjectionBaseError, RefResolutionError, StaleProjectionStubError,
+    ProjectionBaseError, RefResolutionError,
     PrismWarning, PrismBaseDropWarning, PrismOrderingWarning,
 )
 ```
