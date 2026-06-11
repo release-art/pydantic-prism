@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel
@@ -34,14 +35,29 @@ __all__ = ["Projection", "ScopedModel"]
 # None, which is a legitimate resolved value meaning "no default declared".
 _NO_DEFAULT: Any = object()
 
-# Cache key of one derived projection class: (expression, name override,
-# carried bases, extra-config override). All four participate — changing any
-# yields a new class. ``extra`` is None for plain scope()/output() (inherit the
-# canonical's config) and "forbid" for input(); it keeps an input() projection a
-# distinct, separately-named class from the equivalent bare scope().
-type _ProjectionKey = tuple[
-    ScopeExpr, str | None, tuple[type[BaseModel], ...], str | None
-]
+
+@dataclass(frozen=True, slots=True)
+class _ProjectionKey:
+    """Identity of one derived projection class within a model's caches.
+
+    All four fields participate — changing any yields a different class:
+
+    * ``expr`` — the scope expression projected to.
+    * ``name`` — the explicit ``name=`` override, or None for the auto-name.
+    * ``carried`` — the non-``ScopedModel`` bases carried onto the projection.
+    * ``extra`` — the ``model_config["extra"]`` override: None inherits the
+      canonical's config, "forbid" is what ``input()`` forces. It keeps an
+      ``input()`` projection a distinct, separately-named class from the
+      equivalent bare ``scope()``.
+
+    Frozen + slotted so it is hashable and usable as a dict key.
+    """
+
+    expr: ScopeExpr
+    name: str | None
+    carried: tuple[type[BaseModel], ...]
+    extra: Literal["allow", "ignore", "forbid"] | None
+
 
 # RLock: _project recurses for nested models within one build.
 _build_lock = threading.RLock()
@@ -415,13 +431,14 @@ class ScopedModel(BaseModel):
         carried = (
             checked if checked is not None else (cls.__prism_projection_bases__ or ())
         )
-        cached = cls.__prism_cache__.get((expr, name, carried, extra))
+        cache_key = _ProjectionKey(expr, name, carried, extra)
+        cached = cls.__prism_cache__.get(cache_key)
         if cached is not None:
             return cached
         # Build under a lock so concurrent first calls (free-threaded Python,
         # threaded servers) cannot produce two classes for one expression.
         with _build_lock:
-            cached = cls.__prism_cache__.get((expr, name, carried, extra))
+            cached = cls.__prism_cache__.get(cache_key)
             if cached is not None:
                 return cached
             ctx = _BuildContext()
@@ -432,10 +449,9 @@ class ScopedModel(BaseModel):
             # path above safe), and a failed build commits nothing.
             for built in ctx.built.values():
                 built.model_rebuild(_types_namespace=ctx.namespace)
-            for (owner, *owner_key), built in ctx.built.items():
-                key = cast(_ProjectionKey, tuple(owner_key))
-                owner.__prism_cache__[key] = built
-                owner.__prism_names__[built.__name__] = key
+            for build_key, built in ctx.built.items():
+                build_key.owner.__prism_cache__[build_key.key] = built
+                build_key.owner.__prism_names__[built.__name__] = build_key.key
             return projection
 
     @classmethod

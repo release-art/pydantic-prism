@@ -6,6 +6,7 @@ import copy
 import inspect
 import types
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Annotated,
@@ -26,15 +27,15 @@ from ...errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameE
 from ..markers import PRISM_MARKERS
 from ..scopes import ScopeExpr
 from .bases import _warn_dropped_behavior
-from .classes import Projection, ScopedModel
+from .classes import (
+    Projection,
+    ScopedModel,
+    _ProjectionKey,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 from .schema import _apply_field_schema, _apply_model_schema
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
-
-    from .classes import (
-        _ProjectionKey,  # pyright: ignore[reportPrivateUsage] — intra-package
-    )
 
 __all__ = [
     "_BuildContext",
@@ -43,6 +44,23 @@ __all__ = [
     "_rewrite",
     "_validate_name_template",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class _BuildKey:
+    """One projection's key *within a build context*: its owner + projection key.
+
+    A single build context spans every nested model reached from the top-level
+    ``scope()``/``input()`` call, and two different models can share a
+    :class:`_ProjectionKey` (same expr/name/carried/extra), so the owning model
+    must be part of the in-flight key. The ``key`` half is exactly what gets
+    committed to ``owner``'s caches once the whole context finishes building.
+
+    Frozen + slotted so it is hashable and usable as a dict key.
+    """
+
+    owner: type[ScopedModel]
+    key: _ProjectionKey
 
 
 # --- projection naming -----------------------------------------------------
@@ -81,12 +99,10 @@ class _BuildContext:
     """State for one top-level ``scope()`` call, threading through recursion."""
 
     def __init__(self) -> None:
-        # key -> ForwardRef/namespace name, while the class is being built
-        self.pending: dict[tuple[type[ScopedModel], Any, Any, Any, Any], str] = {}
-        # key -> finished (but not yet rebuilt/committed) class
-        self.built: dict[
-            tuple[type[ScopedModel], Any, Any, Any, Any], type[Projection]
-        ] = {}
+        # build key -> ForwardRef/namespace name, while the class is being built
+        self.pending: dict[_BuildKey, str] = {}
+        # build key -> finished (but not yet rebuilt/committed) class
+        self.built: dict[_BuildKey, type[Projection]] = {}
         # ForwardRef name -> class; names are unique even when class names collide
         self.namespace: dict[str, type[Projection]] = {}
 
@@ -158,11 +174,11 @@ def _project(
         # via the model_rebuild override.
         cls.model_rebuild()
     carried = _resolve_carried(cls, bases)
-    cache_key: _ProjectionKey = (expr, name, carried, extra)
+    cache_key = _ProjectionKey(expr, name, carried, extra)
     cached = cls.__prism_cache__.get(cache_key)
     if cached is not None:
         return cached
-    key = (cls, expr, name, carried, extra)
+    key = _BuildKey(cls, cache_key)
     if key in ctx.built:
         return ctx.built[key]
     if key in ctx.pending:
