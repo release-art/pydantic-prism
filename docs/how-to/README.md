@@ -9,7 +9,7 @@ and shows the shortest correct way to get it. New to prism? Start with the
 - [Redact PII for an audit view](redact-pii.md) — strip every classification
   from a view with `Model.redacted(...)`.
 - [Trace where classified data flows](trace-data-flow.md) — produce a
-  compliance artifact with `data_flow()` and `prism flow`.
+  compliance artifact with `data_flow()` and `pydantic-prism flow`.
 
 ## Shapes & round-trips
 
@@ -32,7 +32,7 @@ and shows the shortest correct way to get it. New to prism? Start with the
 ## Tooling
 
 - [Generate editor stubs](generate-editor-stubs.md) — make projections
-  visible to pyright/Pylance/mypy with `prism gen`.
+  visible to pyright/Pylance/mypy with `pydantic-prism gen`.
 - [Export scope / projection / relationship diagrams](export-diagrams.md) —
   Mermaid, DOT, D2, or JSON.
 

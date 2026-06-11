@@ -23,8 +23,8 @@ name = "DocumentPublicView"         # optional name override
 ## 2. Generate
 
 ```console
-$ prism gen
-prism: wrote 4 projection stub(s) to myapp/_prism.py
+$ pydantic-prism gen
+pydantic-prism: wrote 4 projection stub(s) to myapp/_prism.py
 ```
 
 Import the generated names where you want static types:
@@ -46,15 +46,15 @@ regenerate it, don't hand-edit.
 ## 3. Gate drift in CI
 
 ```console
-$ prism check        # exit 1 if the stub is out of date
+$ pydantic-prism check        # exit 1 if the stub is out of date
 ```
 
-`prism check` regenerates the module in memory and byte-diffs it against the file
+`pydantic-prism check` regenerates the module in memory and byte-diffs it against the file
 on disk, so any model change that the stub doesn't reflect fails the check. Wire
 it into CI so a stale stub fails the build. (There is no runtime check: the
 `.scope()` alias is recomputed live every import, so it is never itself stale —
 only the static stub the type checker reads can drift, and that is exactly what
-`prism check` catches.)
+`pydantic-prism check` catches.)
 
 Both commands are also available as `python -m pydantic_prism gen|check`. To
 also emit a GitHub-rendered model doc beside the stub, see

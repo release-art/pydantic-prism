@@ -1,4 +1,4 @@
-"""The ``prism`` CLI: ``gen`` / ``check`` / ``diagram`` subcommands."""
+"""The ``pydantic-prism`` CLI: ``gen`` / ``check`` / ``diagram`` subcommands."""
 
 from __future__ import annotations
 
@@ -59,12 +59,12 @@ def _run_diagram(args: argparse.Namespace) -> int:
     try:
         diagram = _build_cli_diagram(args.kind, args.paths, args.direction)
     except CodegenError as exc:
-        print(f"prism: {exc}", file=sys.stderr)
+        print(f"pydantic-prism: {exc}", file=sys.stderr)
         return 2
     rendered = _render_diagram(diagram, args.format)
     if args.output:
         Path(args.output).write_text(rendered, encoding="utf-8")
-        print(f"prism: wrote {args.format} diagram to {args.output}")
+        print(f"pydantic-prism: wrote {args.format} diagram to {args.output}")
     else:
         print(rendered, end="")
     return 0
@@ -81,7 +81,7 @@ def _run_flow(args: argparse.Namespace) -> int:
     try:
         model = _resolve_kind(args.path, ScopedModel, "ScopedModel subclass")
     except CodegenError as exc:
-        print(f"prism: {exc}", file=sys.stderr)
+        print(f"pydantic-prism: {exc}", file=sys.stderr)
         return 2
     report = model.data_flow()
     if args.format == "mermaid":
@@ -92,7 +92,7 @@ def _run_flow(args: argparse.Namespace) -> int:
         rendered = json.dumps(report.as_dict(), indent=2) + "\n"
     if args.output:
         Path(args.output).write_text(rendered, encoding="utf-8")
-        print(f"prism: wrote {args.format} flow report to {args.output}")
+        print(f"pydantic-prism: wrote {args.format} flow report to {args.output}")
     else:
         print(rendered, end="")
     return 0
@@ -108,7 +108,8 @@ def _stale(path: Path, expected: str) -> bool:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="prism", description="Generate static-typing stubs for prism projections."
+        prog="pydantic-prism",
+        description="Generate static-typing stubs for prism projections.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
     for command in ("gen", "check"):
@@ -152,24 +153,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         readme_path = Path(args.readme) if args.readme else config.readme
         readme_text = generate_readme(config) if readme_path is not None else None
     except (CodegenError, OSError) as exc:
-        print(f"prism: {exc}", file=sys.stderr)
+        print(f"pydantic-prism: {exc}", file=sys.stderr)
         return 2
 
     if args.command == "gen":
         config.output.write_text(text, encoding="utf-8")
         count = text.count("\n    class ")  # one TYPE_CHECKING stub per projection
-        print(f"prism: wrote {count} projection stub(s) to {config.output}")
+        print(f"pydantic-prism: wrote {count} projection stub(s) to {config.output}")
         if readme_path is not None and readme_text is not None:
             readme_path.write_text(readme_text, encoding="utf-8")
-            print(f"prism: wrote README to {readme_path}")
+            print(f"pydantic-prism: wrote README to {readme_path}")
         return 0
 
-    stale = "is out of date — run `prism gen`"
+    stale = "is out of date — run `pydantic-prism gen`"
     if _stale(config.output, text):
-        print(f"prism: {config.output} {stale}", file=sys.stderr)
+        print(f"pydantic-prism: {config.output} {stale}", file=sys.stderr)
         return 1
     if readme_text is not None and _stale(cast(Path, readme_path), readme_text):
-        print(f"prism: {readme_path} {stale}", file=sys.stderr)
+        print(f"pydantic-prism: {readme_path} {stale}", file=sys.stderr)
         return 1
-    print(f"prism: {config.output} is up to date")
+    print(f"pydantic-prism: {config.output} is up to date")
     return 0

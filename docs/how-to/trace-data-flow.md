@@ -79,12 +79,12 @@ assert mermaid.startswith("classDiagram")
 
 ## From the shell
 
-The `prism flow` subcommand does the same against a `module:Model` path:
+The `pydantic-prism flow` subcommand does the same against a `module:Model` path:
 
 ```console
-$ prism flow myapp.models:Account                 # JSON to stdout (default)
-$ prism flow myapp.models:Account --format mermaid
-$ prism flow myapp.models:Account --output flow.json
+$ pydantic-prism flow myapp.models:Account                 # JSON to stdout (default)
+$ pydantic-prism flow myapp.models:Account --format mermaid
+$ pydantic-prism flow myapp.models:Account --output flow.json
 ```
 
 Wire the JSON form into CI to fail a build when PII (an axis rooted at your

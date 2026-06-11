@@ -278,7 +278,7 @@ def test_main_check_missing_file(tmp_path: Path) -> None:
 def test_main_config_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     pyproject = _write_pyproject(tmp_path, "[tool.other]\n")
     assert main(["gen", "--config", str(pyproject)]) == 2
-    assert "prism:" in capsys.readouterr().err
+    assert "pydantic-prism:" in capsys.readouterr().err
 
 
 def test_main_missing_config_file(
@@ -286,7 +286,7 @@ def test_main_missing_config_file(
 ) -> None:
     missing = tmp_path / "nope.toml"
     assert main(["gen", "--config", str(missing)]) == 2
-    assert "prism:" in capsys.readouterr().err
+    assert "pydantic-prism:" in capsys.readouterr().err
 
 
 # --- diagram subcommand ----------------------------------------------------

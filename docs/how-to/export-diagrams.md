@@ -59,22 +59,22 @@ Every builder takes `direction="TD"` (default) or `"LR"`.
 ## From the shell
 
 ```console
-$ prism diagram scope                                       # all scopes → Mermaid (stdout)
-$ prism diagram projection myapp.models:Order --format dot --output order.dot
-$ prism diagram refs myapp.models:Order --format json
+$ pydantic-prism diagram scope                                       # all scopes → Mermaid (stdout)
+$ pydantic-prism diagram projection myapp.models:Order --format dot --output order.dot
+$ pydantic-prism diagram refs myapp.models:Order --format json
 ```
 
-`prism diagram {scope|projection|refs} [module:Name ...]` with
+`pydantic-prism diagram {scope|projection|refs} [module:Name ...]` with
 `--format {mermaid,dot,d2,json}` (default `mermaid`), `--output FILE`, and
 `--direction {TD,LR}`. `scope` takes optional scope paths (none = all);
 `projection`/`refs` take exactly one model path.
 
 ## Ship a model doc
 
-Set `readme = "MODELS.md"` in `[tool.pydantic-prism]` (or `prism gen --readme
-PATH`) and [`prism gen`](generate-editor-stubs.md) writes a GitHub-flavoured
+Set `readme = "MODELS.md"` in `[tool.pydantic-prism]` (or `pydantic-prism gen --readme
+PATH`) and [`pydantic-prism gen`](generate-editor-stubs.md) writes a GitHub-flavoured
 Markdown doc beside the stub — scope hierarchy, per-model projection fan-out,
 and relationship diagrams as `mermaid` blocks, plus per-projection field tables.
-`prism check` verifies it's current, so a stale doc fails CI like a stale stub.
+`pydantic-prism check` verifies it's current, so a stale doc fails CI like a stale stub.
 The auto-generated [`examples/*/README.md`](../../examples) files are produced
 the same way.

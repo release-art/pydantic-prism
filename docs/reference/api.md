@@ -175,5 +175,5 @@ See the dedicated [errors reference](errors.md). All domain errors subclass
 
 ## CLI
 
-See the [CLI reference](cli.md) for `prism gen` / `check` / `diagram` / `flow`
+See the [CLI reference](cli.md) for `pydantic-prism gen` / `check` / `diagram` / `flow`
 and `[tool.pydantic-prism]`.
