@@ -15,7 +15,14 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
 
 from pydantic import BaseModel
 
-from ._internal.scopes import Scope, ScopeExpr, ScopeLike, as_expr, union_all
+from ._internal.scopes import (
+    Scope,
+    ScopeExpr,
+    ScopeLike,
+    as_expr,
+    dimension_root,
+    union_all,
+)
 from .refs import RefGraph
 from .scopes import Classification, In, Out  # bundled taxonomy
 
@@ -266,6 +273,23 @@ class ScopedModel(BaseModel):
         return frozenset(out)
 
     @classmethod
+    def dimensions(cls) -> dict[type[Scope], frozenset[type[Scope]]]:
+        """The model's scopes grouped by **axis** — the structural view.
+
+        An axis (dimension) is inferred from the inheritance forest: each scope's
+        top ancestor just below ``Scope`` is its :func:`dimension_root`, and the
+        root's name labels the axis. Returns ``{root: scopes-in-that-axis}``,
+        discovering visibility, classification, direction, and any user-defined
+        axis alike — without depending on the :class:`Classification` /
+        :class:`Direction` bases. Contrast :meth:`classifications`, the *semantic*
+        (marker-based) classification slice used by :meth:`redacted`.
+        """
+        out: dict[type[Scope], set[type[Scope]]] = {}
+        for scope in cls.scopes():
+            out.setdefault(dimension_root(scope), set()).add(scope)
+        return {root: frozenset(members) for root, members in out.items()}
+
+    @classmethod
     def classifications(cls) -> frozenset[type[Classification]]:
         """The :class:`Classification` atoms appearing in this model's field tags.
 
@@ -289,14 +313,16 @@ class ScopedModel(BaseModel):
         return out
 
     @classmethod
-    def classified_flow(cls) -> FlowReport:
-        """Trace classified data reachable from this model across the ref graph.
+    def data_flow(cls) -> FlowReport:
+        """Trace dimensional data reachable from this model across the ref graph.
 
         Walks forward ``ref`` / ``embedded`` edges (BFS, cycle-safe) and reports
-        the classified fields of every model personal data can reach — the
-        compliance artifact: *given this entry point, where does classified data
-        live, via which references?* Render the returned :class:`.FlowReport`
-        with ``.as_dict()`` (JSON) or ``.to_mermaid()``.
+        every **tagged** field of every reachable model, with its scopes grouped
+        by axis — the compliance/architecture artifact: *given this entry point,
+        where does scoped data live (PII and otherwise), via which references?*
+        Axes are inferred structurally (:meth:`dimensions`), so PII surfaces
+        without prism being told which scope is sensitive. Render the returned
+        :class:`.FlowReport` with ``.as_dict()`` (JSON) or ``.to_mermaid()``.
         """
         from .flow import build_flow_report
 

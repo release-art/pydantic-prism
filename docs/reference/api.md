@@ -11,7 +11,7 @@ from pydantic_prism import (
     ScopedModel, Projection,
     scoped, scoped_validator, ref, backref, Ref, BackRef, Scoped, RefShape,
     RefGraph, RefInfo, IdRefInfo, BackRefInfo, EmbeddedRefInfo,
-    FlowReport, FlowNode, FlowEdge, ClassifiedField, build_flow_report,
+    FlowReport, FlowNode, FlowEdge, FlowField, build_flow_report,
     Diagram, scope_diagram, projection_diagram,
     PrismError, EmptyProjectionError, ProjectionNameError,
     ProjectionBaseError, RefResolutionError, StaleProjectionStubError,
@@ -111,22 +111,26 @@ travel, declare it with `@scoped_validator(*scopes, mode=...)` — it carries on
 every projection whose expression selects one of `scopes`. Field-set safety is
 yours: prism does not check that the touched fields survive there.
 
-## Governance
+## Axes, governance, and data flow
 
-A classification *is* a scope, so it can be requested directly
-(`Model.scope(Pii)`); these helpers are the axis-explicit path.
+A scope's **axis** (dimension) is its top ancestor just below `Scope`, read from
+the inheritance forest (`dimension_root`). `dimensions()` and `data_flow()` are
+*structural* (any axis, no marker import); `classifications()` / `redacted()` are
+the *semantic* slice (Classification-marker-based — they need to know an axis
+means "redact me").
 
 | name | kind | summary |
 |---|---|---|
+| `Model.dimensions()` | classmethod | `dict[type[Scope], frozenset[type[Scope]]]`: the model's scopes grouped by axis root, inferred structurally. Discovers visibility / classification / direction / any user axis. |
 | `Model.classifications()` | classmethod | `frozenset[type[Classification]]` declared on the model (the classification slice of `scopes()`). |
 | `Model.classified_fields()` | classmethod | `dict[str, frozenset[type[Classification]]]`: field → classifications it carries. |
 | `Model.redacted(visible, *, strip=None, name=None, bases=None)` | classmethod | The `visible` projection (one scope/expression) with classifications stripped (set difference). `strip` defaults to **all** declared classifications. |
-| `Model.classified_flow()` | classmethod | A `FlowReport` of classified data reachable across the ref graph (BFS, cycle-safe). |
-| `build_flow_report(root)` | function | The underlying builder; `classified_flow()` calls it. |
-| `FlowReport` | dataclass | `.root`, `.nodes`, `.edges`; `.as_dict()` (JSON artifact), `.to_mermaid(direction="TD")`. Truthy iff any classified data is reachable. |
-| `FlowNode` | dataclass | A reached classified model: `.model`, `.fields` (`tuple[ClassifiedField, ...]`). |
+| `Model.data_flow()` | classmethod | A `FlowReport`: every reachable model's tagged fields with scopes grouped by axis, across the ref graph (BFS, cycle-safe). PII surfaces as the `Classification`-rooted slice. |
+| `build_flow_report(root)` | function | The underlying builder; `data_flow()` calls it. |
+| `FlowReport` | dataclass | `.root`, `.nodes`, `.edges`; `.as_dict()` (JSON artifact), `.to_mermaid(direction="TD")`. Truthy iff any tagged data is reachable. |
+| `FlowNode` | dataclass | A reached model with tagged data: `.model`, `.fields` (`tuple[FlowField, ...]`). |
 | `FlowEdge` | dataclass | One forward edge of the walk: `.source`, `.field_name`, `.target`, `.kind`. |
-| `ClassifiedField` | dataclass | `.field_name`, `.classifications`, `.labels` (sorted class-name tuple). |
+| `FlowField` | dataclass | `.field_name`, `.scopes`, `.labels` (sorted names), `.by_dimension` (`{axis: (names,)}`). |
 
 ## The relationship graph
 

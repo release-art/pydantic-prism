@@ -18,8 +18,8 @@ from .errors import (
     StaleProjectionStubError,
 )
 from .flow import (
-    ClassifiedField,
     FlowEdge,
+    FlowField,
     FlowNode,
     FlowReport,
     build_flow_report,
@@ -42,7 +42,7 @@ __all__ = [
     "BackRef",
     "BackRefInfo",
     "Classification",
-    "ClassifiedField",
+    "FlowField",
     "Diagram",
     "Direction",
     "EmbeddedRefInfo",

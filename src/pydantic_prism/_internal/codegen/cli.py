@@ -83,7 +83,7 @@ def _run_flow(args: argparse.Namespace) -> int:
     except CodegenError as exc:
         print(f"prism: {exc}", file=sys.stderr)
         return 2
-    report = model.classified_flow()
+    report = model.data_flow()
     if args.format == "mermaid":
         rendered = report.to_mermaid(direction=args.direction)
     else:

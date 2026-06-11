@@ -1,12 +1,15 @@
-# Trace where classified data flows
+# Trace where scoped data flows
 
-**Goal:** answer the compliance question *given this entry point, where does
-classified data live, and via which references?* — as a JSON artifact or a
+**Goal:** answer the question *given this entry point, where does scoped data
+(PII and otherwise) live, and via which references?* — as a JSON artifact or a
 diagram.
 
-`classified_flow()` walks the forward `ref` / embedded edges reachable from a
-model (breadth-first, cycle-safe) and reports the classified fields of every
-model it reaches.
+`data_flow()` walks the forward `ref` / embedded edges reachable from a model
+(breadth-first, cycle-safe) and reports every **tagged** field of every model it
+reaches, with the field's scopes grouped by **axis**. Axes are inferred
+structurally from the scope inheritance forest (see
+[`dimensions()`](../reference/api.md)), so PII surfaces under its `Classification`
+root automatically — prism is never told which scope is "sensitive."
 
 ```python
 from typing import Annotated
@@ -29,20 +32,36 @@ class Account(ScopedModel):
     user_id: Annotated[UUID, ref(User), scoped(Public)]
 
 
-report = Account.classified_flow()
+report = Account.data_flow()
 assert isinstance(report, FlowReport)
-assert bool(report) is True                       # truthy iff classified data is reachable
-assert [node.model for node in report.nodes] == [User]
+assert bool(report) is True                       # truthy iff tagged data is reachable
+assert [node.model for node in report.nodes] == [Account, User]
 ```
 
-`report.as_dict()` is the JSON artifact — `Account` itself holds nothing
-classified, but it reaches `User.email`:
+`report.as_dict()` is the JSON artifact — every reachable tagged field, its
+scopes grouped by axis (the `Classification` axis is the PII slice):
 
 ```python
 assert report.as_dict() == {
     "root": "Account",
     "nodes": [
-        {"model": "User", "fields": [{"field": "email", "classifications": ["Pii"]}]}
+        {
+            "model": "Account",
+            "fields": [
+                {"field": "id", "dimensions": {"Public": ["Public"]}},
+                {"field": "user_id", "dimensions": {"Public": ["Public"]}},
+            ],
+        },
+        {
+            "model": "User",
+            "fields": [
+                {"field": "id", "dimensions": {"Public": ["Public"]}},
+                {
+                    "field": "email",
+                    "dimensions": {"Classification": ["Pii"], "Public": ["Public"]},
+                },
+            ],
+        },
     ],
     "edges": [
         {"source": "Account", "field": "user_id", "target": "User", "kind": "ref"}
@@ -50,7 +69,8 @@ assert report.as_dict() == {
 }
 ```
 
-For review, render the same report as a Mermaid `classDiagram`:
+For review, render the same report as a Mermaid `classDiagram` — multi-axis
+models badge each field with its axes (`email [Pii]`):
 
 ```python
 mermaid = report.to_mermaid()                     # or to_mermaid(direction="LR")
@@ -67,5 +87,6 @@ $ prism flow myapp.models:Account --format mermaid
 $ prism flow myapp.models:Account --output flow.json
 ```
 
-Wire the JSON form into CI to fail a build when personal data reaches a model
-it shouldn't. See the runnable [`examples/pii_dataflow`](../../examples/pii_dataflow).
+Wire the JSON form into CI to fail a build when PII (an axis rooted at your
+`Classification` subclass) reaches a model it shouldn't. See the runnable
+[`examples/pii_dataflow`](../../examples/pii_dataflow).

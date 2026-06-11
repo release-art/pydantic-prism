@@ -280,6 +280,28 @@ def as_expr(value: object) -> ScopeExpr:
     raise TypeError(f"expected a Scope subclass or a scope expression, got {value!r}")
 
 
+def dimension_root(scope: type[Scope]) -> type[Scope]:
+    """The scope's *axis*: its top ancestor just below :class:`Scope`.
+
+    A dimension (axis) is read purely from the inheritance forest — walk
+    ``__bases__`` up until the parent is ``Scope`` itself. Visibility ladders,
+    the shipped ``Classification`` / ``Direction`` axes, and any user-defined
+    axis are all discovered the same way, with *no* dependence on which base a
+    scope subclasses. The root's name labels the axis. A scope that is a direct
+    subclass of ``Scope`` (or ``Scope`` itself) is its own dimension root.
+    """
+    current = scope
+    while True:
+        parents = [
+            base
+            for base in current.__bases__
+            if issubclass(base, Scope) and base is not Scope
+        ]
+        if not parents:
+            return current
+        current = parents[0]
+
+
 @dataclass(frozen=True, slots=True)
 class _Atom(ScopeExpr):
     scope: type[Scope]

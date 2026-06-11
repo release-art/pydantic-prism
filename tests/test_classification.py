@@ -50,6 +50,17 @@ def test_classified_fields_reads_tags_off_each_field() -> None:
     assert fx.Org.classified_fields() == {}
 
 
+def test_dimensions_groups_scopes_by_axis_structurally() -> None:
+    # The visibility ladder and the Classification axis are inferred from the
+    # inheritance forest — no marker check involved.
+    assert fx.User.dimensions() == {
+        fx.Public: frozenset({fx.Public, fx.Internal}),
+        Classification: frozenset({fx.Pii, fx.Secret}),
+    }
+    # Single-axis model → one dimension.
+    assert fx.Org.dimensions() == {fx.Public: frozenset({fx.Public})}
+
+
 # --- redacted() ------------------------------------------------------------
 
 
@@ -82,42 +93,46 @@ def test_redacted_requires_a_visibility_scope() -> None:
         fx.User.redacted()  # type: ignore[call-arg]  # visible is required
 
 
-# --- classified_flow() / FlowReport ----------------------------------------
+# --- data_flow() / FlowReport (structural) ---------------------------------
 
 
-def test_classified_flow_reports_reachable_classified_data() -> None:
-    report = fx.Account.classified_flow()
+def test_data_flow_reports_every_reachable_tagged_field() -> None:
+    report = fx.Account.data_flow()
     assert isinstance(report, FlowReport)
     assert bool(report) is True
-    # Only User carries classified data; Account/Org are unclassified hops.
-    assert [n.model for n in report.nodes] == [fx.User]
-    node = report.nodes[0]
-    assert {f.field_name: f.labels for f in node.fields} == {
-        "email": ("Pii",),
-        "secret_note": ("Pii", "Secret"),
+    # Every reachable model with tagged fields is a node (BFS order).
+    assert [n.model for n in report.nodes] == [fx.Account, fx.User, fx.Org]
+    user = next(n for n in report.nodes if n.model is fx.User)
+    # Each field's scopes are grouped by axis, inferred structurally — Pii lands
+    # under its Classification root, visibility under Public, no marker import.
+    by_field = {f.field_name: f.by_dimension for f in user.fields}
+    assert by_field["email"] == {"Classification": ("Pii",), "Public": ("Public",)}
+    # .labels is the flat, sorted view of all the field's scopes.
+    email = next(f for f in user.fields if f.field_name == "email")
+    assert email.labels == ("Pii", "Public")
+    assert by_field["secret_note"] == {
+        "Classification": ("Pii", "Secret"),
+        "Public": ("Internal",),
     }
 
 
-def test_flow_report_is_falsy_when_no_classified_data_reachable() -> None:
-    # Org has no refs and no classified fields.
-    report = fx.Org.classified_flow()
+def test_flow_report_is_falsy_when_no_tagged_data_reachable() -> None:
+    # Bare has no tagged fields and no refs.
+    report = fx.Bare.data_flow()
     assert bool(report) is False
     assert report.nodes == ()
     assert report.edges == ()
 
 
 def test_flow_report_as_dict_is_the_compliance_artifact() -> None:
-    data = fx.Account.classified_flow().as_dict()
+    data = fx.Account.data_flow().as_dict()
     assert data["root"] == "Account"
-    assert data["nodes"] == [
-        {
-            "model": "User",
-            "fields": [
-                {"field": "email", "classifications": ["Pii"]},
-                {"field": "secret_note", "classifications": ["Pii", "Secret"]},
-            ],
-        }
-    ]
+    assert [n["model"] for n in data["nodes"]] == ["Account", "User", "Org"]
+    user_node = next(n for n in data["nodes"] if n["model"] == "User")
+    assert {
+        "field": "secret_note",
+        "dimensions": {"Classification": ["Pii", "Secret"], "Public": ["Internal"]},
+    } in user_node["fields"]
     # The diamond re-reaches Org; every forward edge of the walk is recorded.
     edges = {(e["source"], e["field"], e["target"]) for e in data["edges"]}
     assert edges == {
@@ -128,12 +143,12 @@ def test_flow_report_as_dict_is_the_compliance_artifact() -> None:
     assert all(e["kind"] == "ref" for e in data["edges"])
 
 
-def test_flow_report_to_mermaid_shows_classified_fields_and_hops() -> None:
-    mermaid = fx.Account.classified_flow().to_mermaid()
+def test_flow_report_to_mermaid_badges_fields_and_shows_hops() -> None:
+    mermaid = fx.Account.data_flow().to_mermaid()
     assert mermaid.startswith("classDiagram")
-    # Classified model lists its fields with classification labels...
-    assert "Pii+Secret secret_note" in mermaid
-    # ...unclassified reachable models appear as bare nodes.
+    # Multi-axis User badges each field with its cross-dimension tags...
+    assert "str secret_note [Internal, Pii, Secret]" in mermaid
+    # ...single-axis Account/Org appear with un-badged fields.
     assert "class Account" in mermaid
     assert "class Org" in mermaid
     # Edges are labelled with the referencing field.
@@ -141,7 +156,7 @@ def test_flow_report_to_mermaid_shows_classified_fields_and_hops() -> None:
 
 
 def test_flow_report_to_mermaid_direction() -> None:
-    assert "direction LR" in fx.Account.classified_flow().to_mermaid(direction="LR")
+    assert "direction LR" in fx.Account.data_flow().to_mermaid(direction="LR")
 
 
 # --- prism flow CLI --------------------------------------------------------

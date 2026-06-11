@@ -21,23 +21,23 @@ classDiagram
 classDiagram
     direction TB
     class User {
-        +UUID id
-        +str created_at
-        +str email
-        +str password
+        +UUID id [Out, Public]
+        +str created_at [Out, Public]
+        +str email [Public]
+        +str password [In, Public]
     }
     class UserWriteOnly {
-        +str password
+        +str password [Public]
     }
     class UserReadOnly {
-        +UUID id
-        +str created_at
+        +UUID id [Public]
+        +str created_at [Public]
     }
     class UserPublic {
-        +UUID id
-        +str created_at
+        +UUID id [Out]
+        +str created_at [Out]
         +str email
-        +str password
+        +str password [In]
     }
     User --> UserWriteOnly : In
     User --> UserReadOnly : Out

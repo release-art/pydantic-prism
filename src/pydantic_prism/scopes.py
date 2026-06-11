@@ -32,7 +32,7 @@ class Classification(Scope):
     distinct base is what lets prism tell the two axes apart — enumerate a
     model's classifications (:meth:`ScopedModel.classifications`), auto-derive
     audit-safe views (:meth:`ScopedModel.redacted`), and trace where classified
-    data flows (:meth:`ScopedModel.classified_flow`).
+    data flows (:meth:`ScopedModel.data_flow`).
 
     Declare concrete tags by subclassing::
 

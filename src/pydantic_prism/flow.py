@@ -1,11 +1,14 @@
-"""Data-flow governance: trace where classified data flows across the ref graph.
+"""Data-flow governance: trace dimensional data across the ref graph.
 
 :func:`build_flow_report` walks the forward ``ref`` / ``embedded`` edges
-reachable from a root model (BFS, cycle-safe) and reports the classified fields
-of every model personal data can reach. The result, a :class:`FlowReport`,
+reachable from a root model (BFS, cycle-safe) and reports, for every reachable
+model, each tagged field's scopes **grouped by axis** — the structural view.
+PII, direction, visibility, and any user-defined dimension surface alike,
+inferred from the inheritance forest (:meth:`~pydantic_prism.ScopedModel.dimensions`)
+with no dependence on the shipped axis bases. The result, a :class:`FlowReport`,
 renders to JSON (``as_dict``) for a compliance artifact or to a Mermaid diagram
-(``to_mermaid``) for review — the same two-format story as :mod:`._diagram`,
-whose IR the Mermaid path reuses.
+(``to_mermaid``) for review — the same two-format story as :mod:`.diagram`, whose
+IR (and per-field axis badges) the Mermaid path reuses.
 """
 
 from __future__ import annotations
@@ -13,14 +16,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from ._internal.scopes import dimension_root
+
 if TYPE_CHECKING:
+    from ._internal.model import ScopedModel
+    from ._internal.scopes import Scope
     from .diagram import Diagram
-    from .model import ScopedModel
-    from .scopes import Classification
 
 __all__ = [
-    "ClassifiedField",
     "FlowEdge",
+    "FlowField",
     "FlowNode",
     "FlowReport",
     "build_flow_report",
@@ -28,29 +33,46 @@ __all__ = [
 
 
 @dataclass(frozen=True, slots=True)
-class ClassifiedField:
-    """One classified field: its name and the classifications it carries."""
+class FlowField:
+    """One tagged field on a reachable model: its name and every scope it carries.
+
+    Reports *all* the field's scope atoms across *every* axis — visibility,
+    classification (PII), direction, and any user dimension — not just one. Group
+    them by axis with :attr:`by_dimension`; PII appears as the slice rooted at
+    your ``Classification`` subclass, like any other dimension.
+    """
 
     field_name: str
-    classifications: frozenset[type[Classification]]
+    scopes: frozenset[type[Scope]]
 
     @property
     def labels(self) -> tuple[str, ...]:
-        """Classification class names, sorted — the display/serialization form."""
-        return tuple(sorted(c.__name__ for c in self.classifications))
+        """Every scope's class name, sorted — the flat display form."""
+        return tuple(sorted(scope.__name__ for scope in self.scopes))
+
+    @property
+    def by_dimension(self) -> dict[str, tuple[str, ...]]:
+        """The field's scopes grouped by axis: ``{root_name: (scope_names,)}``."""
+        grouped: dict[type[Scope], list[str]] = {}
+        for scope in self.scopes:
+            grouped.setdefault(dimension_root(scope), []).append(scope.__name__)
+        return {
+            root.__name__: tuple(sorted(names))
+            for root, names in sorted(grouped.items(), key=lambda kv: kv[0].__name__)
+        }
 
 
 @dataclass(frozen=True, slots=True)
 class FlowNode:
-    """A reached model that holds classified data, with its classified fields."""
+    """A reached model that holds tagged data, with its tagged fields."""
 
     model: type[ScopedModel]
-    fields: tuple[ClassifiedField, ...]
+    fields: tuple[FlowField, ...]
 
 
 @dataclass(frozen=True, slots=True)
 class FlowEdge:
-    """One forward edge on the path classified data travels (``ref``/``embedded``)."""
+    """One forward edge on the path data travels (``ref`` / ``embedded``)."""
 
     source: type[ScopedModel]
     field_name: str
@@ -60,12 +82,11 @@ class FlowEdge:
 
 @dataclass(frozen=True, slots=True)
 class FlowReport:
-    """Where classified data reachable from ``root`` lives, and how it is reached.
+    """Where dimensional data reachable from ``root`` lives, and how it is reached.
 
-    ``nodes`` are the reachable models carrying classified fields (``root``
-    first, then BFS discovery order); ``edges`` are the forward edges of the
-    walk, so the path to every classified model is visible. Truthy iff any
-    classified data is reachable.
+    ``nodes`` are the reachable models carrying tagged fields (``root`` first,
+    then BFS discovery order); ``edges`` are the forward edges of the walk, so
+    the path to every model is visible. Truthy iff any tagged data is reachable.
     """
 
     root: type[ScopedModel]
@@ -83,7 +104,13 @@ class FlowReport:
                 {
                     "model": node.model.__name__,
                     "fields": [
-                        {"field": f.field_name, "classifications": list(f.labels)}
+                        {
+                            "field": f.field_name,
+                            "dimensions": {
+                                axis: list(names)
+                                for axis, names in f.by_dimension.items()
+                            },
+                        }
                         for f in node.fields
                     ],
                 }
@@ -103,16 +130,20 @@ class FlowReport:
     def to_mermaid(self, *, direction: str = "TD") -> str:
         """Render as a Mermaid ``classDiagram`` of the reachable graph.
 
-        Every reachable model is a node; classified models list their classified
-        fields (annotated with the classifications), and edges are labelled with
-        the referencing field. Reuses the :class:`._diagram.Diagram` renderer.
+        Every reachable model is a node showing its fields with per-axis badges
+        (``email [Pii]``); edges are labelled with the referencing field. Reuses
+        the :class:`.diagram.Diagram` renderer and its structural badges.
         """
         return self._diagram(direction=direction).to_mermaid()
 
     def _diagram(self, *, direction: str) -> Diagram:
-        from .diagram import Diagram, Edge, Node, NodeField
+        from .diagram import (
+            Diagram,
+            Edge,
+            Node,
+            _node_fields,  # pyright: ignore[reportPrivateUsage] — intra-package
+        )
 
-        classified = {node.model: node for node in self.nodes}
         order: list[type[ScopedModel]] = [self.root]
         seen: set[type[ScopedModel]] = {self.root}
         for edge in self.edges:
@@ -121,36 +152,22 @@ class FlowReport:
                     seen.add(model)
                     order.append(model)
         nodes = tuple(
-            Node(
-                id=model.__name__,
-                label=model.__name__,
-                kind="model",
-                fields=tuple(
-                    NodeField(name=f.field_name, type="+".join(f.labels))
-                    for f in classified[model].fields
-                )
-                if model in classified
-                else (),
-            )
+            Node(model.__name__, model.__name__, "model", _node_fields(model))
             for model in order
         )
         edges = tuple(
-            Edge(
-                src=edge.source.__name__,
-                dst=edge.target.__name__,
-                label=edge.field_name,
-            )
+            Edge(edge.source.__name__, edge.target.__name__, edge.field_name)
             for edge in self.edges
         )
         return Diagram(nodes, edges, direction)
 
 
 def build_flow_report(root: type[ScopedModel]) -> FlowReport:
-    """Trace classified data reachable from ``root`` across its ref graph.
+    """Trace dimensional data reachable from ``root`` across its ref graph.
 
     Walks forward ``ref`` / ``embedded`` edges breadth-first (cycle-safe) and
-    collects the classified fields of every model reached. The entry point for
-    :meth:`ScopedModel.classified_flow`.
+    reports every **tagged** field of every model reached, with its scopes across
+    all axes. The entry point for :meth:`ScopedModel.data_flow`.
     """
     edges: list[FlowEdge] = []
     order: list[type[ScopedModel]] = [root]
@@ -163,12 +180,10 @@ def build_flow_report(root: type[ScopedModel]) -> FlowReport:
                 order.append(model)
     nodes: list[FlowNode] = []
     for model in order:
-        fields = model.classified_fields()
-        if fields:
-            nodes.append(
-                FlowNode(
-                    model,
-                    tuple(ClassifiedField(name, tags) for name, tags in fields.items()),
-                )
-            )
+        tagged = tuple(
+            FlowField(name, frozenset(expr.atoms()))
+            for name, expr in model.__field_scopes__.items()
+        )
+        if tagged:
+            nodes.append(FlowNode(model, tagged))
     return FlowReport(root, tuple(nodes), tuple(edges))

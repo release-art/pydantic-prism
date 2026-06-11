@@ -75,7 +75,7 @@ engine is reused. The only new machinery is the distinct base, which lets prism
 tell the two axes apart by *type* — `issubclass(atom, Classification)` partitions
 a field's tags. That partition is what powers
 [`redacted()`](../how-to/redact-pii.md) (strip the classification atoms, keep the
-visibility view) and [`classified_flow()`](../how-to/trace-data-flow.md).
+visibility view) and [`data_flow()`](../how-to/trace-data-flow.md).
 
 The axes are distinguishable by type but not *forbidden* from mixing:
 `Model.scope(Pii)` stays legal ("give me the PII view" is genuinely useful),
@@ -108,3 +108,22 @@ The one wrinkle is that `input()` forks the projection's `model_config` to
 unknown key is rejected rather than silently dropped — the only thing that
 closes the over-posting hole when the canonical itself allows extra keys. That
 is a deliberate strictness choice on the safety axis, overridable per view.
+
+## Axes are the inheritance forest
+
+Notice the pattern: visibility, classification, and direction are each a *tree*
+in the scope-inheritance forest, hanging off a root just below `Scope` (`Public`,
+`Classification`, `Direction`). That structure is enough to **infer the axes at
+runtime** — `dimension_root(scope)` walks `__bases__` up to the root, and
+[`Model.dimensions()`](../reference/api.md) groups a model's scopes by it. The
+root's *name* labels the axis. Crucially this needs *no* knowledge of the shipped
+`Classification` / `Direction` classes — a user-defined `class Tenancy(Scope)`
+with `Shared` / `Private` members is discovered identically.
+
+Graph generation leans on this: diagrams badge each field with its secondary-axis
+tags (`email [Pii]`) and [`data_flow()`](../how-to/trace-data-flow.md) reports
+every reachable field's scopes per axis — all structural, so a new axis shows up
+automatically. The *semantic* operations stay marker-based, though: `redacted()`
+needs to know an axis *means* "strip me" and `input()`/`output()` that `In`/`Out`
+*mean* a direction — meaning that structure alone can't supply. Structure tells
+you the axes exist; the marker bases tell you what they do.

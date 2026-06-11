@@ -9,7 +9,7 @@ and shows the shortest correct way to get it. New to prism? Start with the
 - [Redact PII for an audit view](redact-pii.md) — strip every classification
   from a view with `Model.redacted(...)`.
 - [Trace where classified data flows](trace-data-flow.md) — produce a
-  compliance artifact with `classified_flow()` and `prism flow`.
+  compliance artifact with `data_flow()` and `prism flow`.
 
 ## Shapes & round-trips
 
