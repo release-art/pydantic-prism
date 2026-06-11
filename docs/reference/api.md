@@ -95,7 +95,8 @@ instance's `model_dump`.
 
 | name | kind | summary |
 |---|---|---|
-| `Projection.from_canonical(instance, *, mode, by_alias, context, exclude_none, exclude_unset, exclude_defaults, narrow)` | classmethod | Canonical instance → projected instance; kwargs forwarded to `model_dump`. |
+| `Projection.from_canonical(instance, *, mode, by_alias, context, exclude_none, exclude_unset, exclude_defaults, narrow)` | classmethod | Canonical (or wider projection) instance → projected instance; kwargs forwarded to `model_dump`. The instance-level narrowing counterpart of re-projection. |
+| `Projection.scope(scope, *, name=None, bases=None)` | classmethod | **Re-project**: derive a narrower projection from this one — `Source.scope(__prism_scope__ & scope)`. Only ever narrows (a view can't expose more than it has); returns a *sibling* projection of the canonical, not a subclass. `bases` defaults to this projection's `__prism_bases__`. |
 | `Projection.__prism_source__` | ClassVar | The canonical `ScopedModel` class this projection derives from. |
 | `Projection.__prism_scope__` | ClassVar | The `ScopeExpr` the projection was built for. |
 | `Projection.__prism_bases__` | ClassVar | The carried bases tuple (`()` when none). |

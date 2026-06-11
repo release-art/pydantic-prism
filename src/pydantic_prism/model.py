@@ -116,6 +116,42 @@ class Projection(BaseModel):
             data = _narrow(cls, cast(Mapping[str, Any], data))
         return cls.model_validate(data, context=context)
 
+    @classmethod
+    def scope(
+        cls,
+        scope: ScopeLike,
+        *,
+        name: str | None = None,
+        bases: Sequence[type[BaseModel]] | None = None,
+    ) -> type[Projection]:
+        """Re-project: derive a **narrower** projection from this one.
+
+        A projection's fields carry no scope tags (they are stripped at build
+        time), so re-projection delegates to the canonical source with the
+        **intersection** of this projection's scope and ``scope``::
+
+            UserInternal = User.scope(Internal)
+            UserInternal.scope(Public)  # == User.scope(Internal & Public)
+
+        Intersection means re-projection can only ever **narrow** — a view cannot
+        expose more than it has, so re-projecting to a wider scope cannot bring
+        back fields this projection dropped (``UserPublic.scope(Internal)`` has
+        the ``Public`` fields, not Internal-only ones). The result is *another
+        projection of the canonical* (a sibling, not a subclass of this one),
+        consistent with projections-not-inheritance.
+
+        ``bases`` defaults to this projection's carried ``__prism_bases__`` so
+        base behavior survives the narrowing; ``name``/``bases`` forward to
+        :meth:`ScopedModel.scope`. The auto-name comes from the intersected
+        expression (e.g. ``UserInternalAndPublic``) — pass ``name=`` for a
+        stable one. To narrow an *instance*, use :meth:`from_canonical`.
+        """
+        return cls.__prism_source__.scope(
+            cls.__prism_scope__ & as_expr(scope),
+            name=name,
+            bases=cls.__prism_bases__ if bases is None else bases,
+        )
+
 
 class ScopedModel(BaseModel):
     """Canonical pydantic model whose fields are tagged with scopes.

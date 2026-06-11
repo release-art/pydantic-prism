@@ -99,6 +99,8 @@ def test_unresolvable_circular_string_ref() -> None:
         Lonely.__refs__["other_id"]
 
 
-def test_projection_classes_cannot_be_rescoped() -> None:
+def test_projection_classes_can_be_rescoped_to_narrow() -> None:
+    # Round 18: projections re-project (narrowing); see test_reprojection.py.
     projected = Target.scope(Public)
-    assert not hasattr(projected, "scope")
+    assert hasattr(projected, "scope")
+    assert projected.scope(Public).__prism_source__ is Target
