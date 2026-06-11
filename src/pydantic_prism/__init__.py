@@ -20,6 +20,7 @@ from .errors import (
     ProjectionBaseError,
     ProjectionNameError,
     RefResolutionError,
+    ToolSchemaDepthWarning,
 )
 from .flow import (
     FlowEdge,
@@ -39,6 +40,7 @@ from .refs import (
     RefShape,
 )
 from .scopes import Classification, Direction, In, Out
+from .toolschema import ToolProvider
 from .validators import scoped_validator
 
 try:
@@ -78,6 +80,8 @@ __all__ = [
     "ScopeExpr",
     "Scoped",
     "ScopedModel",
+    "ToolProvider",
+    "ToolSchemaDepthWarning",
     "backref",
     "build_flow_report",
     "projection_diagram",

@@ -28,6 +28,7 @@ from .scopes import Classification, In, Out  # bundled taxonomy
 
 if TYPE_CHECKING:
     from .flow import FlowReport
+    from .toolschema import ToolProvider
 
 __all__ = ["Projection", "ScopedModel"]
 
@@ -172,6 +173,55 @@ class Projection(BaseModel):
             cls.__prism_scope__ & as_expr(scope),
             name=name,
             bases=cls.__prism_bases__ if bases is None else bases,
+        )
+
+    @classmethod
+    def tool_schema(
+        cls,
+        *,
+        provider: ToolProvider = "openai",
+        strict: bool = True,
+        name: str | None = None,
+        description: str | None = None,
+        envelope: bool = True,
+    ) -> dict[str, Any]:
+        """Render this projection as an LLM tool / function schema.
+
+        The projection already hides the fields the model should not see and
+        carries any per-scope ``description`` / ``examples``; this method
+        normalizes its ``model_json_schema()`` for ``provider`` and wraps it in
+        that provider's tool envelope (ready to pass to the ``openai`` /
+        ``anthropic`` / ``mistral`` SDK — no SDK is imported; ``mistral`` uses
+        the OpenAI-compatible tools format).
+
+        ``strict=True`` (the default, and what OpenAI recommends) applies the
+        rewrites OpenAI strict structured outputs require: every object gets
+        ``additionalProperties: false`` and lists all its properties as
+        ``required``, and an optional/defaulted field becomes a ``"null"`` union
+        with its ``default`` dropped. This is the one place prism rewrites types
+        rather than only filtering fields — opt out with ``strict=False`` (e.g.
+        for Anthropic, whose ``input_schema`` is plain JSON Schema). Under
+        ``provider="openai", strict=True`` a schema that nests objects deeper
+        than 5 levels (or a recursive model) emits a
+        :class:`~pydantic_prism.ToolSchemaDepthWarning`.
+
+        ``name`` defaults to the projection class name; ``description`` falls
+        back to the projection's per-scope model description when present.
+
+        ``envelope=False`` returns just the normalized parameters schema instead
+        of the provider envelope — the shape a framework wants for its own tool
+        definition (e.g. Pydantic AI's ``ToolDefinition.parameters_json_schema``).
+        ``provider`` then only governs the OpenAI depth check.
+        """
+        from .toolschema import build
+
+        return build(
+            cls,
+            provider=provider,
+            strict=strict,
+            name=name,
+            description=description,
+            envelope=envelope,
         )
 
 
@@ -511,6 +561,44 @@ class ScopedModel(BaseModel):
         select raises :class:`ProjectionBaseError`.
         """
         return cls._build_projection(as_expr(scope), name, bases, None)
+
+    @classmethod
+    def tool_schema(
+        cls,
+        scope: ScopeLike | None = None,
+        *,
+        provider: ToolProvider = "openai",
+        strict: bool = True,
+        name: str | None = None,
+        description: str | None = None,
+        envelope: bool = True,
+    ) -> dict[str, Any]:
+        """Render a scope of this model as an LLM tool / function schema.
+
+        A one-step convenience equivalent to
+        ``Model.scope(scope).tool_schema(...)`` — see
+        :meth:`Projection.tool_schema` for the ``provider`` / ``strict`` /
+        ``name`` / ``description`` / ``envelope`` contract. ``scope`` falls back
+        to the model's ``default_scope=`` when omitted (and raises if neither is
+        given). For write-side (mass-assignment-safe) tool inputs, build the
+        projection explicitly instead: ``Model.input(scope).tool_schema(...)``.
+        """
+        if scope is not None:
+            expr = as_expr(scope)
+        elif cls.__prism_default_scope__ is not None:
+            expr = cls.__prism_default_scope__
+        else:
+            raise TypeError(
+                f"{cls.__name__}.tool_schema() requires a scope, or a "
+                f"default_scope= on the model"
+            )
+        return cls.scope(expr).tool_schema(
+            provider=provider,
+            strict=strict,
+            name=name,
+            description=description,
+            envelope=envelope,
+        )
 
     @classmethod
     def _build_projection(

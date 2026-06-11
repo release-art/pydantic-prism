@@ -16,6 +16,7 @@ __all__ = [
     "ProjectionBaseError",
     "ProjectionNameError",
     "RefResolutionError",
+    "ToolSchemaDepthWarning",
 ]
 
 
@@ -53,6 +54,18 @@ class PrismOrderingWarning(PrismWarning):
     depends on the base hook's transformation it sees untransformed data. Fix
     by calling :meth:`ScopedModel.run_inherited_before` inside the validator, or
     assert independence with ``parent_ordering="acknowledged"`` to silence it.
+    """
+
+
+class ToolSchemaDepthWarning(PrismWarning):
+    """An LLM tool schema nests objects deeper than the provider allows.
+
+    Emitted by ``tool_schema(provider="openai", strict=True)`` when the
+    projection's object nesting exceeds OpenAI's 5-level limit for strict
+    structured outputs, or when a recursive (self-referential) model makes the
+    depth unbounded. prism still returns the schema unchanged — the warning
+    surfaces the likely API rejection at build time rather than as an opaque
+    400 from the vendor. Project to a shallower scope, or drop ``strict=True``.
     """
 
 

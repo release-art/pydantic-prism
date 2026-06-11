@@ -22,6 +22,8 @@ job. Pick the column that matches what you need right now.
 - [Trace where classified data flows](how-to/trace-data-flow.md)
 - [Prevent mass-assignment (read-only / write-only fields)](how-to/prevent-mass-assignment.md)
 - [Build a PATCH / partial-update model](how-to/partial-update.md)
+- [Derive an LLM tool / function schema](how-to/derive-llm-tool-schema.md)
+- [Use projections with Pydantic AI](how-to/use-with-pydantic-ai.md)
 - [Use projections with FastAPI](how-to/use-with-fastapi.md)
 - [Bridge a SQLModel or SQLAlchemy ORM](how-to/bridge-an-orm.md)
 - [Carry a custom pydantic base onto projections](how-to/carry-a-custom-base.md)
