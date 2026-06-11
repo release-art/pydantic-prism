@@ -1,14 +1,14 @@
 # CLI reference
 
-The `prism` console script (installed with the package). Everything is also
+The `pydantic-prism` console script (installed with the package). Everything is also
 available as `python -m pydantic_prism <command>`. There are four subcommands:
 `gen`, `check`, `diagram`, `flow`.
 
 ```console
-$ prism <command> [options]
+$ pydantic-prism <command> [options]
 ```
 
-## `prism gen`
+## `pydantic-prism gen`
 
 Generate the static-typing stub module (and optionally a README) from
 `[tool.pydantic-prism]`.
@@ -19,28 +19,28 @@ Generate the static-typing stub module (and optionally a README) from
 | `--readme PATH` | config value | Also write a GitHub-rendered model doc at `PATH` (overrides config). |
 
 ```console
-$ prism gen
-prism: wrote 4 projection stub(s) to myapp/_prism.py
+$ pydantic-prism gen
+pydantic-prism: wrote 4 projection stub(s) to myapp/_prism.py
 ```
 
 See [generate editor stubs](../how-to/generate-editor-stubs.md).
 
-## `prism check`
+## `pydantic-prism check`
 
 Exit non-zero if the generated stub module (or configured README) is out of
 date. A CI gate. Same options as `gen`.
 
 ```console
-$ prism check
-prism: myapp/_prism.py is up to date        # exit 0; exit 1 if stale
+$ pydantic-prism check
+pydantic-prism: myapp/_prism.py is up to date        # exit 0; exit 1 if stale
 ```
 
-## `prism diagram`
+## `pydantic-prism diagram`
 
 Render a structure diagram to stdout or a file.
 
 ```console
-$ prism diagram {scope|projection|refs} [module:Name ...] [options]
+$ pydantic-prism diagram {scope|projection|refs} [module:Name ...] [options]
 ```
 
 | argument / option | values | default | meaning |
@@ -52,20 +52,20 @@ $ prism diagram {scope|projection|refs} [module:Name ...] [options]
 | `--direction` | `TD` / `LR` | `TD` | Layout direction. |
 
 ```console
-$ prism diagram scope
-$ prism diagram projection myapp.models:User --format dot --output user.dot
-$ prism diagram refs myapp.models:Order --format json
+$ pydantic-prism diagram scope
+$ pydantic-prism diagram projection myapp.models:User --format dot --output user.dot
+$ pydantic-prism diagram refs myapp.models:Order --format json
 ```
 
 See [export diagrams](../how-to/export-diagrams.md).
 
-## `prism flow`
+## `pydantic-prism flow`
 
 Trace where classified (PII/Secret) data flows from a model across its ref
 graph, and emit the compliance artifact.
 
 ```console
-$ prism flow module:Model [options]
+$ pydantic-prism flow module:Model [options]
 ```
 
 | argument / option | values | default | meaning |
@@ -76,8 +76,8 @@ $ prism flow module:Model [options]
 | `--direction` | `TD` / `LR` | `TD` | Layout direction (Mermaid only). |
 
 ```console
-$ prism flow myapp.models:Account
-$ prism flow myapp.models:Account --format mermaid --output flow.mmd
+$ pydantic-prism flow myapp.models:Account
+$ pydantic-prism flow myapp.models:Account --format mermaid --output flow.mmd
 ```
 
 See [trace data flow](../how-to/trace-data-flow.md).
@@ -94,7 +94,7 @@ See [trace data flow](../how-to/trace-data-flow.md).
 
 ```toml
 [tool.pydantic-prism]
-output = "myapp/_prism.py"          # required: where prism gen writes the stub module
+output = "myapp/_prism.py"          # required: where pydantic-prism gen writes the stub module
 modules = ["myapp.models"]          # scan these for ScopedModels (one stub per scope)
 readme = "myapp/MODELS.md"          # optional: also emit a GitHub model doc
 

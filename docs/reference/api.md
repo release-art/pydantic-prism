@@ -14,7 +14,7 @@ from pydantic_prism import (
     FlowReport, FlowNode, FlowEdge, FlowField, build_flow_report,
     Diagram, scope_diagram, projection_diagram,
     PrismError, EmptyProjectionError, ProjectionNameError,
-    ProjectionBaseError, RefResolutionError, StaleProjectionStubError,
+    ProjectionBaseError, RefResolutionError,
     PrismWarning, PrismBaseDropWarning, PrismOrderingWarning,
 )
 ```
@@ -175,5 +175,5 @@ See the dedicated [errors reference](errors.md). All domain errors subclass
 
 ## CLI
 
-See the [CLI reference](cli.md) for `prism gen` / `check` / `diagram` / `flow`
+See the [CLI reference](cli.md) for `pydantic-prism gen` / `check` / `diagram` / `flow`
 and `[tool.pydantic-prism]`.

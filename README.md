@@ -85,7 +85,7 @@ your need fits:
 - **[How-to guides](docs/how-to/README.md)** — short recipes: redact PII,
   trace data flow, PATCH models, FastAPI, ORM bridge, editor stubs, diagrams.
 - **[Reference](docs/reference/README.md)** — the [API](docs/reference/api.md),
-  the [`prism` CLI](docs/reference/cli.md), and the [error table](docs/reference/errors.md).
+  the [`pydantic-prism` CLI](docs/reference/cli.md), and the [error table](docs/reference/errors.md).
 - **[Explanation](docs/explanation/README.md)** — the scope algebra, why
   projections aren't inheritance, what `ref()` does and does not model.
 

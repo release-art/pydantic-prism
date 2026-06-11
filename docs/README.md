@@ -9,7 +9,7 @@ job. Pick the column that matches what you need right now.
 |---|---|
 | **[Tutorial](tutorial/first-scoped-model.md)** — learning | One hand-held lesson: take a single model from definition to two working projections. Start here. |
 | **[How-to guides](how-to/README.md)** — tasks | Short, goal-shaped recipes for a capability you already know you want. |
-| **[Reference](reference/README.md)** — information | Dry and complete: the [API](reference/api.md), the [`prism` CLI](reference/cli.md), the [error table](reference/errors.md). |
+| **[Reference](reference/README.md)** — information | Dry and complete: the [API](reference/api.md), the [`pydantic-prism` CLI](reference/cli.md), the [error table](reference/errors.md). |
 | **[Explanation](explanation/README.md)** — understanding | The "why": the [scope algebra](explanation/scopes-and-the-algebra.md), [projections vs inheritance](explanation/projections-not-inheritance.md), [what `ref()` models](explanation/what-ref-models.md), [vs prior art](explanation/vs-prior-art.md). |
 
 ## All pages
@@ -25,7 +25,7 @@ job. Pick the column that matches what you need right now.
 - [Use projections with FastAPI](how-to/use-with-fastapi.md)
 - [Bridge a SQLModel or SQLAlchemy ORM](how-to/bridge-an-orm.md)
 - [Carry a custom pydantic base onto projections](how-to/carry-a-custom-base.md)
-- [Generate editor stubs (`prism gen`)](how-to/generate-editor-stubs.md)
+- [Generate editor stubs (`pydantic-prism gen`)](how-to/generate-editor-stubs.md)
 - [Export scope / projection / relationship diagrams](how-to/export-diagrams.md)
 - [Vary a field's schema per projection](how-to/vary-schema-per-scope.md)
 

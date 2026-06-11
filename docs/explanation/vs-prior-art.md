@@ -62,7 +62,7 @@ Two things, and they are the differentiators:
 | embedded "ref record" projections | auto-registered `embedded` edges with provenance | — | — |
 | all-optional Update views | any scope: `partial=True` | — | fixed `Update`/`UpdateOptional` views |
 | custom pydantic bases on derived models | `projection_bases=` / `bases=`, `isinstance`-true | — | — |
-| static typing of derived models | `prism gen` stubs (pyright/Pylance/mypy) + startup drift check | — | — |
+| static typing of derived models | `pydantic-prism gen` stubs (pyright/Pylance/mypy) + `pydantic-prism check` CI drift gate | — | — |
 | per-projection schema metadata | per-scope field & model `description` / `examples` / `json_schema_extra` | — | — |
 | diagram export | scope / projection / relationship graphs → Mermaid, DOT, D2, JSON | — | — |
 | classification & data-flow | `Classification` axis, `redacted()`, `data_flow()` | — | — |

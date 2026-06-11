@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from ..drift import projection_signature
 from ..model import (
     Projection,
     _auto_name,  # pyright: ignore[reportPrivateUsage] — intra-package
@@ -51,19 +50,14 @@ def generate(config: Config) -> str:
         )
 
     imports = _Imports()
-    imports.add_runtime("pydantic_prism._internal.drift", "assert_fresh")
     imports.add_typing("pydantic_prism", "Projection")
 
     class_blocks: list[str] = []
     alias_lines: list[str] = []
-    assert_lines: list[str] = []
 
     for proj in projections:
         class_blocks.append(_render_class(proj, imports))
         alias_lines.append(_render_alias(proj, imports))
-        assert_lines.append(
-            f'assert_fresh({proj.__name__}, "{projection_signature(proj)}")'
-        )
 
     out: list[str] = [
         _BANNER.rstrip("\n"),
@@ -82,7 +76,6 @@ def generate(config: Config) -> str:
     out.append("else:")
     out.extend(f"    {line}" for line in alias_lines)
     out.append("")
-    out.extend(assert_lines)
     return "\n".join(out) + "\n"
 
 

@@ -45,6 +45,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whether their child validators depend on the parent's transformation — and
   prefer `mode="after"` where the derivation allows it.
 
+### Removed
+
+- **Runtime stub-drift guard, and `StaleProjectionStubError`.** Generated stub
+  modules no longer emit per-projection `assert_fresh(...)` calls, and the
+  `StaleProjectionStubError` exception is removed. The runtime alias
+  (`X = Model.scope(...)`) is recomputed live on every import, so it is never
+  stale; only the static `TYPE_CHECKING` stub the type checker reads can drift,
+  and `prism check` already catches that by regenerating the module and
+  byte-diffing it. The runtime check guarded a consumer that doesn't exist at
+  runtime, at the cost of per-projection work at every startup and an
+  app-won't-boot failure mode for what is a CI/static-typing concern.
+  **Migration:** ensure `prism check` runs in CI (it was already the
+  recommended gate); no application code change is needed.
+
 ## [0.1.0] - 2026-06-10
 
 First public release. Requires Python >= 3.12 and pydantic >= 2.12. See the
