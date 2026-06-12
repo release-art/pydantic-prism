@@ -24,7 +24,10 @@ from pydantic.experimental.missing_sentinel import MISSING
 from pydantic.fields import FieldInfo
 
 from ...errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameError
-from ...markers import PRISM_MARKERS
+from ...markers import (
+    _NO_TYPE,  # pyright: ignore[reportPrivateUsage] — intra-package
+    PRISM_MARKERS,
+)
 from ...model import (
     Projection,
     ScopedModel,
@@ -33,7 +36,8 @@ from ...model import (
 from ..scopes import ScopeExpr
 from .bases import _warn_dropped_behavior
 from .behaviors import _copy_behaviors
-from .schema import _apply_field_schema, _apply_model_schema
+from .collect import _project_refs
+from .schema import _apply_field_spec, _apply_model_schema
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -155,6 +159,25 @@ def _surviving_fields(cls: type[ScopedModel], expr: ScopeExpr) -> list[str]:
     return surviving
 
 
+def _record_field_payload(
+    marker: Any,
+    field_name: str,
+    retyped: dict[str, Any],
+    encoders: dict[str, Callable[[Any], Any]],
+    decoders: dict[str, Callable[[Any], Any]],
+) -> None:
+    """Record a field's ``as_type`` (for ref re-derivation) and converters."""
+    if marker is None:
+        return
+    if marker.field_type is not _NO_TYPE:
+        retyped[field_name] = marker.field_type
+    if marker.convert is not None:
+        if marker.convert.encode is not None:
+            encoders[field_name] = marker.convert.encode
+        if marker.convert.decode is not None:
+            decoders[field_name] = marker.convert.decode
+
+
 def _project(
     cls: type[ScopedModel],
     expr: ScopeExpr,
@@ -201,9 +224,13 @@ def _project(
 
     partial = expr.is_partial()
     field_definitions: dict[str, tuple[Any, FieldInfo]] = {}
+    encoders: dict[str, Callable[[Any], Any]] = {}
+    decoders: dict[str, Callable[[Any], Any]] = {}
+    retyped: dict[str, Any] = {}  # field -> override annotation (for ref re-derivation)
     for field_name in surviving:
         info = copy.deepcopy(cls.model_fields[field_name])
-        _apply_field_schema(cls, field_name, expr, info)
+        marker = _apply_field_spec(cls, field_name, expr, info)
+        _record_field_payload(marker, field_name, retyped, encoders, decoders)
         info.metadata = [m for m in info.metadata if not isinstance(m, PRISM_MARKERS)]
         info.annotation = _rewrite(info.annotation, expr, ctx)
         if partial:
@@ -241,7 +268,9 @@ def _project(
     projection.__prism_source__ = cls
     projection.__prism_scope__ = expr
     projection.__prism_bases__ = carried
-    projection.__refs__ = cls.__refs__.filtered(surviving)
+    projection.__refs__ = _project_refs(cls, surviving, retyped)
+    projection.__prism_encoders__ = encoders
+    projection.__prism_decoders__ = decoders
     _copy_behaviors(cls, projection)
     del ctx.pending[key]
     ctx.built[key] = projection

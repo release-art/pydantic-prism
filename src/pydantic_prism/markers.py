@@ -9,7 +9,7 @@ constraints).
 from __future__ import annotations
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -26,7 +26,7 @@ from ._internal.scopes import (
 if TYPE_CHECKING:
     from .model import ScopedModel
 
-__all__ = ["BackRef", "Ref", "Scoped", "backref", "ref", "scoped"]
+__all__ = ["BackRef", "Converter", "Ref", "Scoped", "backref", "ref", "scoped"]
 
 # The keyword names ``Field(...)`` actually understands. Pydantic silently routes
 # *unknown* kwargs into ``json_schema_extra`` (deprecated, removed in v3), so the
@@ -38,6 +38,25 @@ _FIELD_KWARGS = frozenset(
     if param.kind is not inspect.Parameter.VAR_KEYWORD
 )
 
+# Sentinel for "no as_type= given" — distinct from ``as_type=None`` (≡ NoneType).
+_NO_TYPE: Any = object()
+
+
+@dataclass(frozen=True, slots=True)
+class Converter:
+    """A per-scope round-trip converter for a type-overridden field.
+
+    ``encode`` maps a canonical field value to its projection form (run by
+    :meth:`Projection.from_canonical`); ``decode`` maps it back (run by
+    :meth:`ScopedModel.from_projection` / :meth:`ScopedModel.with_updates`). Both
+    are optional — supply only the direction(s) you need; an absent direction
+    falls back to pydantic's native coercion (and may raise if the types do not
+    bridge). Used with ``scoped(Scope, as_type=..., convert=Converter(...))``.
+    """
+
+    encode: Callable[[Any], Any] | None = None
+    decode: Callable[[Any], Any] | None = None
+
 
 @dataclass(frozen=True, slots=True)
 class Scoped:
@@ -47,10 +66,14 @@ class Scoped:
     whose explicitly-set attributes — description, examples, json_schema_extra,
     constraints (``min_length`` / ``ge`` / ``pattern`` / …), alias, default, … —
     overlay the field in projections selecting this marker's (single) scope.
+    ``field_type`` (when not the ``_NO_TYPE`` sentinel) replaces the field's
+    annotation in that scope, and ``convert`` carries its round-trip converter.
     """
 
     expr: ScopeExpr
     field_override: FieldInfo | None = None
+    field_type: Any = _NO_TYPE
+    convert: Converter | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +96,8 @@ class BackRef:
 def scoped(
     *scopes: ScopeLike,
     override: FieldInfo | Mapping[str, Any] | None = None,
+    as_type: Any = _NO_TYPE,
+    convert: Converter | None = None,
 ) -> Scoped:
     """Tag a field with the scopes (or scope expression) it belongs to.
 
@@ -100,9 +125,30 @@ def scoped(
             Field(max_length=5000),   # canonical, shared by every projection
         ]
 
-    An ``override``-carrying ``scoped()`` must name exactly one ``Scope`` class
-    (so its override keys to a single scope); split membership across markers to
-    attach a per-scope override::
+    ``as_type=`` goes one step further than ``override=``: it replaces the
+    field's *annotation* in that scope (the one thing a ``Field`` cannot carry).
+    Since a projection then holds a value of a different type than the canonical,
+    pass ``convert=Converter(encode=…, decode=…)`` to keep round-trips total
+    (``encode`` runs in :meth:`Projection.from_canonical`, ``decode`` in
+    :meth:`ScopedModel.from_projection`); omit a direction to fall back to
+    pydantic's native coercion::
+
+        created: Annotated[
+            datetime,
+            scoped(Storage),
+            scoped(
+                Llm,
+                as_type=str,
+                convert=Converter(
+                    encode=datetime.isoformat, decode=datetime.fromisoformat
+                ),
+                override=Field(description="ISO-8601 timestamp"),
+            ),
+        ]
+
+    A ``scoped()`` carrying *any* per-scope payload (``override`` / ``as_type`` /
+    ``convert``) must name exactly one ``Scope`` class (so it keys to a single
+    scope); split membership across markers to attach per-scope payloads::
 
         email: Annotated[
             str,
@@ -134,13 +180,14 @@ def scoped(
                     f"{', '.join(unknown)}; pass valid pydantic Field() keywords"
                 )
             info = Field(**dict(override))
-        if len(expr.atoms()) != 1:
-            raise TypeError(
-                "scoped(...) with override= must reference exactly one scope; "
-                "split membership across separate scoped() markers to attach a "
-                "per-scope override"
-            )
-    return Scoped(expr, field_override=info)
+    has_payload = info is not None or as_type is not _NO_TYPE or convert is not None
+    if has_payload and len(expr.atoms()) != 1:
+        raise TypeError(
+            "scoped(...) with per-scope payload (override / as_type / convert) "
+            "must reference exactly one scope; split membership across separate "
+            "scoped() markers to attach per-scope payloads"
+        )
+    return Scoped(expr, field_override=info, field_type=as_type, convert=convert)
 
 
 def _check_str(value: object, message: str) -> None:

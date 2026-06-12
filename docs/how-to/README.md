@@ -20,6 +20,8 @@ and shows the shortest correct way to get it. New to prism? Start with the
 - [Vary a field's schema per projection](vary-schema-per-scope.md) — per-scope
   `description` / `examples` / constraints / `default`, all via one
   `override=Field(...)`.
+- [Change a field's type per projection](retype-a-field-per-scope.md) — per-scope
+  `as_type=`, with `Converter` round-trip hooks and ref-graph re-derivation.
 - [Keep model behavior on projections](keep-behavior-on-projections.md) — carry
   methods / properties / classmethods onto projections; opt out with
   `@unprojected`.

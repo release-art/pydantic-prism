@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic.fields import FieldInfo
 
-from ...markers import Scoped
+from ...markers import (
+    _NO_TYPE,  # pyright: ignore[reportPrivateUsage] — intra-package
+    Scoped,
+)
 from ..scopes import (
     Scope,
     ScopeExpr,
@@ -17,11 +20,11 @@ if TYPE_CHECKING:
     from ...model import ScopedModel
 
 __all__ = [
-    "_apply_field_schema",
+    "_apply_field_spec",
     "_apply_model_schema",
     "_merge_constraints",
     "_merge_json_schema_extra",
-    "_resolve_field_override",
+    "_resolve_field_spec",
 ]
 
 
@@ -39,63 +42,79 @@ def _merge_json_schema_extra(original: Any, extra: dict[str, Any]) -> Any:
     return base
 
 
-def _resolve_field_override(
+def _resolve_field_spec(
     cls: type[ScopedModel], field_name: str, expr: ScopeExpr
-) -> FieldInfo | None:
-    """The per-scope field override that applies in projection ``expr``, if any.
+) -> Scoped | None:
+    """The per-scope payload marker that applies in projection ``expr``, if any.
 
-    Markers whose scope ``expr`` selects are candidates; the most-derived scope
-    (a subclass of every other candidate) wins. Candidates with no subclass
-    relation are ambiguous and raise.
+    Markers carrying a payload (``override`` / ``as_type`` / ``convert``) whose
+    scope ``expr`` selects are candidates; the most-derived scope (a subclass of
+    every other candidate) wins wholesale — the winning marker supplies *all*
+    three aspects. Candidates with no subclass relation are ambiguous and raise.
     """
-    candidates: list[tuple[type[Scope], FieldInfo]] = []
+    candidates: list[tuple[type[Scope], Scoped]] = []
     for marker in cls.model_fields[field_name].metadata:
         if (
             isinstance(marker, Scoped)
-            and marker.field_override is not None
+            and _has_payload(marker)
             and expr.selects(marker.expr)
         ):
             scope = next(iter(marker.expr.atoms()))  # single atom (enforced)
-            candidates.append((scope, marker.field_override))
+            candidates.append((scope, marker))
     if not candidates:
         return None
     if len(candidates) == 1:
         return candidates[0][1]
     scopes = [scope for scope, _ in candidates]
-    for scope, override in candidates:
+    for scope, marker in candidates:
         if all(issubclass(scope, other) for other in scopes):
-            return override
+            return marker
     names = ", ".join(sorted(scope.__name__ for scope in scopes))
     raise TypeError(
-        f"{cls.__name__}.{field_name}: ambiguous scoped() override in projection "
-        f"{expr!r}; scopes {names} all apply and are unrelated — attach the override "
+        f"{cls.__name__}.{field_name}: ambiguous scoped() payload in projection "
+        f"{expr!r}; scopes {names} all apply and are unrelated — attach the payload "
         f"to a single common scope or narrow the projection"
     )
 
 
-def _apply_field_schema(
-    cls: type[ScopedModel], field_name: str, expr: ScopeExpr, info: FieldInfo
-) -> None:
-    """Overlay the resolved per-scope field override onto a projected ``FieldInfo``.
+def _has_payload(marker: Scoped) -> bool:
+    """Whether a marker carries any per-scope payload (override/as_type/convert)."""
+    return (
+        marker.field_override is not None
+        or marker.field_type is not _NO_TYPE
+        or marker.convert is not None
+    )
 
-    Only the override's *explicitly-set* attributes apply: scalar attributes
-    (description, examples, alias, default, …) from ``_attributes_set``, and
-    constraints (``MinLen`` / ``Ge`` / …) from ``.metadata``. ``json_schema_extra``
-    merges with the canonical's; constraints merge by kind; the rest replace.
+
+def _apply_field_spec(
+    cls: type[ScopedModel], field_name: str, expr: ScopeExpr, info: FieldInfo
+) -> Scoped | None:
+    """Apply the resolved per-scope payload onto a projected ``FieldInfo``.
+
+    Sets the overridden annotation (``as_type``) — *before* the caller rewrites
+    nested models — then overlays the ``override`` ``FieldInfo`` (its
+    explicitly-set scalar attributes, with ``json_schema_extra`` merged and
+    constraints merged by kind). Returns the winning marker (so the builder can
+    read its ``field_type`` for ref re-derivation and its ``convert``), or None.
     """
-    override = _resolve_field_override(cls, field_name, expr)
-    if override is None:
-        return
-    attributes_set: dict[str, Any] = override._attributes_set  # pyright: ignore[reportPrivateUsage]
-    for key, value in attributes_set.items():
-        if key == "json_schema_extra":
-            info.json_schema_extra = _merge_json_schema_extra(
-                info.json_schema_extra, cast("dict[str, Any]", value)
-            )
-        else:
-            setattr(info, key, value)
-    if override.metadata:
-        info.metadata = _merge_constraints(info.metadata, override.metadata)
+    marker = _resolve_field_spec(cls, field_name, expr)
+    if marker is None:
+        return None
+    if marker.field_type is not _NO_TYPE:
+        info.annotation = marker.field_type
+    override = marker.field_override
+    if override is not None:
+        attributes_set: dict[str, Any] = override._attributes_set  # pyright: ignore[reportPrivateUsage]
+        for key, value in attributes_set.items():
+            if key == "json_schema_extra":
+                info.json_schema_extra = _merge_json_schema_extra(
+                    info.json_schema_extra, cast("dict[str, Any]", value)
+                )
+            else:
+                setattr(info, key, value)
+        if override.metadata:
+            info.metadata = _merge_constraints(info.metadata, override.metadata)
+    return marker
 
 
 def _merge_constraints(canonical: list[Any], overlay: list[Any]) -> list[Any]:

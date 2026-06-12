@@ -9,7 +9,7 @@ imports of the engine to call time to break the cycle.
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, TypeVar, cast
 
@@ -105,6 +105,10 @@ class Projection(BaseModel):
     __prism_scope__: ClassVar[ScopeExpr]
     __prism_bases__: ClassVar[tuple[type[BaseModel], ...]] = ()
     __refs__: ClassVar[RefGraph]
+    # Per-field round-trip converters for ``as_type=`` fields (Converter.encode /
+    # .decode), keyed by python field name. Empty unless a field was retyped.
+    __prism_encoders__: ClassVar[dict[str, Callable[[Any], Any]]] = {}
+    __prism_decoders__: ClassVar[dict[str, Callable[[Any], Any]]] = {}
 
     @classmethod
     def run_inherited_before(cls, data: Any) -> Any:
@@ -686,7 +690,7 @@ class ScopedModel(BaseModel):
         baseline. Apply it to one with :meth:`with_updates` instead; passing a
         partial projection here raises :class:`TypeError`.
         """
-        from ._internal.model.narrow import _validation_key
+        from ._internal.model.narrow import _apply_decoders, _validation_key
 
         if (
             isinstance(projection, Projection)
@@ -700,6 +704,9 @@ class ScopedModel(BaseModel):
                 f"build from a non-partial projection of {cls.__name__}"
             )
         data = dict(projection.model_dump(by_alias=True))
+        if isinstance(projection, Projection):
+            # Decode any as_type= field back toward the canonical (no-op otherwise).
+            data = _apply_decoders(type(projection), data)
         for key, value in extra.items():
             info = cls.model_fields.get(key)
             data[_validation_key(key, info) if info else key] = value
@@ -731,10 +738,14 @@ class ScopedModel(BaseModel):
                     else ""
                 )
             )
-        merged = {
-            **self.model_dump(by_alias=True),
-            **patch.model_dump(by_alias=True, exclude_unset=True),
-        }
+        from ._internal.model.narrow import _apply_decoders
+
+        # Decode any as_type= field of the patch back toward the canonical
+        # (a no-op when nothing was retyped); patch is always a Projection here.
+        patch_data = _apply_decoders(
+            type(patch), dict(patch.model_dump(by_alias=True, exclude_unset=True))
+        )
+        merged = {**self.model_dump(by_alias=True), **patch_data}
         return type(self).model_validate(merged)
 
 

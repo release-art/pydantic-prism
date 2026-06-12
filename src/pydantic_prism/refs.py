@@ -279,6 +279,26 @@ class RefGraph(Mapping[str, RefInfo]):
         }
         return graph
 
+    def reshaped(
+        self, field_names: Collection[str], overrides: Mapping[str, RawEdge | None]
+    ) -> RefGraph:
+        """``filtered``, but with some fields' edges re-derived (``as_type=`` retypes).
+
+        For a name in ``overrides`` the supplied :class:`RawEdge` replaces the
+        canonical one (``None`` means the retyped field now carries no edge — e.g.
+        an embed it dropped); every other surviving field keeps its canonical
+        edge. The owner stays the canonical model, so targets still resolve.
+        """
+        raw: dict[str, RawEdge] = {}
+        for name in field_names:
+            if name in overrides:
+                edge = overrides[name]
+                if edge is not None:
+                    raw[name] = edge
+            elif name in self._raw:
+                raw[name] = self._raw[name]
+        return RefGraph(self._owner, raw)
+
     def _resolve(self, field_name: str) -> RefInfo:
         from .model import ScopedModel
 

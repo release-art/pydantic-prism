@@ -29,7 +29,7 @@ from .flow import (
     FlowReport,
     build_flow_report,
 )
-from .markers import BackRef, Ref, Scoped, backref, ref, scoped
+from .markers import BackRef, Converter, Ref, Scoped, backref, ref, scoped
 from .model import Projection, ScopedModel, unprojected
 from .refs import (
     BackRefInfo,
@@ -53,6 +53,7 @@ __all__ = [
     "BackRef",
     "BackRefInfo",
     "Classification",
+    "Converter",
     "FlowField",
     "Diagram",
     "Direction",

@@ -14,7 +14,7 @@ from ...validators import (
 )
 from ..scopes import Scope, ScopeExpr, as_expr, union_all
 
-__all__ = ["_collect", "_initialize", "_variable_container"]
+__all__ = ["_collect", "_initialize", "_project_refs", "_variable_container"]
 
 
 def _initialize(cls: type[ScopedModel]) -> None:
@@ -55,14 +55,9 @@ def _collect(cls: type[ScopedModel]) -> None:
                 f"{cls.__name__}.{field_name}: at most one ref()/backref() marker "
                 f"is allowed per field"
             )
-        if ref_markers:
-            shape, optional, key_type = shape_of(info.annotation)
-            raw_refs[field_name] = RawEdge(ref_markers[0], shape, optional, key_type)
-        else:
-            embedded = _detect_embedded(info.annotation)
-            if embedded is not None:
-                shape, optional, key_type = shape_of(info.annotation)
-                raw_refs[field_name] = RawEdge(embedded, shape, optional, key_type)
+        edge = _derive_edge(info.annotation, ref_markers)
+        if edge is not None:
+            raw_refs[field_name] = edge
     cls.__field_scopes__ = field_scopes
     _check_scope_name_tokens(cls)
     cls.__prism_validator_scopes__ = _collect_validator_scopes(cls)
@@ -72,6 +67,45 @@ def _collect(cls: type[ScopedModel]) -> None:
         existing._reset(raw_refs)  # pyright: ignore[reportPrivateUsage] — intra-package
     else:
         cls.__refs__ = RefGraph(cls, raw_refs)
+
+
+def _derive_edge(annotation: Any, ref_markers: list[Any]) -> RawEdge | None:
+    """The relationship edge of a field annotation, if any (≤1 ref marker assumed).
+
+    An explicit ``ref()``/``backref()`` marker wins; otherwise an unambiguously
+    embedded model is auto-detected. Shared by initial collection and per-scope
+    ref re-derivation (when ``as_type=`` reshapes a field).
+    """
+    if ref_markers:
+        shape, optional, key_type = shape_of(annotation)
+        return RawEdge(ref_markers[0], shape, optional, key_type)
+    embedded = _detect_embedded(annotation)
+    if embedded is not None:
+        shape, optional, key_type = shape_of(annotation)
+        return RawEdge(embedded, shape, optional, key_type)
+    return None
+
+
+def _project_refs(
+    cls: type[ScopedModel], surviving: list[str], retyped: dict[str, Any]
+) -> RefGraph:
+    """The projection's relationship graph: canonical edges filtered to ``surviving``.
+
+    A field reshaped by ``as_type=`` has its edge **re-derived** from the override
+    annotation (its shape / key-type / embedded target may differ, or it may gain
+    or lose an edge entirely), keeping any explicit ``ref()``/``backref()`` marker.
+    """
+    if not retyped:
+        return cls.__refs__.filtered(surviving)
+    overrides: dict[str, RawEdge | None] = {}
+    for field_name, annotation in retyped.items():
+        ref_markers = [
+            m
+            for m in cls.model_fields[field_name].metadata
+            if isinstance(m, (Ref, BackRef))
+        ]
+        overrides[field_name] = _derive_edge(annotation, ref_markers)
+    return cls.__refs__.reshaped(surviving, overrides)
 
 
 def _check_scope_name_tokens(cls: type[ScopedModel]) -> None:
