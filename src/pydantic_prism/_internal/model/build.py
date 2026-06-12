@@ -27,6 +27,7 @@ from ...errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameE
 from ...markers import (
     _NO_TYPE,  # pyright: ignore[reportPrivateUsage] — intra-package
     PRISM_MARKERS,
+    Heritage,
 )
 from ...model import (
     Projection,
@@ -231,7 +232,18 @@ def _project(
         info = copy.deepcopy(cls.model_fields[field_name])
         marker = _apply_field_spec(cls, field_name, expr, info)
         _record_field_payload(marker, field_name, retyped, encoders, decoders)
-        info.metadata = [m for m in info.metadata if not isinstance(m, PRISM_MARKERS)]
+        heritage = Heritage(
+            source=field_name,
+            overridden=marker is not None,
+            # info.description is now final; compare to the canonical's original
+            description_inherited=(
+                info.description == cls.model_fields[field_name].description
+            ),
+        )
+        info.metadata = [
+            *(m for m in info.metadata if not isinstance(m, PRISM_MARKERS)),
+            heritage,
+        ]
         info.annotation = _rewrite(info.annotation, expr, ctx)
         if partial:
             # Partial scope: every field becomes optional via the MISSING

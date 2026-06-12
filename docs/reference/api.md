@@ -9,7 +9,7 @@ top-level import.)
 from pydantic_prism import (
     MISSING, Scope, ScopeExpr, Classification, Direction, In, Out,
     ScopedModel, Projection,
-    scoped, scoped_validator, unprojected, ref, backref, Ref, BackRef, Scoped, Converter, RefShape,
+    scoped, scoped_validator, unprojected, ref, backref, Ref, BackRef, Scoped, Converter, Heritage, RefShape,
     RefGraph, RefInfo, IdRefInfo, BackRefInfo, EmbeddedRefInfo,
     FlowReport, FlowNode, FlowEdge, FlowField, build_flow_report,
     Diagram, scope_diagram, projection_diagram,
@@ -25,6 +25,7 @@ from pydantic_prism import (
 |---|---|---|
 | `scoped(*scopes, override=, as_type=, convert=)` | marker fn | Tags a field with scopes / a scope expression (varargs union). `override=Field(...)` (or a plain mapping of the same kwargs) overlays the field per scope across the **whole `FieldInfo` surface** — `description`/`examples`/`json_schema_extra` annotations *and* validation constraints (`min_length`/`ge`/`pattern`/…), `alias`, `default`, … — landing in core *and* JSON schema; constraints merge by kind over the canonical `Field(...)`, the rest replace. `as_type=` replaces the field's **annotation** per scope (re-deriving any relationship edge from the new type); `convert=Converter(...)` keeps round-trips total across that type change. One scope per payload-bearing marker. See [vary schema per scope](../how-to/vary-schema-per-scope.md) and [change a field's type per scope](../how-to/retype-a-field-per-scope.md). |
 | `Converter(encode=, decode=)` | dataclass | Per-scope round-trip hooks for an `as_type=` field: `encode` (canonical value → projection value, run by `from_canonical`) and `decode` (projection → canonical, run by `from_projection`/`with_updates`). Both optional — an omitted direction falls back to pydantic's native coercion. |
+| `Heritage(source, overridden, description_inherited)` | dataclass | Provenance stamp the builder adds to **every projected field's** `FieldInfo.metadata` (read with `next(m for m in field.metadata if isinstance(m, Heritage))`). `overridden` = a per-scope `override=`/`as_type=`/`convert=` reshaped the field; `description_inherited` = the description is still the canonical's. Metadata only — never reaches the JSON/tool schema. |
 | `scoped_validator(*scopes, mode=..., parent_ordering=None)` | decorator | A `@model_validator` that **also** carries onto projections whose expression selects `scopes`. `mode` is required (`"before" \| "after" \| "wrap"`). `parent_ordering="acknowledged"` asserts a `before` validator does not depend on an inherited base hook, silencing the [`PrismOrderingWarning`](errors.md). |
 | `unprojected(member)` | decorator | Keep a method / `@property` / `@classmethod` / `@staticmethod` **canonical-only**. By default a model's non-field callables are copied onto every projection; `@unprojected` opts one out. See [keep behavior on projections](../how-to/keep-behavior-on-projections.md). |
 | `ref(target, *, field="id")` | marker fn | Forward FK-style reference. `target`: `ScopedModel` subclass or string name. Keyed-dict shape inferred from a `dict[...]` annotation. |

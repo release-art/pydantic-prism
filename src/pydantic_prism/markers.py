@@ -26,7 +26,16 @@ from ._internal.scopes import (
 if TYPE_CHECKING:
     from .model import ScopedModel
 
-__all__ = ["BackRef", "Converter", "Ref", "Scoped", "backref", "ref", "scoped"]
+__all__ = [
+    "BackRef",
+    "Converter",
+    "Heritage",
+    "Ref",
+    "Scoped",
+    "backref",
+    "ref",
+    "scoped",
+]
 
 # The keyword names ``Field(...)`` actually understands. Pydantic silently routes
 # *unknown* kwargs into ``json_schema_extra`` (deprecated, removed in v3), so the
@@ -56,6 +65,30 @@ class Converter:
 
     encode: Callable[[Any], Any] | None = None
     decode: Callable[[Any], Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Heritage:
+    """Provenance stamp on a *projected* field, found in its ``FieldInfo.metadata``.
+
+    Every field of a projection carries exactly one ``Heritage`` (read it with
+    ``next(m for m in field.metadata if isinstance(m, Heritage))``). Unlike the
+    input markers in :data:`PRISM_MARKERS`, it is added by the builder, not the
+    author, and is not stripped — it is output, not a tag.
+
+    Attributes:
+        source: The canonical field this projected field descends from.
+        overridden: True when a per-scope ``override=`` / ``as_type=`` /
+            ``convert=`` reshaped this field for this projection; False when the
+            field is the canonical's verbatim.
+        description_inherited: True when the field's description is the canonical's
+            (the LLM-facing question: is this the original description, or one
+            tailored for this face?).
+    """
+
+    source: str
+    overridden: bool
+    description_inherited: bool
 
 
 @dataclass(frozen=True, slots=True)

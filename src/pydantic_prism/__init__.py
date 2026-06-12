@@ -29,7 +29,7 @@ from .flow import (
     FlowReport,
     build_flow_report,
 )
-from .markers import BackRef, Converter, Ref, Scoped, backref, ref, scoped
+from .markers import BackRef, Converter, Heritage, Ref, Scoped, backref, ref, scoped
 from .model import Projection, ScopedModel, unprojected
 from .refs import (
     BackRefInfo,
@@ -60,6 +60,7 @@ __all__ = [
     "EmbeddedRefInfo",
     "EmptyProjectionError",
     "FlowEdge",
+    "Heritage",
     "FlowNode",
     "FlowReport",
     "IdRefInfo",

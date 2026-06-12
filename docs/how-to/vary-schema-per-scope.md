@@ -115,3 +115,46 @@ including *loosening*, as `StorageScope` does above.
 > canonical is no longer a superset of its projections.** That is the point of
 > the feature, but it means you cannot assume "valid in projection ⇒ valid in
 > canonical." An `override=`-bearing `scoped()` must name exactly one scope.
+
+## Descriptions inherit — and you can see that they did
+
+A projected field keeps the canonical field's `description` (and the rest of its
+schema) unless a per-scope `override=` changes it — so an LLM-facing projection
+never loses its prose. Every projected field also carries a `Heritage` stamp in
+its `FieldInfo.metadata` recording that provenance: whether the field was
+overridden for this scope, and whether its description is still the canonical's.
+
+```python
+from pydantic_prism import Heritage
+
+
+class Account(ScopedModel):
+    # description written once, on the canonical
+    email: Annotated[str, Field(description="contact email"), scoped(Public)]
+    tier: Annotated[
+        str,
+        Field(description="canonical tier"),
+        scoped(Public, override=Field(description="tier, public wording")),
+    ]
+
+
+def heritage(projection, field):
+    metadata = projection.model_fields[field].metadata
+    return next(m for m in metadata if isinstance(m, Heritage))
+
+
+public = Account.scope(Public)
+
+# the description carried over verbatim…
+assert public.model_fields["email"].description == "contact email"
+# …and its heritage says so
+assert heritage(public, "email").description_inherited is True
+assert heritage(public, "email").overridden is False
+
+# `tier` was re-worded for this scope — heritage records the divergence
+assert heritage(public, "tier").description_inherited is False
+assert heritage(public, "tier").overridden is True
+```
+
+The stamp is metadata, not schema: it never appears in `model_json_schema()` or a
+tool schema, so it informs your tooling without reaching the model.
