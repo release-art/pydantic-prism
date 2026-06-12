@@ -32,6 +32,7 @@ from ...model import (
 )
 from ..scopes import ScopeExpr
 from .bases import _warn_dropped_behavior
+from .behaviors import _copy_behaviors
 from .schema import _apply_field_schema, _apply_model_schema
 
 if TYPE_CHECKING:
@@ -241,6 +242,7 @@ def _project(
     projection.__prism_scope__ = expr
     projection.__prism_bases__ = carried
     projection.__refs__ = cls.__refs__.filtered(surviving)
+    _copy_behaviors(cls, projection)
     del ctx.pending[key]
     ctx.built[key] = projection
     ctx.namespace[ref_name] = projection

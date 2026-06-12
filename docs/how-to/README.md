@@ -18,7 +18,11 @@ and shows the shortest correct way to get it. New to prism? Start with the
 - [Build a PATCH / partial-update model](partial-update.md) — all-optional
   views with `partial=True` and `with_updates`.
 - [Vary a field's schema per projection](vary-schema-per-scope.md) — per-scope
-  `description` / `examples`.
+  `description` / `examples` / constraints / `default`, all via one
+  `override=Field(...)`.
+- [Keep model behavior on projections](keep-behavior-on-projections.md) — carry
+  methods / properties / classmethods onto projections; opt out with
+  `@unprojected`.
 
 ## Integration
 

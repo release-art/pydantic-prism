@@ -30,7 +30,7 @@ from .flow import (
     build_flow_report,
 )
 from .markers import BackRef, Ref, Scoped, backref, ref, scoped
-from .model import Projection, ScopedModel
+from .model import Projection, ScopedModel, unprojected
 from .refs import (
     BackRefInfo,
     EmbeddedRefInfo,
@@ -89,5 +89,6 @@ __all__ = [
     "scope_diagram",
     "scoped",
     "scoped_validator",
+    "unprojected",
     "__version__",
 ]

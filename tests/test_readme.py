@@ -7,7 +7,7 @@ from typing import Annotated, Any, Optional
 from urllib.parse import urlparse
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pydantic_prism import (
     MISSING,
@@ -237,8 +237,10 @@ class Auditor(Viewer): ...
 class Person(ScopedModel):
     email: Annotated[
         str,
-        scoped(Viewer, description="User contact (public-facing)"),
-        scoped(Auditor, description="User identity, for internal audit"),
+        scoped(Viewer, override=Field(description="User contact (public-facing)")),
+        scoped(
+            Auditor, override=Field(description="User identity, for internal audit")
+        ),
     ]
 
 

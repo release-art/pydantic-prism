@@ -60,6 +60,7 @@ _RUNNABLE = [
     "docs/how-to/prevent-mass-assignment.md",
     "docs/how-to/carry-a-custom-base.md",
     "docs/how-to/vary-schema-per-scope.md",
+    "docs/how-to/keep-behavior-on-projections.md",
     "docs/how-to/derive-llm-tool-schema.md",
     "docs/how-to/use-with-pydantic-ai.md",
     "docs/how-to/export-diagrams.md",

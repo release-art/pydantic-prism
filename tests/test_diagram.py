@@ -247,10 +247,12 @@ def test_field_rows_render_name_and_type() -> None:
 
 
 def test_descriptions_in_as_dict_and_dot_tooltip() -> None:
+    from pydantic import Field
+
     class Doc(ScopedModel):
         """Doc model."""
 
-        x: Annotated[str, scoped(Public, description="the x field")]
+        x: Annotated[str, scoped(Public, override=Field(description="the x field"))]
 
     data = projection_diagram(Doc).as_dict()
     canonical = next(n for n in data["nodes"] if n["label"] == "Doc")

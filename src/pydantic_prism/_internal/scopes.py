@@ -26,12 +26,13 @@ __all__ = [
 
 
 class _SchemaMeta(TypedDict, total=False):
-    """The fixed-shape JSON-schema metadata a scope or ``scoped()`` field carries.
+    """The fixed-shape JSON-schema metadata a ``Scope`` class carries at model level.
 
-    All three keys are optional. ``description`` / ``examples`` land on the
-    field's (or projection's) schema; ``json_schema_extra`` is itself an *open*
-    dict of arbitrary JSON-schema fields, merged in. Used for
-    :attr:`Scope.__prism_model_schema__` and :attr:`markers.Scoped.field_schema`.
+    All keys are optional. ``description`` / ``examples`` land on the projected
+    model's schema; ``json_schema_extra`` is itself an *open* dict of arbitrary
+    JSON-schema fields, merged in. Used for :attr:`Scope.__prism_model_schema__`;
+    per-*field* overrides ride a :class:`~pydantic.fields.FieldInfo` on
+    :attr:`markers.Scoped.field_override` instead.
     """
 
     description: str

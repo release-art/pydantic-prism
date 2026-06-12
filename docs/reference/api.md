@@ -9,7 +9,7 @@ top-level import.)
 from pydantic_prism import (
     MISSING, Scope, ScopeExpr, Classification, Direction, In, Out,
     ScopedModel, Projection,
-    scoped, scoped_validator, ref, backref, Ref, BackRef, Scoped, RefShape,
+    scoped, scoped_validator, unprojected, ref, backref, Ref, BackRef, Scoped, RefShape,
     RefGraph, RefInfo, IdRefInfo, BackRefInfo, EmbeddedRefInfo,
     FlowReport, FlowNode, FlowEdge, FlowField, build_flow_report,
     Diagram, scope_diagram, projection_diagram,
@@ -23,8 +23,9 @@ from pydantic_prism import (
 
 | name | kind | summary |
 |---|---|---|
-| `scoped(*scopes, description=, examples=, json_schema_extra=)` | marker fn | Tags a field with scopes / a scope expression (varargs union). Optional schema kwargs attach per-scope field schema (one scope per schema-bearing marker). |
+| `scoped(*scopes, override=)` | marker fn | Tags a field with scopes / a scope expression (varargs union). `override=Field(...)` (or a plain mapping of the same kwargs) overlays the field per scope across the **whole `FieldInfo` surface** — `description`/`examples`/`json_schema_extra` annotations *and* validation constraints (`min_length`/`ge`/`pattern`/…), `alias`, `default`, … — landing in core *and* JSON schema; constraints merge by kind over the canonical `Field(...)`, the rest replace (one scope per override-bearing marker). See [vary schema per scope](../how-to/vary-schema-per-scope.md). |
 | `scoped_validator(*scopes, mode=..., parent_ordering=None)` | decorator | A `@model_validator` that **also** carries onto projections whose expression selects `scopes`. `mode` is required (`"before" \| "after" \| "wrap"`). `parent_ordering="acknowledged"` asserts a `before` validator does not depend on an inherited base hook, silencing the [`PrismOrderingWarning`](errors.md). |
+| `unprojected(member)` | decorator | Keep a method / `@property` / `@classmethod` / `@staticmethod` **canonical-only**. By default a model's non-field callables are copied onto every projection; `@unprojected` opts one out. See [keep behavior on projections](../how-to/keep-behavior-on-projections.md). |
 | `ref(target, *, field="id")` | marker fn | Forward FK-style reference. `target`: `ScopedModel` subclass or string name. Keyed-dict shape inferred from a `dict[...]` annotation. |
 | `backref(target, *, via, field="id")` | marker fn | Declared reverse reference; `via` names the forward-`ref` field on `target`. |
 | `Ref` / `BackRef` / `Scoped` | marker types | The frozen-dataclass instances produced by `ref()` / `backref()` / `scoped()`; you rarely name these directly. |
@@ -95,6 +96,12 @@ placeholders; the result must be a valid identifier).
 instance's `model_dump`.
 
 ## `Projection` — derived classes
+
+A projection does not inherit the canonical class, but the canonical's non-field
+callables (methods / `@property` / `@classmethod` / `@staticmethod`) are **copied
+onto it** by default; framework names and pydantic-managed members
+(validators / serializers / computed fields) are never copied, and `@unprojected`
+opts a member out. See [keep behavior on projections](../how-to/keep-behavior-on-projections.md).
 
 | name | kind | summary |
 |---|---|---|

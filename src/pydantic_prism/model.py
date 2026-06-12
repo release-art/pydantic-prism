@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -30,11 +30,38 @@ if TYPE_CHECKING:
     from .flow import FlowReport
     from .toolschema import ToolProvider
 
-__all__ = ["Projection", "ScopedModel"]
+__all__ = ["Projection", "ScopedModel", "unprojected"]
 
 # Sentinel: "no default_scope= keyword on this class definition". Distinct from
 # None, which is a legitimate resolved value meaning "no default declared".
 _NO_DEFAULT: Any = object()
+
+_Member = TypeVar("_Member")
+
+
+def unprojected(member: _Member) -> _Member:
+    """Keep a method / ``property`` / ``classmethod`` canonical-only.
+
+    By default prism copies a :class:`ScopedModel`'s non-field callables onto
+    every projection. Decorate a member with ``@unprojected`` to exclude it —
+    e.g. a method that hard-depends on a field no projection carries::
+
+        class Card(ScopedModel):
+            @unprojected
+            def needs_storage_only_fields(self) -> bool:
+                return bool(self.hashes)  # 'hashes' exists only on Storage
+
+    The flag is set on the underlying function, so ``@unprojected`` may wrap (or
+    be wrapped by) ``@property`` / ``@classmethod`` / ``@staticmethod`` in either
+    order.
+    """
+    target: Any = member
+    if isinstance(target, (classmethod, staticmethod)):
+        target = cast(Any, target).__func__
+    elif isinstance(target, property):
+        target = cast(Any, target).fget
+    target.__prism_unprojected__ = True
+    return member
 
 
 @dataclass(frozen=True, slots=True)
