@@ -29,8 +29,8 @@ from .flow import (
     FlowReport,
     build_flow_report,
 )
-from .markers import BackRef, Ref, Scoped, backref, ref, scoped
-from .model import Projection, ScopedModel
+from .markers import BackRef, Converter, Heritage, Ref, Scoped, backref, ref, scoped
+from .model import ModelState, Projection, ProjectionState, ScopedModel, unprojected
 from .refs import (
     BackRefInfo,
     EmbeddedRefInfo,
@@ -53,16 +53,20 @@ __all__ = [
     "BackRef",
     "BackRefInfo",
     "Classification",
+    "Converter",
     "FlowField",
     "Diagram",
     "Direction",
     "EmbeddedRefInfo",
     "EmptyProjectionError",
     "FlowEdge",
+    "Heritage",
     "FlowNode",
     "FlowReport",
     "IdRefInfo",
     "In",
+    "ModelState",
+    "ProjectionState",
     "Out",
     "PrismBaseDropWarning",
     "PrismError",
@@ -89,5 +93,6 @@ __all__ = [
     "scope_diagram",
     "scoped",
     "scoped_validator",
+    "unprojected",
     "__version__",
 ]

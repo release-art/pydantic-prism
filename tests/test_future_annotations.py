@@ -41,9 +41,9 @@ class Novel(ScopedModel):
 
 def test_explicit_rebuild_recovers_markers() -> None:
     Author.model_rebuild()
-    assert set(Author.__field_scopes__) == {"name", "favorite", "book_id"}
+    assert set(Author.__prism__.field_scopes) == {"name", "favorite", "book_id"}
     assert set(Author.scope(Public).model_fields) == {"name", "favorite", "book_id"}
-    assert Author.__refs__["book_id"].target is Book
+    assert Author.__prism__.refs["book_id"].target is Book
 
 
 def test_scope_rebuilds_automatically() -> None:

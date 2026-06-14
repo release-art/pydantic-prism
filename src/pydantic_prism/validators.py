@@ -9,7 +9,7 @@ the same membership rule as scoped fields (``projection_expr.selects(tag)``).
 The scope tag cannot live on the decorated callable (pydantic stores
 ``before``/``wrap`` validators as bound methods with no ``__dict__``), so it is
 recorded in a module-level registry keyed by the raw function;
-``ScopedModel`` resolves it into the per-class ``__prism_validator_scopes__``
+``ScopedModel`` resolves it into the per-class ``__prism__.validator_scopes``
 map at collection time.
 """
 

@@ -172,7 +172,7 @@ def build_flow_report(root: type[ScopedModel]) -> FlowReport:
     edges: list[FlowEdge] = []
     order: list[type[ScopedModel]] = [root]
     seen: set[type[ScopedModel]] = {root}
-    for source, info in root.__refs__.walk():
+    for source, info in root.__prism__.refs.walk():
         edges.append(FlowEdge(source, info.field_name, info.target, info.kind))
         for model in (source, info.target):
             if model not in seen:
@@ -182,7 +182,7 @@ def build_flow_report(root: type[ScopedModel]) -> FlowReport:
     for model in order:
         tagged = tuple(
             FlowField(name, frozenset(expr.atoms()))
-            for name, expr in model.__field_scopes__.items()
+            for name, expr in model.__prism__.field_scopes.items()
         )
         if tagged:
             nodes.append(FlowNode(model, tagged))

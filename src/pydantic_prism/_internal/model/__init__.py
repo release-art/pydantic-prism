@@ -2,7 +2,7 @@
 
 The public ``Projection`` / ``ScopedModel`` classes live in
 :mod:`pydantic_prism.model`; this package is their engine:
-:mod:`collect` (marker collection → ``__field_scopes__`` / ``__refs__``),
+:mod:`collect` (marker collection → ``__prism__.field_scopes`` / ``__prism__.refs``),
 :mod:`build` (the projection builder ``_project`` + naming + validator carry),
 :mod:`schema` (scope-attached JSON schema), :mod:`bases` (carried-base checks),
 :mod:`narrow` (round-trip narrowing). The classes lazy-import these helpers

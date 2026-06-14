@@ -68,7 +68,7 @@ def test_redacted_strips_every_classification_by_default() -> None:
     audit = fx.User.redacted(fx.Internal)
     # Internal view minus all PII/Secret: classified fields gone, refs survive.
     assert set(audit.model_fields) == {"id", "org_id"}
-    assert audit.__refs__["org_id"].target is fx.Org
+    assert audit.__prism__.refs["org_id"].target is fx.Org
 
 
 def test_redacted_explicit_strip_keeps_other_classifications() -> None:

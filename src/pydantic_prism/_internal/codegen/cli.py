@@ -40,7 +40,7 @@ def _build_cli_diagram(kind: str, paths: Sequence[str], direction: str) -> Any:
     model = _resolve_kind(paths[0], ScopedModel, "ScopedModel subclass")
     if kind == "projection":
         return projection_diagram(model, direction=direction)
-    return model.__refs__.diagram(direction=direction)
+    return model.__prism__.refs.diagram(direction=direction)
 
 
 def _render_diagram(diagram: Any, fmt: str) -> str:

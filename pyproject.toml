@@ -149,5 +149,4 @@ addopts = """
     -v -l --color=yes
     --local-badge-output-dir docs/badges/
     --cov-fail-under=100
-    --local-badge-package=pydantic_prism
 """

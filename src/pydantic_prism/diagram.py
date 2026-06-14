@@ -336,10 +336,12 @@ def _node_fields(
     direction / any user axis surface automatically. Badges are suppressed
     entirely when the source model has a single dimension (nothing to
     distinguish). Projection fields read their tags off the canonical source
-    (``__prism_source__``), whose markers were not stripped.
+    (``__prism__.source``), whose markers were not stripped.
     """
-    source = getattr(model, "__prism_source__", model)
-    field_scopes: dict[str, Any] = getattr(source, "__field_scopes__", {})
+    source = getattr(getattr(model, "__prism__", None), "source", model)
+    field_scopes: dict[str, Any] = getattr(
+        getattr(source, "__prism__", None), "field_scopes", {}
+    )
     multi_axis = (
         len({dimension_root(a) for e in field_scopes.values() for a in e.atoms()}) > 1
     )
@@ -458,7 +460,7 @@ def projection_diagram(model: type[Any], *, direction: str = "TD") -> Diagram:
     for scope in sorted(model.scopes(), key=lambda s: s.__name__):
         proj = model.scope(scope)
         kind = (
-            "partial_projection" if proj.__prism_scope__.is_partial() else "projection"
+            "partial_projection" if proj.__prism__.scope.is_partial() else "projection"
         )
         pid = ids.make(proj.__name__)
         # The projection's own axis is implied by the edge label; badge only the

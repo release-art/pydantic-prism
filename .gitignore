@@ -267,3 +267,4 @@ $RECYCLE.BIN/
 .vscode/
 .pdm-python
 .pdm-build
+uv.lock

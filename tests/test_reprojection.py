@@ -39,7 +39,7 @@ def test_reprojection_narrows_to_the_intersection() -> None:
     reproj = User.scope(Internal).scope(Public)
     assert set(reproj.model_fields) == set(User.scope(Public).model_fields)
     assert set(reproj.model_fields) == {"id", "org_id", "name"}
-    assert reproj.__prism_scope__ == (Internal & Public)
+    assert reproj.__prism__.scope == (Internal & Public)
 
 
 def test_reprojection_only_narrows_never_widens() -> None:
@@ -52,7 +52,7 @@ def test_reprojection_only_narrows_never_widens() -> None:
 def test_reprojection_is_a_sibling_not_a_subclass() -> None:
     internal = User.scope(Internal)
     reproj = internal.scope(Public)
-    assert reproj.__prism_source__ is User  # of the canonical, not of `internal`
+    assert reproj.__prism__.source is User  # of the canonical, not of `internal`
     assert not issubclass(reproj, internal)
 
 
@@ -68,8 +68,8 @@ def test_nested_reprojection_chains() -> None:
 
 def test_reprojection_carries_refs_filtered_to_survivors() -> None:
     reproj = User.scope(Internal).scope(Public)
-    assert "org_id" in reproj.__refs__
-    assert reproj.__refs__["org_id"].target is Org
+    assert "org_id" in reproj.__prism__.refs
+    assert reproj.__prism__.refs["org_id"].target is Org
 
 
 # --- naming + bases --------------------------------------------------------

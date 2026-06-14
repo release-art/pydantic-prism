@@ -58,7 +58,7 @@ def test_canonical_is_both_sqlmodel_and_scopedmodel() -> None:
     assert issubclass(Invoice, ScopedModel)
     assert Invoice.__tablename__ == "t_invoice"  # a real SQLAlchemy table
     # prism collected the scope tags off the same fields
-    assert set(Invoice.__field_scopes__) == {
+    assert set(Invoice.__prism__.field_scopes) == {
         "id",
         "account_id",
         "total",
@@ -74,7 +74,7 @@ def test_scope_filters_the_table_model() -> None:
 
 
 def test_ref_graph_resolves_across_table_models() -> None:
-    edge = Invoice.__refs__["account_id"]
+    edge = Invoice.__prism__.refs["account_id"]
     assert edge.target is Account
     assert edge.target_field == "id"
 
@@ -169,8 +169,8 @@ def test_sqlmodel_metaclass_swallows_prism_class_keywords() -> None:
         id: Annotated[int | None, scoped(Api)] = Col(default=None, primary_key=True)
         untagged: str = Col(default="")
 
-    assert Widget.__prism_default_scope__ is None  # default_scope was dropped
-    assert Widget.__prism_name_template__ is None  # template was dropped
-    assert Widget.__field_scopes__.get("untagged") is None  # no default applied
+    assert Widget.__prism__.default_scope is None  # default_scope was dropped
+    assert Widget.__prism__.name_template is None  # template was dropped
+    assert Widget.__prism__.field_scopes.get("untagged") is None  # no default applied
     # control: the same keywords take effect on a plain (non-SQLModel) ScopedModel
     assert Account.scope(Api, bases=()).__name__ == "AccountApi"

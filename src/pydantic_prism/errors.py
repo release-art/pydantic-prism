@@ -101,7 +101,7 @@ class ProjectionBaseError(PrismError, ValueError):
 class RefResolutionError(PrismError, ValueError):
     """A ``ref``/``backref`` declaration could not be resolved.
 
-    Raised lazily — on ``__refs__`` access — when a string target does not
+    Raised lazily — on ``__prism__.refs`` access — when a string target does not
     name a ``ScopedModel`` in the owning model's module, or when a
     ``backref(..., via=...)`` does not line up with a forward ``ref`` on the
     target model.

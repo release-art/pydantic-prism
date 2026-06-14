@@ -32,11 +32,11 @@ class Order(ScopedModel):
 
 scope_diagram(Public, Internal).to_mermaid()   # the scope inheritance graph
 projection_diagram(Order).to_dot()             # a model + its projections, with fields
-Order.__refs__.diagram().to_d2()               # the cross-model relationship graph
+Order.__prism__.refs.diagram().to_d2()               # the cross-model relationship graph
 scope_diagram().as_dict()                       # no args: every scope, as JSON-able data
 ```
 
-`Order.__refs__.diagram().to_mermaid()` produces the following, which GitHub
+`Order.__prism__.refs.diagram().to_mermaid()` produces the following, which GitHub
 renders inline:
 
 ```mermaid

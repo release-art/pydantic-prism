@@ -24,15 +24,22 @@ from pydantic.experimental.missing_sentinel import MISSING
 from pydantic.fields import FieldInfo
 
 from ...errors import EmptyProjectionError, ProjectionBaseError, ProjectionNameError
-from ...markers import PRISM_MARKERS
+from ...markers import (
+    _NO_TYPE,  # pyright: ignore[reportPrivateUsage] — intra-package
+    PRISM_MARKERS,
+    Heritage,
+)
 from ...model import (
     Projection,
+    ProjectionState,
     ScopedModel,
     _ProjectionKey,  # pyright: ignore[reportPrivateUsage] — intra-package
 )
 from ..scopes import ScopeExpr
 from .bases import _warn_dropped_behavior
-from .schema import _apply_field_schema, _apply_model_schema
+from .behaviors import _copy_behaviors
+from .collect import _project_refs
+from .schema import _apply_field_spec, _apply_model_schema
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -86,7 +93,7 @@ def _validate_name_template(cls: type[ScopedModel], template: str) -> None:
 
 def _auto_name(cls: type[ScopedModel], expr: ScopeExpr) -> str:
     """The auto-generated projection name: class template, or the default form."""
-    template = cls.__prism_name_template__
+    template = cls.__prism__.name_template
     if template is None:
         return f"{cls.__name__}{expr.token()}"
     return template.format(model=cls.__name__, scope=expr.token())
@@ -125,7 +132,7 @@ def _resolve_carried(
     """
     if bases is not None:
         return bases
-    declared = cls.__prism_projection_bases__
+    declared = cls.__prism__.projection_bases
     if declared is None:
         _warn_dropped_behavior(cls)
         return ()
@@ -137,8 +144,8 @@ def _surviving_fields(cls: type[ScopedModel], expr: ScopeExpr) -> list[str]:
     surviving = [
         field_name
         for field_name in cls.model_fields
-        if field_name in cls.__field_scopes__
-        and expr.selects(cls.__field_scopes__[field_name])
+        if field_name in cls.__prism__.field_scopes
+        and expr.selects(cls.__prism__.field_scopes[field_name])
     ]
     if not surviving:
         defined = sorted(scope.__name__ for scope in cls.scopes())
@@ -152,6 +159,25 @@ def _surviving_fields(cls: type[ScopedModel], expr: ScopeExpr) -> list[str]:
             f"belong to no scope{detail}"
         )
     return surviving
+
+
+def _record_field_payload(
+    marker: Any,
+    field_name: str,
+    retyped: dict[str, Any],
+    encoders: dict[str, Callable[[Any], Any]],
+    decoders: dict[str, Callable[[Any], Any]],
+) -> None:
+    """Record a field's ``as_type`` (for ref re-derivation) and converters."""
+    if marker is None:
+        return
+    if marker.field_type is not _NO_TYPE:
+        retyped[field_name] = marker.field_type
+    if marker.convert is not None:
+        if marker.convert.encode is not None:
+            encoders[field_name] = marker.convert.encode
+        if marker.convert.decode is not None:
+            decoders[field_name] = marker.convert.decode
 
 
 def _project(
@@ -175,7 +201,7 @@ def _project(
         cls.model_rebuild()
     carried = _resolve_carried(cls, bases)
     cache_key = _ProjectionKey(expr, name, carried, extra)
-    cached = cls.__prism_cache__.get(cache_key)
+    cached = cls.__prism__.cache.get(cache_key)
     if cached is not None:
         return cached
     key = _BuildKey(cls, cache_key)
@@ -186,7 +212,7 @@ def _project(
         # resolved by the rebuild pass once every class in this context exists.
         return ForwardRef(ctx.pending[key])
     class_name = name if name is not None else _auto_name(cls, expr)
-    registered = cls.__prism_names__.get(class_name)
+    registered = cls.__prism__.names.get(class_name)
     if registered is not None and registered != cache_key:
         raise ProjectionNameError(
             f"{cls.__name__} already has a projection named {class_name!r} for a "
@@ -200,10 +226,25 @@ def _project(
 
     partial = expr.is_partial()
     field_definitions: dict[str, tuple[Any, FieldInfo]] = {}
+    encoders: dict[str, Callable[[Any], Any]] = {}
+    decoders: dict[str, Callable[[Any], Any]] = {}
+    retyped: dict[str, Any] = {}  # field -> override annotation (for ref re-derivation)
     for field_name in surviving:
         info = copy.deepcopy(cls.model_fields[field_name])
-        _apply_field_schema(cls, field_name, expr, info)
-        info.metadata = [m for m in info.metadata if not isinstance(m, PRISM_MARKERS)]
+        marker = _apply_field_spec(cls, field_name, expr, info)
+        _record_field_payload(marker, field_name, retyped, encoders, decoders)
+        heritage = Heritage(
+            source=field_name,
+            overridden=marker is not None,
+            # info.description is now final; compare to the canonical's original
+            description_inherited=(
+                info.description == cls.model_fields[field_name].description
+            ),
+        )
+        info.metadata = [
+            *(m for m in info.metadata if not isinstance(m, PRISM_MARKERS)),
+            heritage,
+        ]
         info.annotation = _rewrite(info.annotation, expr, ctx)
         if partial:
             # Partial scope: every field becomes optional via the MISSING
@@ -237,10 +278,15 @@ def _project(
         __validators__=_carry_validators(cls, set(surviving), expr),
         **cast(dict[str, Any], field_definitions),
     )
-    projection.__prism_source__ = cls
-    projection.__prism_scope__ = expr
-    projection.__prism_bases__ = carried
-    projection.__refs__ = cls.__refs__.filtered(surviving)
+    projection.__prism__ = ProjectionState(
+        source=cls,
+        scope=expr,
+        bases=carried,
+        refs=_project_refs(cls, surviving, retyped),
+        encoders=encoders,
+        decoders=decoders,
+    )
+    _copy_behaviors(cls, projection)
     del ctx.pending[key]
     ctx.built[key] = projection
     ctx.namespace[ref_name] = projection
@@ -261,7 +307,7 @@ def _check_base_fields(
     """
     for base in carried:
         for field_name in base.model_fields:
-            if field_name in cls.__field_scopes__ and field_name not in surviving:
+            if field_name in cls.__prism__.field_scopes and field_name not in surviving:
                 raise ProjectionBaseError(
                     f"{cls.__name__}.scope({expr!r}): field {field_name!r} is "
                     f"declared on carried base {base.__name__} and tagged "
@@ -337,7 +383,7 @@ def _carry_validators(
             kept[0], *kept[1:], mode=decorator.info.mode, check_fields=False
         )(func)
     for dec_name, decorator in cls.__pydantic_decorators__.model_validators.items():
-        tag = cls.__prism_validator_scopes__.get(dec_name)
+        tag = cls.__prism__.validator_scopes.get(dec_name)
         if tag is None or not expr.selects(tag):
             continue
         func = decorator.func

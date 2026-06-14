@@ -8,14 +8,17 @@ constraints).
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import inspect
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
+
+from pydantic import Field
+from pydantic.fields import FieldInfo
 
 from ._internal.scopes import (
     ScopeExpr,
     ScopeLike,
-    _SchemaMeta,  # pyright: ignore[reportPrivateUsage] — intra-package
     as_expr,
     union_all,
 )
@@ -23,20 +26,87 @@ from ._internal.scopes import (
 if TYPE_CHECKING:
     from .model import ScopedModel
 
-__all__ = ["BackRef", "Ref", "Scoped", "backref", "ref", "scoped"]
+__all__ = [
+    "BackRef",
+    "Converter",
+    "Heritage",
+    "Ref",
+    "Scoped",
+    "backref",
+    "ref",
+    "scoped",
+]
+
+# The keyword names ``Field(...)`` actually understands. Pydantic silently routes
+# *unknown* kwargs into ``json_schema_extra`` (deprecated, removed in v3), so the
+# relaxed mapping form of ``override=`` is validated against this set first — a
+# typo'd key raises here instead of vanishing into the schema.
+_FIELD_KWARGS = frozenset(
+    name
+    for name, param in inspect.signature(Field).parameters.items()
+    if param.kind is not inspect.Parameter.VAR_KEYWORD
+)
+
+# Sentinel for "no as_type= given" — distinct from ``as_type=None`` (≡ NoneType).
+_NO_TYPE: Any = object()
+
+
+@dataclass(frozen=True, slots=True)
+class Converter:
+    """A per-scope round-trip converter for a type-overridden field.
+
+    ``encode`` maps a canonical field value to its projection form (run by
+    :meth:`Projection.from_canonical`); ``decode`` maps it back (run by
+    :meth:`ScopedModel.from_projection` / :meth:`ScopedModel.with_updates`). Both
+    are optional — supply only the direction(s) you need; an absent direction
+    falls back to pydantic's native coercion (and may raise if the types do not
+    bridge). Used with ``scoped(Scope, as_type=..., convert=Converter(...))``.
+    """
+
+    encode: Callable[[Any], Any] | None = None
+    decode: Callable[[Any], Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Heritage:
+    """Provenance stamp on a *projected* field, found in its ``FieldInfo.metadata``.
+
+    Every field of a projection carries exactly one ``Heritage`` (read it with
+    ``next(m for m in field.metadata if isinstance(m, Heritage))``). Unlike the
+    input markers in :data:`PRISM_MARKERS`, it is added by the builder, not the
+    author, and is not stripped — it is output, not a tag.
+
+    Attributes:
+        source: The canonical field this projected field descends from.
+        overridden: True when a per-scope ``override=`` / ``as_type=`` /
+            ``convert=`` reshaped this field for this projection; False when the
+            field is the canonical's verbatim.
+        description_inherited: True when the field's description is the canonical's
+            (the LLM-facing question: is this the original description, or one
+            tailored for this face?).
+    """
+
+    source: str
+    overridden: bool
+    description_inherited: bool
 
 
 @dataclass(frozen=True, slots=True)
 class Scoped:
     """Marker produced by :func:`scoped`. Holds the field's scope expression.
 
-    ``field_schema`` (when present) carries per-scope JSON-schema metadata —
-    ``description`` / ``examples`` / ``json_schema_extra`` keys — that lands on
-    the field in projections selecting this marker's (single) scope.
+    ``field_override`` (when present) is a :class:`~pydantic.fields.FieldInfo`
+    whose explicitly-set attributes — description, examples, json_schema_extra,
+    constraints (``min_length`` / ``ge`` / ``pattern`` / …), alias, default, … —
+    overlay the field in projections selecting this marker's (single) scope.
+    ``field_type`` (when not the ``_NO_TYPE`` sentinel) replaces the field's
+    annotation in that scope, and ``convert`` carries its round-trip converter.
     """
 
     expr: ScopeExpr
-    field_schema: _SchemaMeta | None = None
+    field_override: FieldInfo | None = None
+    field_type: Any = _NO_TYPE
+    convert: Converter | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,25 +128,65 @@ class BackRef:
 
 def scoped(
     *scopes: ScopeLike,
-    description: str | None = None,
-    examples: Sequence[Any] | None = None,
-    json_schema_extra: dict[str, Any] | None = None,
+    override: FieldInfo | Mapping[str, Any] | None = None,
+    as_type: Any = _NO_TYPE,
+    convert: Converter | None = None,
 ) -> Scoped:
     """Tag a field with the scopes (or scope expression) it belongs to.
 
     Multiple arguments union: ``scoped(A, B)`` is ``scoped(A | B)``.
 
-    Optional ``description`` / ``examples`` / ``json_schema_extra`` attach
-    per-scope JSON-schema metadata to the field: it lands on the field's schema
-    in projections that select this scope, so the same field can read
-    differently per projection. A schema-carrying ``scoped()`` must name exactly
-    one ``Scope`` class (so its metadata keys to a single scope); split membership
-    across markers to attach per-scope schema::
+    ``override=`` makes the same field read — and *validate* — differently per
+    projection. Pass a ``Field(...)`` (or a plain mapping of the same kwargs):
+    its explicitly-set attributes overlay the field in projections that select
+    this scope. That spans the whole ``FieldInfo`` surface — ``description`` /
+    ``examples`` / ``json_schema_extra`` annotations *and* core validation
+    constraints (``min_length`` / ``ge`` / ``pattern`` / …), plus ``alias``,
+    ``default``, and anything else a ``Field`` carries. Constraints merge with
+    the canonical ``Field(...)`` by *kind* (each kind you set overrides, the rest
+    inherit) and land in both the core schema (validation actually differs) and
+    the JSON schema.
+
+    The override is arbitrary, including *loosening* a canonical bound — a
+    projection may then accept values the canonical rejects, so the canonical is
+    no longer a superset of its projections::
+
+        image_description: Annotated[
+            str,
+            scoped(Body,    override=Field(min_length=200, description="rich prompt")),
+            scoped(Storage, override={"min_length": 10}),
+            Field(max_length=5000),   # canonical, shared by every projection
+        ]
+
+    ``as_type=`` goes one step further than ``override=``: it replaces the
+    field's *annotation* in that scope (the one thing a ``Field`` cannot carry).
+    Since a projection then holds a value of a different type than the canonical,
+    pass ``convert=Converter(encode=…, decode=…)`` to keep round-trips total
+    (``encode`` runs in :meth:`Projection.from_canonical`, ``decode`` in
+    :meth:`ScopedModel.from_projection`); omit a direction to fall back to
+    pydantic's native coercion::
+
+        created: Annotated[
+            datetime,
+            scoped(Storage),
+            scoped(
+                Llm,
+                as_type=str,
+                convert=Converter(
+                    encode=datetime.isoformat, decode=datetime.fromisoformat
+                ),
+                override=Field(description="ISO-8601 timestamp"),
+            ),
+        ]
+
+    A ``scoped()`` carrying *any* per-scope payload (``override`` / ``as_type`` /
+    ``convert``) must name exactly one ``Scope`` class (so it keys to a single
+    scope); split membership across markers to attach per-scope payloads::
 
         email: Annotated[
             str,
-            scoped(Public, description="User contact (public-facing)"),
-            scoped(Internal, description="User identity, for internal audit"),
+            scoped(Public, override=Field(description="User contact (public-facing)")),
+            scoped(Internal, override=Field(description="User identity, for audit")),
         ]
 
     Usage::
@@ -88,21 +198,29 @@ def scoped(
     if not scopes:
         raise TypeError("scoped() requires at least one scope or scope expression")
     expr = union_all(as_expr(scope) for scope in scopes)
-    schema: _SchemaMeta = {}
-    if description is not None:
-        schema["description"] = description
-    if examples is not None:
-        schema["examples"] = list(examples)
-    if json_schema_extra is not None:
-        schema["json_schema_extra"] = dict(json_schema_extra)
-    if schema and len(expr.atoms()) != 1:
+    info: FieldInfo | None = None
+    if override is not None:
+        # A plain mapping is the relaxed form; normalize it to a strict FieldInfo
+        # so the rest of prism only ever sees a FieldInfo. Validate the keys
+        # ourselves first — Field() would otherwise swallow a typo as schema.
+        if isinstance(override, FieldInfo):
+            info = override
+        else:
+            unknown = sorted(set(override) - _FIELD_KWARGS)
+            if unknown:
+                raise TypeError(
+                    f"scoped(override=...) got unknown Field argument(s) "
+                    f"{', '.join(unknown)}; pass valid pydantic Field() keywords"
+                )
+            info = Field(**dict(override))
+    has_payload = info is not None or as_type is not _NO_TYPE or convert is not None
+    if has_payload and len(expr.atoms()) != 1:
         raise TypeError(
-            "scoped(...) with schema metadata (description/examples/"
-            "json_schema_extra) must reference exactly one scope; split "
-            "membership across separate scoped() markers to attach per-scope "
-            "schema"
+            "scoped(...) with per-scope payload (override / as_type / convert) "
+            "must reference exactly one scope; split membership across separate "
+            "scoped() markers to attach per-scope payloads"
         )
-    return Scoped(expr, field_schema=schema or None)
+    return Scoped(expr, field_override=info, field_type=as_type, convert=convert)
 
 
 def _check_str(value: object, message: str) -> None:
@@ -145,7 +263,7 @@ def backref(target: type[ScopedModel] | str, *, via: str, field: str = "id") -> 
     The marked field is a real, validated field holding ids of ``target``
     (identified by ``target``'s ``field``); if it has no default, an empty one
     is implied. The ``via=`` link is checked against the target's forward
-    ``ref`` when ``__refs__`` is first resolved.
+    ``ref`` when ``__prism__.refs`` is first resolved.
 
     Usage::
 

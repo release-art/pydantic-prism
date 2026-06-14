@@ -96,11 +96,11 @@ def test_unresolvable_circular_string_ref() -> None:
         other_id: Annotated[UUID, ref("DefinedNowhere"), scoped(Public)]
 
     with pytest.raises(RefResolutionError, match="DefinedNowhere"):
-        Lonely.__refs__["other_id"]
+        Lonely.__prism__.refs["other_id"]
 
 
 def test_projection_classes_can_be_rescoped_to_narrow() -> None:
     # Round 18: projections re-project (narrowing); see test_reprojection.py.
     projected = Target.scope(Public)
     assert hasattr(projected, "scope")
-    assert projected.scope(Public).__prism_source__ is Target
+    assert projected.scope(Public).__prism__.source is Target

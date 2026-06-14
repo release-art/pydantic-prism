@@ -1,4 +1,4 @@
-"""Marker collection: build ``__field_scopes__`` / ``__refs__`` from a model."""
+"""Marker collection: build a model's ``__prism__`` field-scopes / refs."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from ...validators import (
 )
 from ..scopes import Scope, ScopeExpr, as_expr, union_all
 
-__all__ = ["_collect", "_initialize", "_variable_container"]
+__all__ = ["_collect", "_initialize", "_project_refs", "_variable_container"]
 
 
 def _initialize(cls: type[ScopedModel]) -> None:
@@ -25,7 +25,7 @@ def _initialize(cls: type[ScopedModel]) -> None:
 
 
 def _collect(cls: type[ScopedModel]) -> None:
-    """Validate markers and (re)build ``__field_scopes__`` / ``__refs__``.
+    """Validate markers and (re)build ``__prism__.field_scopes`` / ``__prism__.refs``.
 
     Runs at class creation and again after every successful ``model_rebuild``,
     because markers on forward-referenced annotations are invisible until the
@@ -46,32 +46,64 @@ def _collect(cls: type[ScopedModel]) -> None:
         if scope_markers:
             # Explicit wins, no merge: a tagged field ignores the class default.
             field_scopes[field_name] = union_all(m.expr for m in scope_markers)
-        elif cls.__prism_default_scope__ is not None:
+        elif cls.__prism__.default_scope is not None:
             # Untagged field on a class with a default: fall back to it. The
             # fallback is uniform — ref()/backref() fields are filled too.
-            field_scopes[field_name] = cls.__prism_default_scope__
+            field_scopes[field_name] = cls.__prism__.default_scope
         if len(ref_markers) > 1:
             raise TypeError(
                 f"{cls.__name__}.{field_name}: at most one ref()/backref() marker "
                 f"is allowed per field"
             )
-        if ref_markers:
-            shape, optional, key_type = shape_of(info.annotation)
-            raw_refs[field_name] = RawEdge(ref_markers[0], shape, optional, key_type)
-        else:
-            embedded = _detect_embedded(info.annotation)
-            if embedded is not None:
-                shape, optional, key_type = shape_of(info.annotation)
-                raw_refs[field_name] = RawEdge(embedded, shape, optional, key_type)
-    cls.__field_scopes__ = field_scopes
+        edge = _derive_edge(info.annotation, ref_markers)
+        if edge is not None:
+            raw_refs[field_name] = edge
+    cls.__prism__.field_scopes = field_scopes
     _check_scope_name_tokens(cls)
-    cls.__prism_validator_scopes__ = _collect_validator_scopes(cls)
-    existing = cls.__dict__.get("__refs__")
-    if isinstance(existing, RefGraph):
-        # Mutate in place so graphs already held by user code stay current.
-        existing._reset(raw_refs)  # pyright: ignore[reportPrivateUsage] — intra-package
-    else:
-        cls.__refs__ = RefGraph(cls, raw_refs)
+    cls.__prism__.validator_scopes = _collect_validator_scopes(cls)
+    # The state's RefGraph is created with the class (in __init_subclass__) and
+    # reset in place on every (re)collect, so graphs already held by user code
+    # stay current.
+    cls.__prism__.refs._reset(raw_refs)  # pyright: ignore[reportPrivateUsage] — intra-package
+
+
+def _derive_edge(annotation: Any, ref_markers: list[Any]) -> RawEdge | None:
+    """The relationship edge of a field annotation, if any (≤1 ref marker assumed).
+
+    An explicit ``ref()``/``backref()`` marker wins; otherwise an unambiguously
+    embedded model is auto-detected. Shared by initial collection and per-scope
+    ref re-derivation (when ``as_type=`` reshapes a field).
+    """
+    if ref_markers:
+        shape, optional, key_type = shape_of(annotation)
+        return RawEdge(ref_markers[0], shape, optional, key_type)
+    embedded = _detect_embedded(annotation)
+    if embedded is not None:
+        shape, optional, key_type = shape_of(annotation)
+        return RawEdge(embedded, shape, optional, key_type)
+    return None
+
+
+def _project_refs(
+    cls: type[ScopedModel], surviving: list[str], retyped: dict[str, Any]
+) -> RefGraph:
+    """The projection's relationship graph: canonical edges filtered to ``surviving``.
+
+    A field reshaped by ``as_type=`` has its edge **re-derived** from the override
+    annotation (its shape / key-type / embedded target may differ, or it may gain
+    or lose an edge entirely), keeping any explicit ``ref()``/``backref()`` marker.
+    """
+    if not retyped:
+        return cls.__prism__.refs.filtered(surviving)
+    overrides: dict[str, RawEdge | None] = {}
+    for field_name, annotation in retyped.items():
+        ref_markers = [
+            m
+            for m in cls.model_fields[field_name].metadata
+            if isinstance(m, (Ref, BackRef))
+        ]
+        overrides[field_name] = _derive_edge(annotation, ref_markers)
+    return cls.__prism__.refs.reshaped(surviving, overrides)
 
 
 def _check_scope_name_tokens(cls: type[ScopedModel]) -> None:
@@ -131,9 +163,9 @@ def _find_embedded_models(
         if issubclass(annotation, ScopedModel) and annotation is not ScopedModel:
             found.add((annotation, None))
         elif issubclass(annotation, Projection) and annotation is not Projection:
-            source = getattr(annotation, "__prism_source__", None)
-            if source is not None:
-                found.add((source, annotation.__prism_scope__))
+            state = getattr(annotation, "__prism__", None)
+            if state is not None:
+                found.add((state.source, state.scope))
         return
     for arg in get_args(annotation):
         if isinstance(arg, list):  # Callable parameter lists

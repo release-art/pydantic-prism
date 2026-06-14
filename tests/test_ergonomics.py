@@ -82,5 +82,5 @@ def test_recursive_dict_tuple_and_projection_together() -> None:
     assert type(tree.ordered[0]) is projected  # type: ignore[attr-defined]
     assert "label" not in projected.model_fields
     # the self-edges register as embedded composition
-    assert Tree.__refs__["branches"].target is Tree
-    assert Tree.__refs__["ordered"].target is Tree
+    assert Tree.__prism__.refs["branches"].target is Tree
+    assert Tree.__prism__.refs["ordered"].target is Tree

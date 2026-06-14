@@ -80,7 +80,7 @@ def generate(config: Config) -> str:
 
 
 def _render_class(proj: type[Projection], imports: _Imports) -> str:
-    base_names = [_render_type_ref(base, imports) for base in proj.__prism_bases__]
+    base_names = [_render_type_ref(base, imports) for base in proj.__prism__.bases]
     bases = ", ".join([*base_names, "Projection"])
     lines = [f"    class {proj.__name__}({bases}):"]
     for name, info in proj.model_fields.items():
@@ -94,10 +94,10 @@ def _render_class(proj: type[Projection], imports: _Imports) -> str:
 
 
 def _render_alias(proj: type[Projection], imports: _Imports) -> str:
-    source = proj.__prism_source__
+    source = proj.__prism__.source
     source_ref = imports.add_runtime(source.__module__, source.__qualname__)
-    expr_src = _render_scope_expr(proj.__prism_scope__, imports)
-    auto_name = _auto_name(source, proj.__prism_scope__)
+    expr_src = _render_scope_expr(proj.__prism__.scope, imports)
+    auto_name = _auto_name(source, proj.__prism__.scope)
     if proj.__name__ == auto_name:
         return f"{proj.__name__} = {source_ref}.scope({expr_src})"
     return f"{proj.__name__} = {source_ref}.scope({expr_src}, name={proj.__name__!r})"

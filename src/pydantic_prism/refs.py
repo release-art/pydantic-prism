@@ -74,7 +74,7 @@ class RawEdge:
 class RefInfo:
     """One resolved relationship edge — the base of the three edge kinds.
 
-    ``__refs__[name]`` is typed as this base; the concrete object is one of
+    ``__prism__.refs[name]`` is typed as this base; the concrete object is one of
     :class:`IdRefInfo` (``kind="ref"``), :class:`BackRefInfo` (``kind="backref"``,
     adds ``via``) or :class:`EmbeddedRefInfo` (``kind="embedded"``, adds
     ``scope``). Narrow with ``isinstance`` / ``match info.kind`` — or use the
@@ -247,7 +247,9 @@ class RefGraph(Mapping[str, RefInfo]):
                 yield graph.owner, info
                 if info.target not in seen:
                     seen.add(info.target)
-                    target_graph = getattr(info.target, "__refs__", None)
+                    target_graph = getattr(
+                        getattr(info.target, "__prism__", None), "refs", None
+                    )
                     if isinstance(target_graph, RefGraph):
                         queue.append(target_graph)
 
@@ -278,6 +280,26 @@ class RefGraph(Mapping[str, RefInfo]):
             name: info for name, info in self._resolved.items() if name in field_names
         }
         return graph
+
+    def reshaped(
+        self, field_names: Collection[str], overrides: Mapping[str, RawEdge | None]
+    ) -> RefGraph:
+        """``filtered``, but with some fields' edges re-derived (``as_type=`` retypes).
+
+        For a name in ``overrides`` the supplied :class:`RawEdge` replaces the
+        canonical one (``None`` means the retyped field now carries no edge — e.g.
+        an embed it dropped); every other surviving field keeps its canonical
+        edge. The owner stays the canonical model, so targets still resolve.
+        """
+        raw: dict[str, RawEdge] = {}
+        for name in field_names:
+            if name in overrides:
+                edge = overrides[name]
+                if edge is not None:
+                    raw[name] = edge
+            elif name in self._raw:
+                raw[name] = self._raw[name]
+        return RefGraph(self._owner, raw)
 
     def _resolve(self, field_name: str) -> RefInfo:
         from .model import ScopedModel
@@ -347,7 +369,7 @@ class RefGraph(Mapping[str, RefInfo]):
     def _check_backref(
         self, field_name: str, target: type[ScopedModel], via: str
     ) -> None:
-        target_graph = target.__refs__
+        target_graph = target.__prism__.refs
         prefix = f"{self._owner.__name__}.{field_name}: backref via {via!r}"
         raw = target_graph._raw.get(via)
         if raw is None or not isinstance(raw.marker, Ref):

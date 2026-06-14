@@ -8,8 +8,8 @@ top-level import.)
 ```python
 from pydantic_prism import (
     MISSING, Scope, ScopeExpr, Classification, Direction, In, Out,
-    ScopedModel, Projection,
-    scoped, scoped_validator, ref, backref, Ref, BackRef, Scoped, RefShape,
+    ScopedModel, Projection, ModelState, ProjectionState,
+    scoped, scoped_validator, unprojected, ref, backref, Ref, BackRef, Scoped, Converter, Heritage, RefShape,
     RefGraph, RefInfo, IdRefInfo, BackRefInfo, EmbeddedRefInfo,
     FlowReport, FlowNode, FlowEdge, FlowField, build_flow_report,
     Diagram, scope_diagram, projection_diagram,
@@ -23,8 +23,11 @@ from pydantic_prism import (
 
 | name | kind | summary |
 |---|---|---|
-| `scoped(*scopes, description=, examples=, json_schema_extra=)` | marker fn | Tags a field with scopes / a scope expression (varargs union). Optional schema kwargs attach per-scope field schema (one scope per schema-bearing marker). |
+| `scoped(*scopes, override=, as_type=, convert=)` | marker fn | Tags a field with scopes / a scope expression (varargs union). `override=Field(...)` (or a plain mapping of the same kwargs) overlays the field per scope across the **whole `FieldInfo` surface** — `description`/`examples`/`json_schema_extra` annotations *and* validation constraints (`min_length`/`ge`/`pattern`/…), `alias`, `default`, … — landing in core *and* JSON schema; constraints merge by kind over the canonical `Field(...)`, the rest replace. `as_type=` replaces the field's **annotation** per scope (re-deriving any relationship edge from the new type); `convert=Converter(...)` keeps round-trips total across that type change. One scope per payload-bearing marker. See [vary schema per scope](../how-to/vary-schema-per-scope.md) and [change a field's type per scope](../how-to/retype-a-field-per-scope.md). |
+| `Converter(encode=, decode=)` | dataclass | Per-scope round-trip hooks for an `as_type=` field: `encode` (canonical value → projection value, run by `from_canonical`) and `decode` (projection → canonical, run by `from_projection`/`with_updates`). Both optional — an omitted direction falls back to pydantic's native coercion. |
+| `Heritage(source, overridden, description_inherited)` | dataclass | Provenance stamp the builder adds to **every projected field's** `FieldInfo.metadata` (read with `next(m for m in field.metadata if isinstance(m, Heritage))`). `overridden` = a per-scope `override=`/`as_type=`/`convert=` reshaped the field; `description_inherited` = the description is still the canonical's. Metadata only — never reaches the JSON/tool schema. |
 | `scoped_validator(*scopes, mode=..., parent_ordering=None)` | decorator | A `@model_validator` that **also** carries onto projections whose expression selects `scopes`. `mode` is required (`"before" \| "after" \| "wrap"`). `parent_ordering="acknowledged"` asserts a `before` validator does not depend on an inherited base hook, silencing the [`PrismOrderingWarning`](errors.md). |
+| `unprojected(member)` | decorator | Keep a method / `@property` / `@classmethod` / `@staticmethod` **canonical-only**. By default a model's non-field callables are copied onto every projection; `@unprojected` opts one out. See [keep behavior on projections](../how-to/keep-behavior-on-projections.md). |
 | `ref(target, *, field="id")` | marker fn | Forward FK-style reference. `target`: `ScopedModel` subclass or string name. Keyed-dict shape inferred from a `dict[...]` annotation. |
 | `backref(target, *, via, field="id")` | marker fn | Declared reverse reference; `via` names the forward-`ref` field on `target`. |
 | `Ref` / `BackRef` / `Scoped` | marker types | The frozen-dataclass instances produced by `ref()` / `backref()` / `scoped()`; you rarely name these directly. |
@@ -63,6 +66,10 @@ Prefer the operators for statically-known scopes.
 
 ## `ScopedModel` — canonical models
 
+All of a model's prism state lives in one `ModelState` at `Model.__prism__`; the
+`__prism__.*` rows below are its fields (a `Projection` likewise carries a
+`ProjectionState`).
+
 | name | kind | summary |
 |---|---|---|
 | `Model.scope(scope, *, name=None, bases=None)` | classmethod | Derive/fetch the cached projection class for one scope or expression (compose with `\| & - ~`). `name` and `bases` join the cache key. |
@@ -73,10 +80,10 @@ Prefer the operators for statically-known scopes.
 | `Model.from_projection(projection, /, **extra)` | classmethod | Complete projection → canonical instance; missing fields via `**extra` or canonical defaults. Rejects **partial** projections (use `with_updates`). |
 | `Model.run_inherited_before(data)` | classmethod | Run inherited `@model_validator(mode="before")` hooks (nearest ancestor first), threading the result. Call inside a `@scoped_validator(mode="before")` whose logic depends on a base hook's transformation. Inherited hooks must be idempotent (they re-run under pydantic). Also on `Projection`. |
 | `instance.with_updates(patch, /)` | method | Apply a (partial) projection's set fields as a PATCH; returns a new, re-validated instance. `self` unchanged. |
-| `Model.__refs__` | ClassVar | The model's `RefGraph`. |
-| `Model.__field_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each field's **resolved** scope (class default folded in for untagged fields). |
-| `Model.__prism_default_scope__` | ClassVar | `ScopeExpr \| None`: the class-level `default_scope=` (inherited down the MRO), or `None`. |
-| `Model.__prism_validator_scopes__` | ClassVar | `dict[str, ScopeExpr]`: each `@scoped_validator`'s name → the expression deciding which projections carry it. |
+| `Model.__prism__.refs` | state | The model's `RefGraph`. |
+| `Model.__prism__.field_scopes` | state | `dict[str, ScopeExpr]`: each field's **resolved** scope (class default folded in for untagged fields). |
+| `Model.__prism__.default_scope` | state | `ScopeExpr \| None`: the class-level `default_scope=` (inherited down the MRO), or `None`. |
+| `Model.__prism__.validator_scopes` | state | `dict[str, ScopeExpr]`: each `@scoped_validator`'s name → the expression deciding which projections carry it. |
 
 Class keywords: `projection_bases=(...)`, `default_scope=` (the scope untagged
 fields fall back to), `projection_name_template=` (`{model}` / `{scope}`
@@ -96,15 +103,21 @@ instance's `model_dump`.
 
 ## `Projection` — derived classes
 
+A projection does not inherit the canonical class, but the canonical's non-field
+callables (methods / `@property` / `@classmethod` / `@staticmethod`) are **copied
+onto it** by default; framework names and pydantic-managed members
+(validators / serializers / computed fields) are never copied, and `@unprojected`
+opts a member out. See [keep behavior on projections](../how-to/keep-behavior-on-projections.md).
+
 | name | kind | summary |
 |---|---|---|
 | `Projection.from_canonical(instance, *, mode, by_alias, context, exclude_none, exclude_unset, exclude_defaults, narrow)` | classmethod | Canonical (or wider projection) instance → projected instance; kwargs forwarded to `model_dump`. The instance-level narrowing counterpart of re-projection. |
-| `Projection.scope(scope, *, name=None, bases=None)` | classmethod | **Re-project**: derive a narrower projection from this one — `Source.scope(__prism_scope__ & scope)`. Only ever narrows (a view can't expose more than it has); returns a *sibling* projection of the canonical, not a subclass. `bases` defaults to this projection's `__prism_bases__`. |
+| `Projection.scope(scope, *, name=None, bases=None)` | classmethod | **Re-project**: derive a narrower projection from this one — `Source.scope(__prism__.scope & scope)`. Only ever narrows (a view can't expose more than it has); returns a *sibling* projection of the canonical, not a subclass. `bases` defaults to this projection's `__prism__.bases`. |
 | `Projection.tool_schema(*, provider="openai", strict=True, name=None, description=None, envelope=True)` | classmethod | Render this projection as an LLM tool / function schema (a plain `dict` for the `openai` / `anthropic` / `mistral` SDK; `mistral` shares the OpenAI-compatible envelope). `strict=True` applies OpenAI strict-mode rewrites (all-required, nullable optionals, `additionalProperties: false`); `strict=False` leaves the schema faithful (Anthropic). `envelope=False` returns just the normalized parameters schema (no provider wrapper) — for a framework's own tool definition, e.g. [Pydantic AI](../how-to/use-with-pydantic-ai.md). `name` defaults to the class name; `description` falls back to the per-scope or canonical docstring. Emits `ToolSchemaDepthWarning` past OpenAI's 5-level limit (OpenAI only). See [the how-to](../how-to/derive-llm-tool-schema.md). |
-| `Projection.__prism_source__` | ClassVar | The canonical `ScopedModel` class this projection derives from. |
-| `Projection.__prism_scope__` | ClassVar | The `ScopeExpr` the projection was built for. |
-| `Projection.__prism_bases__` | ClassVar | The carried bases tuple (`()` when none). |
-| `Projection.__refs__` | ClassVar | The surviving slice of the canonical's `RefGraph`. |
+| `Projection.__prism__.source` | state | The canonical `ScopedModel` class this projection derives from. |
+| `Projection.__prism__.scope` | state | The `ScopeExpr` the projection was built for. |
+| `Projection.__prism__.bases` | state | The carried bases tuple (`()` when none). |
+| `Projection.__prism__.refs` | state | The surviving slice of the canonical's `RefGraph`. |
 
 ## Validators
 
@@ -153,7 +166,7 @@ means "redact me").
 | name | kind | summary |
 |---|---|---|
 | `RefGraph` | class | `Mapping[str, RefInfo]` keyed by field name; `.owner`, `.targets()`, `.walk()` (BFS over forward + embedded edges), `.diagram(...)`, plus kind-typed accessors `.outgoing` (`dict[str, IdRefInfo]`), `.incoming` (`dict[str, BackRefInfo]`), `.embedded` (`dict[str, EmbeddedRefInfo]`). |
-| `RefInfo` | dataclass | Base edge: `.field_name`, `.target`, `.target_field`, `.shape`, `.optional`, `.kind`, `.key_type` (shape-driven), `.many` (derived). `__refs__[name]` is typed as this; narrow with `isinstance` / `match .kind`. |
+| `RefInfo` | dataclass | Base edge: `.field_name`, `.target`, `.target_field`, `.shape`, `.optional`, `.kind`, `.key_type` (shape-driven), `.many` (derived). `__prism__.refs[name]` is typed as this; narrow with `isinstance` / `match .kind`. |
 | `IdRefInfo` | dataclass | `kind="ref"`: a forward id-valued FK edge. |
 | `BackRefInfo` | dataclass | `kind="backref"`: a declared reverse edge; adds `.via: str`. |
 | `EmbeddedRefInfo` | dataclass | `kind="embedded"`: an embedded carrier/composition edge; adds `.scope: ScopeExpr \| None`. `.target` is always the **canonical** model. |

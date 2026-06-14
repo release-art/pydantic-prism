@@ -110,14 +110,14 @@ def test_optional_scalar_backref_gets_none_default() -> None:
 
 
 def test_refgraph_repr_shows_edges() -> None:
-    assert repr(Thing.__refs__) == "RefGraph(Thing: no refs)"
-    text = repr(DanglingTarget.__refs__)
+    assert repr(Thing.__prism__.refs) == "RefGraph(Thing: no refs)"
+    text = repr(DanglingTarget.__prism__.refs)
     assert "other_id->NoSuchModel" in text  # string targets shown unresolved
 
 
 def test_unresolvable_string_target_raises() -> None:
     with pytest.raises(RefResolutionError, match="cannot resolve 'NoSuchModel'"):
-        DanglingTarget.__refs__["other_id"]
+        DanglingTarget.__prism__.refs["other_id"]
 
 
 # --- projection builder internals -------------------------------------------
@@ -130,14 +130,14 @@ def test_scope_double_checked_cache_under_lock() -> None:
         id: Annotated[UUID, scoped(Public)]
 
     passed_fast_path = threading.Event()
-    original: dict[Any, Any] = Raced.__prism_cache__
+    original: dict[Any, Any] = Raced.__prism__.cache
 
     class SpyDict(dict[Any, Any]):
         def get(self, key: Any, default: Any = None) -> Any:
             passed_fast_path.set()
             return super().get(key, default)
 
-    Raced.__prism_cache__ = SpyDict(original)
+    Raced.__prism__.cache = SpyDict(original)
     results: list[type[Any]] = []
     thread = threading.Thread(target=lambda: results.append(Raced.scope(Public)))
     with _build_lock:
@@ -166,7 +166,7 @@ def test_rewrite_preserves_nested_annotated_metadata() -> None:
     leg = trip.legs[0]  # type: ignore[attr-defined]
     assert type(leg) is Leg.scope(Public)
     # the embedded edge was found through the nested Annotated as well
-    assert Trip.__refs__["legs"].target is Leg
+    assert Trip.__prism__.refs["legs"].target is Leg
 
 
 def test_rewrite_leaves_bare_generics_alone() -> None:

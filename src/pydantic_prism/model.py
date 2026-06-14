@@ -9,9 +9,9 @@ imports of the engine to call time to break the cycle.
 from __future__ import annotations
 
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, cast
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, Self, TypeVar, cast
 
 from pydantic import BaseModel
 
@@ -30,11 +30,44 @@ if TYPE_CHECKING:
     from .flow import FlowReport
     from .toolschema import ToolProvider
 
-__all__ = ["Projection", "ScopedModel"]
+__all__ = [
+    "ModelState",
+    "Projection",
+    "ProjectionState",
+    "ScopedModel",
+    "unprojected",
+]
 
 # Sentinel: "no default_scope= keyword on this class definition". Distinct from
 # None, which is a legitimate resolved value meaning "no default declared".
 _NO_DEFAULT: Any = object()
+
+_Member = TypeVar("_Member")
+
+
+def unprojected(member: _Member) -> _Member:
+    """Keep a method / ``property`` / ``classmethod`` canonical-only.
+
+    By default prism copies a :class:`ScopedModel`'s non-field callables onto
+    every projection. Decorate a member with ``@unprojected`` to exclude it —
+    e.g. a method that hard-depends on a field no projection carries::
+
+        class Card(ScopedModel):
+            @unprojected
+            def needs_storage_only_fields(self) -> bool:
+                return bool(self.hashes)  # 'hashes' exists only on Storage
+
+    The flag is set on the underlying function, so ``@unprojected`` may wrap (or
+    be wrapped by) ``@property`` / ``@classmethod`` / ``@staticmethod`` in either
+    order.
+    """
+    target: Any = member
+    if isinstance(target, (classmethod, staticmethod)):
+        target = cast(Any, target).__func__
+    elif isinstance(target, property):
+        target = cast(Any, target).fget
+    target.__prism_unprojected__ = True
+    return member
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +93,70 @@ class _ProjectionKey:
     extra: Literal["allow", "ignore", "forbid"] | None
 
 
+@dataclass(frozen=True, slots=True)
+class ProjectionState:
+    """All of a projection's prism state, held on ``Projection.__prism__``.
+
+    Set once when the projection is built and never mutated, so it is frozen:
+
+    * ``source`` — the canonical :class:`ScopedModel` this projection derives from.
+    * ``scope`` — the :class:`ScopeExpr` it was built for.
+    * ``bases`` — the non-``ScopedModel`` bases carried onto it (``()`` when none).
+    * ``refs`` — the surviving slice of the canonical's relationship graph.
+    * ``encoders`` / ``decoders`` — per-field round-trip converters for
+      ``as_type=`` fields (``Converter.encode`` / ``.decode``), keyed by python
+      field name; empty unless a field was retyped.
+    """
+
+    source: type[ScopedModel]
+    scope: ScopeExpr
+    bases: tuple[type[BaseModel], ...]
+    refs: RefGraph
+    encoders: dict[str, Callable[[Any], Any]]
+    decoders: dict[str, Callable[[Any], Any]]
+
+
+@dataclass(slots=True)
+class ModelState:
+    """All of a canonical model's prism state, held on ``ScopedModel.__prism__``.
+
+    Unlike :class:`ProjectionState` this mutates after class creation (the
+    ``cache`` grows; ``field_scopes`` / ``refs`` are rebuilt on
+    ``model_rebuild``), so it is slotted but not frozen.
+
+    * ``default_scope`` / ``name_template`` / ``projection_bases`` — class-level
+      *config*, set from class keywords and inherited from the parent's state.
+    * ``field_scopes`` — field name → the scope expression it belongs to.
+    * ``validator_scopes`` — ``@scoped_validator`` name → the expression deciding
+      which projections carry it.
+    * ``refs`` — this model's relationship graph (mutated in place on rebuild).
+    * ``cache`` / ``names`` — the projection caches, keyed by projection key /
+      class name.
+    * ``base_warned`` — whether the dropped-base-behavior warning has fired.
+    """
+
+    refs: RefGraph
+    field_scopes: dict[str, ScopeExpr]
+    validator_scopes: dict[str, ScopeExpr]
+    cache: dict[_ProjectionKey, type[Projection]]
+    names: dict[str, _ProjectionKey]
+    default_scope: ScopeExpr | None = None
+    name_template: str | None = None
+    projection_bases: tuple[type[BaseModel], ...] | None = None
+    base_warned: bool = False
+
+    @classmethod
+    def empty(cls, owner: type[ScopedModel]) -> ModelState:
+        """A fresh state for ``owner`` with empty runtime containers."""
+        return cls(
+            refs=RefGraph(owner, {}),
+            field_scopes={},
+            validator_scopes={},
+            cache={},
+            names={},
+        )
+
+
 # RLock: _project recurses for nested models within one build.
 _build_lock = threading.RLock()
 
@@ -69,15 +166,12 @@ class Projection(BaseModel):
 
     Projections are real pydantic models — validation, serialization, JSON
     schema, and FastAPI integration all work normally. They additionally
-    carry where they came from (``__prism_source__``, ``__prism_scope__``,
-    ``__prism_bases__``) and the surviving slice of the relationship graph
-    (``__refs__``).
+    carry all their prism state in a single :class:`ProjectionState` at
+    ``__prism__`` (``.source``, ``.scope``, ``.bases``, ``.refs``, ``.encoders``,
+    ``.decoders``).
     """
 
-    __prism_source__: ClassVar[type[ScopedModel]]
-    __prism_scope__: ClassVar[ScopeExpr]
-    __prism_bases__: ClassVar[tuple[type[BaseModel], ...]] = ()
-    __refs__: ClassVar[RefGraph]
+    __prism__: ClassVar[ProjectionState]
 
     @classmethod
     def run_inherited_before(cls, data: Any) -> Any:
@@ -163,16 +257,16 @@ class Projection(BaseModel):
         projection of the canonical* (a sibling, not a subclass of this one),
         consistent with projections-not-inheritance.
 
-        ``bases`` defaults to this projection's carried ``__prism_bases__`` so
+        ``bases`` defaults to this projection's carried ``__prism__.bases`` so
         base behavior survives the narrowing; ``name``/``bases`` forward to
         :meth:`ScopedModel.scope`. The auto-name comes from the intersected
         expression (e.g. ``UserInternalAndPublic``) — pass ``name=`` for a
         stable one. To narrow an *instance*, use :meth:`from_canonical`.
         """
-        return cls.__prism_source__.scope(
-            cls.__prism_scope__ & as_expr(scope),
+        return cls.__prism__.source.scope(
+            cls.__prism__.scope & as_expr(scope),
             name=name,
-            bases=cls.__prism_bases__ if bases is None else bases,
+            bases=cls.__prism__.bases if bases is None else bases,
         )
 
     @classmethod
@@ -241,26 +335,10 @@ class ScopedModel(BaseModel):
     See :meth:`scope` (``bases=``) for the per-call form.
     """
 
-    __field_scopes__: ClassVar[dict[str, ScopeExpr]] = {}
-    # The class-level default scope: the expression a field falls back to when
-    # it carries no scoped(...) marker. None means "no default declared"; it is
-    # inherited down the ScopedModel MRO like any class attribute and may be
-    # re-declared (or cleared with default_scope=None) by a subclass.
-    __prism_default_scope__: ClassVar[ScopeExpr | None] = None
-    # Model validators declared with @scoped_validator, keyed by validator name,
-    # mapped to the scope expression that decides which projections carry them.
-    __prism_validator_scopes__: ClassVar[dict[str, ScopeExpr]] = {}
-    # Template for auto-naming projections: format placeholders {model} and
-    # {scope}. None means the built-in "{model}{scope}" form. Inherited down the
-    # MRO; the call-site name= still overrides it.
-    __prism_name_template__: ClassVar[str | None] = None
-    __refs__: ClassVar[RefGraph]
-    __prism_cache__: ClassVar[dict[_ProjectionKey, type[Projection]]] = {}
-    __prism_names__: ClassVar[dict[str, _ProjectionKey]] = {}
-    # None means "never declared" (inherited declarations stay visible);
-    # an explicit empty tuple is a declaration and silences the drop warning.
-    __prism_projection_bases__: ClassVar[tuple[type[BaseModel], ...] | None] = None
-    __prism_base_warned__: ClassVar[bool] = False
+    # All prism state for a canonical model lives in one ModelState; see its
+    # docstring. Created per subclass in __init_subclass__ (config inherited from
+    # the parent's state), populated by collection in __pydantic_init_subclass__.
+    __prism__: ClassVar[ModelState]
 
     def __init_subclass__(
         cls,
@@ -273,16 +351,22 @@ class ScopedModel(BaseModel):
         from ._internal.model.bases import _check_bases
         from ._internal.model.build import _validate_name_template
 
+        # A fresh state per class, inheriting the parent's *config* (so a subclass
+        # without the keywords still sees the ancestor's default_scope etc.); the
+        # runtime fields (cache/names/field_scopes/refs) start empty.
+        parent = cls.__prism__
+        cls.__prism__ = ModelState.empty(cast("type[ScopedModel]", cls))
+        cls.__prism__.default_scope = parent.default_scope
+        cls.__prism__.name_template = parent.name_template
+        cls.__prism__.projection_bases = parent.projection_bases
         if projection_bases is not None:
-            cls.__prism_projection_bases__ = _check_bases(
+            cls.__prism__.projection_bases = _check_bases(
                 cast("type[ScopedModel]", cls), projection_bases
             )
         if default_scope is not _NO_DEFAULT:
-            # Validate eagerly (TypeError for a non-Scope value) at class
-            # definition; default_scope=None explicitly clears an inherited
-            # default. Setting the attribute on this class shadows the
-            # inherited one; leaving the keyword off lets the MRO supply it.
-            cls.__prism_default_scope__ = (
+            # default_scope=None explicitly clears an inherited default; validate
+            # eagerly (TypeError for a non-Scope value) at class definition.
+            cls.__prism__.default_scope = (
                 as_expr(default_scope) if default_scope is not None else None
             )
         if projection_name_template is not _NO_DEFAULT:
@@ -290,7 +374,7 @@ class ScopedModel(BaseModel):
                 _validate_name_template(
                     cast("type[ScopedModel]", cls), projection_name_template
                 )
-            cls.__prism_name_template__ = projection_name_template
+            cls.__prism__.name_template = projection_name_template
 
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
@@ -298,8 +382,6 @@ class ScopedModel(BaseModel):
         from ._internal.model.collect import _initialize
         from ._internal.model.ordering import _warn_ordering_trap
 
-        cls.__prism_cache__ = {}
-        cls.__prism_names__ = {}
         _initialize(cls)
         _warn_ordering_trap(cls)
 
@@ -366,7 +448,7 @@ class ScopedModel(BaseModel):
     def scopes(cls) -> frozenset[type[Scope]]:
         """The Scope classes appearing in this model's field tags."""
         out: set[type[Scope]] = set()
-        for expr in cls.__field_scopes__.values():
+        for expr in cls.__prism__.field_scopes.values():
             out |= expr.atoms()
         return frozenset(out)
 
@@ -404,7 +486,7 @@ class ScopedModel(BaseModel):
         atoms); visibility scopes and untagged fields are omitted.
         """
         out: dict[str, frozenset[type[Classification]]] = {}
-        for field_name, expr in cls.__field_scopes__.items():
+        for field_name, expr in cls.__prism__.field_scopes.items():
             tags = frozenset(a for a in expr.atoms() if issubclass(a, Classification))
             if tags:
                 out[field_name] = tags
@@ -474,8 +556,8 @@ class ScopedModel(BaseModel):
         """
         if visible is not None:
             base = as_expr(visible)
-        elif cls.__prism_default_scope__ is not None:
-            base = cls.__prism_default_scope__
+        elif cls.__prism__.default_scope is not None:
+            base = cls.__prism__.default_scope
         else:
             raise TypeError(
                 f"{cls.__name__}.{'input' if drop is Out else 'output'}() requires a "
@@ -585,8 +667,8 @@ class ScopedModel(BaseModel):
         """
         if scope is not None:
             expr = as_expr(scope)
-        elif cls.__prism_default_scope__ is not None:
-            expr = cls.__prism_default_scope__
+        elif cls.__prism__.default_scope is not None:
+            expr = cls.__prism__.default_scope
         else:
             raise TypeError(
                 f"{cls.__name__}.tool_schema() requires a scope, or a "
@@ -621,16 +703,16 @@ class ScopedModel(BaseModel):
 
         checked = _check_bases(cls, bases) if bases is not None else None
         carried = (
-            checked if checked is not None else (cls.__prism_projection_bases__ or ())
+            checked if checked is not None else (cls.__prism__.projection_bases or ())
         )
         cache_key = _ProjectionKey(expr, name, carried, extra)
-        cached = cls.__prism_cache__.get(cache_key)
+        cached = cls.__prism__.cache.get(cache_key)
         if cached is not None:
             return cached
         # Build under a lock so concurrent first calls (free-threaded Python,
         # threaded servers) cannot produce two classes for one expression.
         with _build_lock:
-            cached = cls.__prism_cache__.get(cache_key)
+            cached = cls.__prism__.cache.get(cache_key)
             if cached is not None:
                 return cached
             ctx = _BuildContext()
@@ -642,8 +724,8 @@ class ScopedModel(BaseModel):
             for built in ctx.built.values():
                 built.model_rebuild(_types_namespace=ctx.namespace)
             for build_key, built in ctx.built.items():
-                build_key.owner.__prism_cache__[build_key.key] = built
-                build_key.owner.__prism_names__[built.__name__] = build_key.key
+                build_key.owner.__prism__.cache[build_key.key] = built
+                build_key.owner.__prism__.names[built.__name__] = build_key.key
             return projection
 
     @classmethod
@@ -659,11 +741,11 @@ class ScopedModel(BaseModel):
         baseline. Apply it to one with :meth:`with_updates` instead; passing a
         partial projection here raises :class:`TypeError`.
         """
-        from ._internal.model.narrow import _validation_key
+        from ._internal.model.narrow import _apply_decoders, _validation_key
 
         if (
             isinstance(projection, Projection)
-            and projection.__prism_scope__.is_partial()
+            and projection.__prism__.scope.is_partial()
         ):
             raise TypeError(
                 f"{cls.__name__}.from_projection() received a partial projection "
@@ -673,6 +755,9 @@ class ScopedModel(BaseModel):
                 f"build from a non-partial projection of {cls.__name__}"
             )
         data = dict(projection.model_dump(by_alias=True))
+        if isinstance(projection, Projection):
+            # Decode any as_type= field back toward the canonical (no-op otherwise).
+            data = _apply_decoders(type(projection), data)
         for key, value in extra.items():
             info = cls.model_fields.get(key)
             data[_validation_key(key, info) if info else key] = value
@@ -693,7 +778,8 @@ class ScopedModel(BaseModel):
         Update projections are the usual source); a projection of a different
         model raises :class:`TypeError`. ``self`` is left unchanged.
         """
-        source = getattr(patch, "__prism_source__", None)
+        state = getattr(patch, "__prism__", None)
+        source = state.source if isinstance(state, ProjectionState) else None
         if not (isinstance(source, type) and isinstance(self, source)):
             raise TypeError(
                 f"{type(self).__name__}.with_updates() expects a projection of "
@@ -704,11 +790,15 @@ class ScopedModel(BaseModel):
                     else ""
                 )
             )
-        merged = {
-            **self.model_dump(by_alias=True),
-            **patch.model_dump(by_alias=True, exclude_unset=True),
-        }
+        from ._internal.model.narrow import _apply_decoders
+
+        # Decode any as_type= field of the patch back toward the canonical
+        # (a no-op when nothing was retyped); patch is always a Projection here.
+        patch_data = _apply_decoders(
+            type(patch), dict(patch.model_dump(by_alias=True, exclude_unset=True))
+        )
+        merged = {**self.model_dump(by_alias=True), **patch_data}
         return type(self).model_validate(merged)
 
 
-ScopedModel.__refs__ = RefGraph(ScopedModel, {})
+ScopedModel.__prism__ = ModelState.empty(ScopedModel)

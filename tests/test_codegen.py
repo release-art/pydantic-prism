@@ -400,7 +400,7 @@ def test_readme_includes_relationship_diagram(tmp_path: Path) -> None:
     assert main(["gen", "--config", str(_readme_pyproject(tmp_path))]) == 0
     readme = (tmp_path / "GENERATED.md").read_text()
     # Screenshot embeds Tag (list[Tag]) -> Screenshot has edges -> relationships
-    assert fixtures.Screenshot.__refs__  # sanity: has edges
+    assert fixtures.Screenshot.__prism__.refs  # sanity: has edges
     assert "relationships" in readme
 
 

@@ -92,7 +92,7 @@ def test_projection_is_a_real_basemodel() -> None:
     assert issubclass(UserPublic, BaseModel)
     assert issubclass(UserPublic, Projection)
     assert not issubclass(UserPublic, ScopedModel)
-    assert UserPublic.__prism_source__ is User
+    assert UserPublic.__prism__.source is User
     instance = UserPublic(id=uuid4(), display_name="Ada")
     assert set(instance.model_dump()) == {"id", "display_name"}
 
