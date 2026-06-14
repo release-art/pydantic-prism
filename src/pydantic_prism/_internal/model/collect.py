@@ -1,4 +1,4 @@
-"""Marker collection: build ``__field_scopes__`` / ``__refs__`` from a model."""
+"""Marker collection: build a model's ``__prism__`` field-scopes / refs."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ def _initialize(cls: type[ScopedModel]) -> None:
 
 
 def _collect(cls: type[ScopedModel]) -> None:
-    """Validate markers and (re)build ``__field_scopes__`` / ``__refs__``.
+    """Validate markers and (re)build ``__prism__.field_scopes`` / ``__prism__.refs``.
 
     Runs at class creation and again after every successful ``model_rebuild``,
     because markers on forward-referenced annotations are invisible until the
@@ -46,10 +46,10 @@ def _collect(cls: type[ScopedModel]) -> None:
         if scope_markers:
             # Explicit wins, no merge: a tagged field ignores the class default.
             field_scopes[field_name] = union_all(m.expr for m in scope_markers)
-        elif cls.__prism_default_scope__ is not None:
+        elif cls.__prism__.default_scope is not None:
             # Untagged field on a class with a default: fall back to it. The
             # fallback is uniform — ref()/backref() fields are filled too.
-            field_scopes[field_name] = cls.__prism_default_scope__
+            field_scopes[field_name] = cls.__prism__.default_scope
         if len(ref_markers) > 1:
             raise TypeError(
                 f"{cls.__name__}.{field_name}: at most one ref()/backref() marker "
@@ -58,15 +58,13 @@ def _collect(cls: type[ScopedModel]) -> None:
         edge = _derive_edge(info.annotation, ref_markers)
         if edge is not None:
             raw_refs[field_name] = edge
-    cls.__field_scopes__ = field_scopes
+    cls.__prism__.field_scopes = field_scopes
     _check_scope_name_tokens(cls)
-    cls.__prism_validator_scopes__ = _collect_validator_scopes(cls)
-    existing = cls.__dict__.get("__refs__")
-    if isinstance(existing, RefGraph):
-        # Mutate in place so graphs already held by user code stay current.
-        existing._reset(raw_refs)  # pyright: ignore[reportPrivateUsage] — intra-package
-    else:
-        cls.__refs__ = RefGraph(cls, raw_refs)
+    cls.__prism__.validator_scopes = _collect_validator_scopes(cls)
+    # The state's RefGraph is created with the class (in __init_subclass__) and
+    # reset in place on every (re)collect, so graphs already held by user code
+    # stay current.
+    cls.__prism__.refs._reset(raw_refs)  # pyright: ignore[reportPrivateUsage] — intra-package
 
 
 def _derive_edge(annotation: Any, ref_markers: list[Any]) -> RawEdge | None:
@@ -96,7 +94,7 @@ def _project_refs(
     or lose an edge entirely), keeping any explicit ``ref()``/``backref()`` marker.
     """
     if not retyped:
-        return cls.__refs__.filtered(surviving)
+        return cls.__prism__.refs.filtered(surviving)
     overrides: dict[str, RawEdge | None] = {}
     for field_name, annotation in retyped.items():
         ref_markers = [
@@ -105,7 +103,7 @@ def _project_refs(
             if isinstance(m, (Ref, BackRef))
         ]
         overrides[field_name] = _derive_edge(annotation, ref_markers)
-    return cls.__refs__.reshaped(surviving, overrides)
+    return cls.__prism__.refs.reshaped(surviving, overrides)
 
 
 def _check_scope_name_tokens(cls: type[ScopedModel]) -> None:
@@ -165,9 +163,9 @@ def _find_embedded_models(
         if issubclass(annotation, ScopedModel) and annotation is not ScopedModel:
             found.add((annotation, None))
         elif issubclass(annotation, Projection) and annotation is not Projection:
-            source = getattr(annotation, "__prism_source__", None)
-            if source is not None:
-                found.add((source, annotation.__prism_scope__))
+            state = getattr(annotation, "__prism__", None)
+            if state is not None:
+                found.add((state.source, state.scope))
         return
     for arg in get_args(annotation):
         if isinstance(arg, list):  # Callable parameter lists

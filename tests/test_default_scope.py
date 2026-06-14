@@ -53,7 +53,7 @@ def test_basic_untagged_fields_take_the_default() -> None:
 
 def test_explicit_marker_overrides_default_no_merge() -> None:
     """Replace, not merge: a tagged field ignores the class default."""
-    assert repr(Screenshot.__field_scopes__["website_id"]) == "Public"
+    assert repr(Screenshot.__prism__.field_scopes["website_id"]) == "Public"
     # website_id is Public only — NOT Public | Storage. A pure-Ref projection
     # (narrower than Public) excludes it.
     ref_only = Screenshot.scope(Ref)
@@ -61,16 +61,16 @@ def test_explicit_marker_overrides_default_no_merge() -> None:
 
 
 def test_default_scoped_fields_resolved_in_field_scopes() -> None:
-    assert repr(Screenshot.__field_scopes__["container_name"]) == "Storage"
-    assert repr(Screenshot.__field_scopes__["blob_path"]) == "Storage"
-    assert repr(Screenshot.__field_scopes__["md5_hash"]) == "Storage"
+    assert repr(Screenshot.__prism__.field_scopes["container_name"]) == "Storage"
+    assert repr(Screenshot.__prism__.field_scopes["blob_path"]) == "Storage"
+    assert repr(Screenshot.__prism__.field_scopes["md5_hash"]) == "Storage"
 
 
 def test_default_exposed_for_introspection() -> None:
-    assert isinstance(Screenshot.__prism_default_scope__, ScopeExpr)
-    assert repr(Screenshot.__prism_default_scope__) == "Storage"
+    assert isinstance(Screenshot.__prism__.default_scope, ScopeExpr)
+    assert repr(Screenshot.__prism__.default_scope) == "Storage"
     # A model without a default reports None.
-    assert Plain.__prism_default_scope__ is None
+    assert Plain.__prism__.default_scope is None
 
 
 def test_scopes_includes_default_scope_atoms() -> None:
@@ -87,10 +87,10 @@ def test_explicit_can_be_narrower_or_wider_than_default() -> None:
         c: Annotated[str, scoped(Ref)]  # wider
         d: Annotated[str, scoped(Public, Storage)]  # explicit union
 
-    assert repr(M.__field_scopes__["a"]) == "Internal"
-    assert repr(M.__field_scopes__["b"]) == "Public"
-    assert repr(M.__field_scopes__["c"]) == "Ref"
-    assert M.__field_scopes__["d"].atoms() == frozenset({Public, Storage})
+    assert repr(M.__prism__.field_scopes["a"]) == "Internal"
+    assert repr(M.__prism__.field_scopes["b"]) == "Public"
+    assert repr(M.__prism__.field_scopes["c"]) == "Ref"
+    assert M.__prism__.field_scopes["d"].atoms() == frozenset({Public, Storage})
 
 
 # --- multiple defaults via | -----------------------------------------------
@@ -102,7 +102,7 @@ def test_default_scope_accepts_an_expression() -> None:
     class M(ScopedModel, default_scope=Public | Sibling):
         a: str
 
-    assert M.__field_scopes__["a"].atoms() == frozenset({Public, Sibling})
+    assert M.__prism__.field_scopes["a"].atoms() == frozenset({Public, Sibling})
 
 
 # --- inheritance -----------------------------------------------------------
@@ -112,8 +112,8 @@ def test_subclass_inherits_default() -> None:
     class Sub(Screenshot):
         note: str  # no own default declared -> inherits Storage
 
-    assert repr(Sub.__field_scopes__["note"]) == "Storage"
-    assert repr(Sub.__prism_default_scope__) == "Storage"
+    assert repr(Sub.__prism__.field_scopes["note"]) == "Storage"
+    assert repr(Sub.__prism__.default_scope) == "Storage"
 
 
 def test_subclass_override_redefaults_inherited_untagged_fields() -> None:
@@ -121,22 +121,22 @@ def test_subclass_override_redefaults_inherited_untagged_fields() -> None:
         note: str
 
     # The subclass's new field takes the new default...
-    assert repr(Sub.__field_scopes__["note"]) == "Public"
+    assert repr(Sub.__prism__.field_scopes["note"]) == "Public"
     # ...and an inherited *untagged* field re-defaults to it too.
-    assert repr(Sub.__field_scopes__["container_name"]) == "Public"
+    assert repr(Sub.__prism__.field_scopes["container_name"]) == "Public"
     # An inherited *explicitly tagged* field keeps its own scope.
-    assert repr(Sub.__field_scopes__["website_id"]) == "Public"
-    assert repr(Sub.__field_scopes__["id"]) == "Ref"
+    assert repr(Sub.__prism__.field_scopes["website_id"]) == "Public"
+    assert repr(Sub.__prism__.field_scopes["id"]) == "Ref"
 
 
 def test_subclass_can_clear_default() -> None:
     class Sub(Screenshot, default_scope=None):
         note: str  # now genuinely untagged
 
-    assert Sub.__prism_default_scope__ is None
-    assert "note" not in Sub.__field_scopes__
+    assert Sub.__prism__.default_scope is None
+    assert "note" not in Sub.__prism__.field_scopes
     # Inherited untagged fields lose their default too.
-    assert "container_name" not in Sub.__field_scopes__
+    assert "container_name" not in Sub.__prism__.field_scopes
 
 
 # --- projection_bases interaction ------------------------------------------
@@ -203,7 +203,7 @@ class Plain(ScopedModel):
 
 
 def test_untagged_field_without_default_stays_scopeless() -> None:
-    assert "y" not in Plain.__field_scopes__
+    assert "y" not in Plain.__prism__.field_scopes
     public = Plain.scope(Public)
     assert set(public.model_fields) == {"x"}
 
@@ -230,8 +230,8 @@ def test_untagged_ref_field_takes_default() -> None:
         id: Annotated[UUID, scoped(Public)] = Field(default_factory=uuid4)
         target_id: Annotated[UUID, ref(Target)]  # untagged -> Storage default
 
-    assert repr(Source.__field_scopes__["target_id"]) == "Storage"
+    assert repr(Source.__prism__.field_scopes["target_id"]) == "Storage"
     storage = Source.scope(Storage)
     assert "target_id" in storage.model_fields
     # The ref edge survives onto the projection.
-    assert "target_id" in storage.__refs__.outgoing
+    assert "target_id" in storage.__prism__.refs.outgoing

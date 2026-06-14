@@ -56,7 +56,7 @@ def test_field_membership_still_unions_across_markers() -> None:
     # email is in Public ∪ Internal; both projections keep it.
     assert "email" in User.scope(Public).model_fields
     assert "email" in User.scope(Internal).model_fields
-    assert repr(User.__field_scopes__["email"]) == "(Internal | Public)"
+    assert repr(User.__prism__.field_scopes["email"]) == "(Internal | Public)"
 
 
 def test_most_derived_scope_wins_in_broad_projection() -> None:

@@ -96,7 +96,7 @@ def test_faces_derive_from_the_mirrored_canonical(session: Session) -> None:
 
 
 def test_ref_graph_spans_the_mirrored_models() -> None:
-    assert Order.__refs__["customer_id"].target is Customer
+    assert Order.__prism__.refs["customer_id"].target is Customer
 
 
 def test_write_back_to_a_new_orm_row(session: Session) -> None:

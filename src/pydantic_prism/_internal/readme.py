@@ -44,7 +44,7 @@ def build_readme(
     """
     by_source: dict[type[ScopedModel], list[type[Projection]]] = defaultdict(list)
     for proj in projections:
-        by_source[proj.__prism_source__].append(proj)
+        by_source[proj.__prism__.source].append(proj)
     sources = sorted(by_source, key=lambda cls: cls.__name__)
 
     banner = (
@@ -68,7 +68,7 @@ def build_readme(
         lines.append("")
         lines += _fenced_mermaid(projection_diagram(source).to_mermaid())
         for proj in sorted(by_source[source], key=lambda cls: cls.__name__):
-            token = proj.__prism_scope__.token()
+            token = proj.__prism__.scope.token()
             lines.append(f"### {proj.__name__} — scope `{token}`")
             lines += ["", "| field | type | description |", "|---|---|---|"]
             for node_field in _node_fields(proj):
@@ -77,7 +77,7 @@ def build_readme(
                     f"| {_cell(node_field.description or '')} |"
                 )
             lines.append("")
-        refs = source.__refs__.diagram()
+        refs = source.__prism__.refs.diagram()
         if refs.edges:  # only when there's a forward edge to show
             lines.append(f"### {source.__name__} relationships")
             lines.append("")

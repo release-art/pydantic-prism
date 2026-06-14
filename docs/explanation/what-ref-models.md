@@ -2,12 +2,12 @@
 
 `ref()` and `backref()` declare that a field's *values* (or, for keyed dicts,
 its *keys*) are identifiers of another model, and record that fact for
-introspection through `__refs__`. That sentence is the whole feature. This page
+introspection through `__prism__.refs`. That sentence is the whole feature. This page
 explains the deliberate line it draws.
 
 ## Introspection only
 
-`__refs__` is a `RefGraph`: a mapping from field name to a `RefInfo`, plus
+`__prism__.refs` is a `RefGraph`: a mapping from field name to a `RefInfo`, plus
 `.outgoing` / `.incoming` / `.embedded` accessors, `.targets()`, and a
 cycle-safe `.walk()` BFS over reachable models. That is the ceiling. Prism
 **never fetches anything.** There is no session, no lazy loading, no query
@@ -34,7 +34,7 @@ declaration is checked at resolution time.
 Prism validates *declarations*, never *data*. A keyed-dict `ref()`'s key type is
 checked against the target id field's annotation, and a `backref(via=...)` is
 checked against the matching forward `ref` on its target. These checks run
-**lazily**, on first `__refs__` access (eager structure, lazy resolution), and
+**lazily**, on first `__prism__.refs` access (eager structure, lazy resolution), and
 raise `RefResolutionError` — but they never touch a single instance. (A scalar
 or collection `ref()` records its target without comparing field types, and a
 `UUID` that points nowhere validates fine.) Referential integrity is a

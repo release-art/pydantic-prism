@@ -20,7 +20,7 @@ PrismError(Exception)
 | `EmptyProjectionError` | `Model.scope(...)` selected zero fields — almost always a typo'd scope or a never-tagged model. The message lists the scopes the model defines. |
 | `ProjectionNameError` | Two different scope expressions (or `bases`) would produce one projection class name. Pass `name=` to disambiguate. Also raised *at model definition* when two of a model's scopes share a class-name token (their `cls_name_token`, else `__name__`) — there, rename one or give it a distinct `cls_name_token=`. |
 | `ProjectionBaseError` | A field declared on a carried base is tagged with a scope the requested expression does not select — inherited fields can't be removed, so narrowing would leak it. |
-| `RefResolutionError` | A `ref` / `backref` couldn't resolve: a string target names no `ScopedModel` in the owning module, a function-local model, a `backref(via=...)` that doesn't line up with a forward `ref`, or a keyed-dict key type that doesn't match the target id type. Raised lazily, on `__refs__` access. |
+| `RefResolutionError` | A `ref` / `backref` couldn't resolve: a string target names no `ScopedModel` in the owning module, a function-local model, a `backref(via=...)` that doesn't line up with a forward `ref`, or a keyed-dict key type that doesn't match the target id type. Raised lazily, on `__prism__.refs` access. |
 
 ## Situation → error → when
 
@@ -38,9 +38,9 @@ PrismError(Exception)
 | one projection name for two different expressions (or bases) | `ProjectionNameError` | `.scope()` call |
 | `bases=` / `projection_bases=` entry invalid (not a `BaseModel`, a `ScopedModel`, or not an ancestor) | `TypeError` | `.scope()` call / class definition |
 | carried-base field tagged with a scope the expression does not select | `ProjectionBaseError` | `.scope()` call |
-| string ref target doesn't resolve (or model is function-local) | `RefResolutionError` | `__refs__` access |
-| `backref(via=...)` doesn't match a forward ref | `RefResolutionError` | `__refs__` access |
-| keyed-dict `ref()` key type doesn't match the target id type | `RefResolutionError` | `__refs__` access |
+| string ref target doesn't resolve (or model is function-local) | `RefResolutionError` | `__prism__.refs` access |
+| `backref(via=...)` doesn't match a forward ref | `RefResolutionError` | `__prism__.refs` access |
+| keyed-dict `ref()` key type doesn't match the target id type | `RefResolutionError` | `__prism__.refs` access |
 
 Models whose annotations were forward references at definition time are handled:
 `.scope()` resolves them (or raises pydantic's clear error), and an explicit

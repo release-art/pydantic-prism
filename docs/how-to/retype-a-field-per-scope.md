@@ -93,9 +93,9 @@ class Order(ScopedModel):
     ]
 
 
-assert Order.scope(Storage).__refs__["cust"].shape.value == "scalar"
-assert Order.scope(Llm).__refs__["cust"].shape.value == "collection"  # re-derived
-assert Order.scope(Llm).__refs__["cust"].target is Customer           # still a ref
+assert Order.scope(Storage).__prism__.refs["cust"].shape.value == "scalar"
+assert Order.scope(Llm).__prism__.refs["cust"].shape.value == "collection"  # re-derived
+assert Order.scope(Llm).__prism__.refs["cust"].target is Customer           # still a ref
 ```
 
 A `scoped()` carrying `as_type=` / `convert=` (like `override=`) must name exactly

@@ -30,7 +30,7 @@ from .flow import (
     build_flow_report,
 )
 from .markers import BackRef, Converter, Heritage, Ref, Scoped, backref, ref, scoped
-from .model import Projection, ScopedModel, unprojected
+from .model import ModelState, Projection, ProjectionState, ScopedModel, unprojected
 from .refs import (
     BackRefInfo,
     EmbeddedRefInfo,
@@ -65,6 +65,8 @@ __all__ = [
     "FlowReport",
     "IdRefInfo",
     "In",
+    "ModelState",
+    "ProjectionState",
     "Out",
     "PrismBaseDropWarning",
     "PrismError",

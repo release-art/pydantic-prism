@@ -119,7 +119,7 @@ def test_projection_diagram_nodes_edges_and_fields() -> None:
 
 
 def test_ref_diagram_models_fields_and_kind_labels() -> None:
-    diagram = Order.__refs__.diagram()
+    diagram = Order.__prism__.refs.diagram()
     by_label = {n.label: n for n in diagram.nodes}
     assert set(by_label) == {"Order", "Customer"}
     assert "customer_id" in {f.name for f in by_label["Order"].fields}
@@ -133,14 +133,14 @@ def test_ref_diagram_models_fields_and_kind_labels() -> None:
 def test_mermaid_classdiagram_associations_strip_parens() -> None:
     # ref edges become classDiagram associations; GitHub's Mermaid breaks on
     # parens in a relation label, so "(ref)" is stripped to "ref".
-    out = Order.__refs__.diagram().to_mermaid()
+    out = Order.__prism__.refs.diagram().to_mermaid()
     assert out.startswith("classDiagram")
     assert "Order --> Customer : customer_id ref" in out
     assert "(ref)" not in out  # parentheses never reach the label
 
 
 def test_dot_record_nodes_and_edges() -> None:
-    out = Order.__refs__.diagram().to_dot()
+    out = Order.__prism__.refs.diagram().to_dot()
     assert "digraph prism {" in out
     assert "rankdir=TB;" in out
     assert "shape=record" in out
@@ -184,7 +184,7 @@ def test_bad_direction_raises(builder: object) -> None:
 
 def test_ref_diagram_bad_direction_raises() -> None:
     with pytest.raises(ValueError, match="direction must be one of"):
-        Order.__refs__.diagram(direction="diagonal")
+        Order.__prism__.refs.diagram(direction="diagonal")
 
 
 # --- IR edge cases: unlabelled edges, no-field & special-char nodes ---------

@@ -207,7 +207,7 @@ def test_input_composes_with_partial_scope() -> None:
 
     DocIn = Doc.input(Update)
     assert set(DocIn.model_fields) == {"title"}  # read-only id dropped
-    assert DocIn.__prism_scope__.is_partial()  # PATCH shape survives
+    assert DocIn.__prism__.scope.is_partial()  # PATCH shape survives
 
 
 def test_direction_drops_deep_through_nested_models() -> None:

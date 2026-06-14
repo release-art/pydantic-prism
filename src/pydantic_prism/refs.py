@@ -74,7 +74,7 @@ class RawEdge:
 class RefInfo:
     """One resolved relationship edge — the base of the three edge kinds.
 
-    ``__refs__[name]`` is typed as this base; the concrete object is one of
+    ``__prism__.refs[name]`` is typed as this base; the concrete object is one of
     :class:`IdRefInfo` (``kind="ref"``), :class:`BackRefInfo` (``kind="backref"``,
     adds ``via``) or :class:`EmbeddedRefInfo` (``kind="embedded"``, adds
     ``scope``). Narrow with ``isinstance`` / ``match info.kind`` — or use the
@@ -247,7 +247,9 @@ class RefGraph(Mapping[str, RefInfo]):
                 yield graph.owner, info
                 if info.target not in seen:
                     seen.add(info.target)
-                    target_graph = getattr(info.target, "__refs__", None)
+                    target_graph = getattr(
+                        getattr(info.target, "__prism__", None), "refs", None
+                    )
                     if isinstance(target_graph, RefGraph):
                         queue.append(target_graph)
 
@@ -367,7 +369,7 @@ class RefGraph(Mapping[str, RefInfo]):
     def _check_backref(
         self, field_name: str, target: type[ScopedModel], via: str
     ) -> None:
-        target_graph = target.__refs__
+        target_graph = target.__prism__.refs
         prefix = f"{self._owner.__name__}.{field_name}: backref via {via!r}"
         raw = target_graph._raw.get(via)
         if raw is None or not isinstance(raw.marker, Ref):

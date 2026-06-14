@@ -93,7 +93,7 @@ class Article(ScopedModel):
 
 ArticleUpdate = Article.input(Update)
 assert set(ArticleUpdate.model_fields) == {"title"}   # read-only id dropped
-assert ArticleUpdate.__prism_scope__.is_partial()     # every field optional
+assert ArticleUpdate.__prism__.scope.is_partial()     # every field optional
 ```
 
 ## No visibility ladder? Use a neutral scope

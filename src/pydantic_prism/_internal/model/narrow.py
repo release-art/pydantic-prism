@@ -30,14 +30,15 @@ def _narrow(model_cls: type[BaseModel], data: Mapping[str, Any]) -> dict[str, An
     """Keep only the keys ``model_cls`` accepts, recursing into nested models.
 
     Drives ``from_canonical``: also **encodes** any ``as_type=`` field through the
-    projection's ``__prism_encoders__`` (canonical value → projection value); an
+    projection's ``__prism__.encoders`` (canonical value → projection value); an
     encoded field's raw value goes straight to its encoder, bypassing the
     structural walk (its canonical shape need not match the override annotation).
     """
     out: dict[str, Any] = {}
-    encoders: dict[str, Callable[[Any], Any]] = getattr(
-        model_cls, "__prism_encoders__", {}
-    )
+    # getattr-chain so a plain BaseModel (no __prism__) or a canonical model
+    # (ModelState has no .encoders) both fall back to {}.
+    state = getattr(model_cls, "__prism__", None)
+    encoders: dict[str, Callable[[Any], Any]] = getattr(state, "encoders", {})
     for name, info in model_cls.model_fields.items():
         key = _validation_key(name, info)
         if key in data:
@@ -61,13 +62,12 @@ def _apply_decoders(
 
     Drives ``from_projection`` / ``with_updates``: unlike ``_narrow`` it keeps
     every present key (the canonical is a superset), applying each retyped field's
-    ``__prism_decoders__`` (projection value → canonical value) and recursing into
+    ``__prism__.decoders`` (projection value → canonical value) and recursing into
     nested projections. A no-op (identity) when nothing in the tree was retyped.
     """
     out: dict[str, Any] = {}
-    decoders: dict[str, Callable[[Any], Any]] = getattr(
-        proj_cls, "__prism_decoders__", {}
-    )
+    state = getattr(proj_cls, "__prism__", None)
+    decoders: dict[str, Callable[[Any], Any]] = getattr(state, "decoders", {})
     for name, info in proj_cls.model_fields.items():
         # The data is the projection's *own* dump (by_alias), so each field sits
         # under its validation key — one lookup, no canonical/alias ambiguity.

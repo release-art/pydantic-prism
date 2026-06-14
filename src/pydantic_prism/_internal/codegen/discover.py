@@ -96,8 +96,8 @@ def _reject_name_clashes(projections: Sequence[type[Projection]]) -> None:
         if other is not None and other is not proj:
             raise CodegenError(
                 f"two projections share the generated name {proj.__name__!r} "
-                f"(of {other.__prism_source__.__name__} and "
-                f"{proj.__prism_source__.__name__}); pass a distinct name= via a "
+                f"(of {other.__prism__.source.__name__} and "
+                f"{proj.__prism__.source.__name__}); pass a distinct name= via a "
                 f"projections entry"
             )
         seen[proj.__name__] = proj

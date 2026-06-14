@@ -61,7 +61,7 @@ class M(ScopedModel):
 
 
 def test_validator_scopes_introspection() -> None:
-    scopes = M.__prism_validator_scopes__
+    scopes = M.__prism__.validator_scopes
     assert set(scopes) == {"derive_tag", "set_n"}  # plain is absent
     assert repr(scopes["derive_tag"]) == "Public"
     assert repr(scopes["set_n"]) == "Storage"
@@ -134,7 +134,7 @@ def test_scoped_validator_accepts_expression() -> None:
             object.__setattr__(self, "x", self.x.strip())
             return self
 
-    assert N.__prism_validator_scopes__["v"].atoms() == frozenset({Public, Other})
+    assert N.__prism__.validator_scopes["v"].atoms() == frozenset({Public, Other})
     assert N(x=" hi ").x == "hi"  # runs on the canonical model
 
 
@@ -145,7 +145,7 @@ def test_scoped_validator_inherited_by_subclass() -> None:
     class Sub(M):
         extra: Annotated[str, scoped(Public)] = ""
 
-    assert "derive_tag" in Sub.__prism_validator_scopes__
+    assert "derive_tag" in Sub.__prism__.validator_scopes
     sub_public = Sub.scope(Public)
     assert "derive_tag" in sub_public.__pydantic_decorators__.model_validators
     assert sub_public(a="yo").tag == "YO"

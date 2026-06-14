@@ -263,7 +263,7 @@ def backref(target: type[ScopedModel] | str, *, via: str, field: str = "id") -> 
     The marked field is a real, validated field holding ids of ``target``
     (identified by ``target``'s ``field``); if it has no default, an empty one
     is implied. The ``via=`` link is checked against the target's forward
-    ``ref`` when ``__refs__`` is first resolved.
+    ``ref`` when ``__prism__.refs`` is first resolved.
 
     Usage::
 

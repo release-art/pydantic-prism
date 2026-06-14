@@ -230,7 +230,7 @@ def test_closure_model_string_ref_refuses_instead_of_guessing() -> None:
         other: Annotated[UUID, ref("Decoy"), scoped(Public)]
 
     with pytest.raises(RefResolutionError, match="inside a function"):
-        Local.__refs__["other"]
+        Local.__prism__.refs["other"]
 
 
 # --- bug 9: backref default implication respects the container type ---------
@@ -256,7 +256,7 @@ def test_union_of_containers_is_many() -> None:
     class M(ScopedModel):
         ids: Annotated[list[UUID] | set[UUID], ref(Decoy), scoped(Public)] = []  # noqa: RUF012
 
-    assert M.__refs__["ids"].many
+    assert M.__prism__.refs["ids"].many
 
 
 # --- bug 11: Callable parameter lists are rewritten --------------------------

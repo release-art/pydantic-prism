@@ -202,12 +202,14 @@ def test_retype_reshapes_a_ref_edge() -> None:
         # the projection re-derives only `cust`
         seller: Annotated[UUID, ref(Customer), scoped(Storage, Llm)]
 
-    assert Order.__refs__["cust"].shape.value == "scalar"
-    assert Order.scope(Storage).__refs__["cust"].shape.value == "scalar"
+    assert Order.__prism__.refs["cust"].shape.value == "scalar"
+    assert Order.scope(Storage).__prism__.refs["cust"].shape.value == "scalar"
     llm = Order.scope(Llm)
-    assert llm.__refs__["cust"].shape.value == "collection"  # re-derived
-    assert llm.__refs__["cust"].target is Customer  # marker preserved
-    assert llm.__refs__["seller"].shape.value == "scalar"  # untouched canonical edge
+    assert llm.__prism__.refs["cust"].shape.value == "collection"  # re-derived
+    assert llm.__prism__.refs["cust"].target is Customer  # marker preserved
+    assert (
+        llm.__prism__.refs["seller"].shape.value == "scalar"
+    )  # untouched canonical edge
 
 
 def test_retype_can_drop_an_embedded_edge() -> None:
@@ -216,9 +218,9 @@ def test_retype_can_drop_an_embedded_edge() -> None:
         payload: Annotated[Customer, scoped(Storage), scoped(Llm, as_type=str)]
         note: Annotated[str, scoped(Storage, Llm)]
 
-    assert Order.scope(Storage).__refs__["payload"].kind == "embedded"
-    assert "payload" not in Order.scope(Llm).__refs__  # edge dropped on retype
-    assert "note" not in Order.scope(Llm).__refs__  # plain field, never an edge
+    assert Order.scope(Storage).__prism__.refs["payload"].kind == "embedded"
+    assert "payload" not in Order.scope(Llm).__prism__.refs  # edge dropped on retype
+    assert "note" not in Order.scope(Llm).__prism__.refs  # plain field, never an edge
 
 
 def test_retype_keeps_an_explicit_ref_edge() -> None:
@@ -232,7 +234,7 @@ def test_retype_keeps_an_explicit_ref_edge() -> None:
             scoped(Llm, as_type=dict[UUID, UUID]),
         ]
 
-    edge = Order.scope(Llm).__refs__["cust"]
+    edge = Order.scope(Llm).__prism__.refs["cust"]
     assert edge.kind == "ref"
     assert edge.shape.value == "keyed_dict"  # re-derived
     assert edge.target is Customer
@@ -242,8 +244,8 @@ def test_retype_can_add_an_embedded_edge() -> None:
     class Order(ScopedModel):
         payload: Annotated[str, scoped(Storage), scoped(Llm, as_type=Customer)]
 
-    assert "payload" not in Order.scope(Storage).__refs__
-    edge = Order.scope(Llm).__refs__["payload"]
+    assert "payload" not in Order.scope(Storage).__prism__.refs
+    edge = Order.scope(Llm).__prism__.refs["payload"]
     assert edge.kind == "embedded"
     assert edge.target is Customer
 

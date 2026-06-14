@@ -75,7 +75,7 @@ def build(
     # model's own docstring. A *deliberate* per-scope description (set via the
     # vary-schema mechanism) differs from __doc__ and is kept.
     if schema_description == projection.__doc__:
-        source = getattr(projection, "__prism_source__", None)
+        source = getattr(getattr(projection, "__prism__", None), "source", None)
         schema_description = getattr(source, "__doc__", None)
     tool_name = name or projection.__name__
     tool_description = description or schema_description

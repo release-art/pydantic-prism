@@ -116,8 +116,8 @@ def test_default_scope_example() -> None:
     ]
     # explicit replaces, not merges: website_id is StoragePublic only
     assert list(Screenshot.scope(Ref).model_fields) == ["id"]
-    assert repr(Screenshot.__prism_default_scope__) == "StorageScope"
-    assert repr(Screenshot.__field_scopes__["container_name"]) == "StorageScope"
+    assert repr(Screenshot.__prism__.default_scope) == "StorageScope"
+    assert repr(Screenshot.__prism__.field_scopes["container_name"]) == "StorageScope"
 
 
 # --- "Relationships" -------------------------------------------------------
@@ -138,24 +138,24 @@ class Order(ScopedModel):
 
 
 def test_relationships_example() -> None:
-    info = Order.__refs__["customer_id"]
+    info = Order.__prism__.refs["customer_id"]
     assert info.target is Customer
     assert info.target_field == "id"
     assert info.many is False
     assert info.optional is False
     assert info.kind == "ref"
 
-    assert set(Order.__refs__.outgoing) == {"customer_id"}
-    assert set(Customer.__refs__.incoming) == {"order_ids"}
-    assert Order.__refs__.targets() == {Customer}
-    assert [(src, edge.field_name) for src, edge in Order.__refs__.walk()] == [
+    assert set(Order.__prism__.refs.outgoing) == {"customer_id"}
+    assert set(Customer.__prism__.refs.incoming) == {"order_ids"}
+    assert Order.__prism__.refs.targets() == {Customer}
+    assert [(src, edge.field_name) for src, edge in Order.__prism__.refs.walk()] == [
         (Order, "customer_id")
     ]
 
 
 def test_refs_survive_projection_example() -> None:
     OrderPublic = Order.scope(Public)
-    assert OrderPublic.__refs__["customer_id"].target is Customer
+    assert OrderPublic.__prism__.refs["customer_id"].target is Customer
 
 
 # --- "Nested models" -------------------------------------------------------
@@ -247,7 +247,7 @@ class Person(ScopedModel):
 def test_diagrams_example() -> None:
     assert "classDiagram" in scope_diagram(Update).to_mermaid()
     assert "digraph prism" in projection_diagram(User).to_dot()
-    assert "direction: down" in User.__refs__.diagram().to_d2()
+    assert "direction: down" in User.__prism__.refs.diagram().to_d2()
     assert "nodes" in scope_diagram().as_dict()
 
 
@@ -277,7 +277,7 @@ class Page(ScopedModel):
 
 
 def test_dict_keyed_refs_example() -> None:
-    info = Page.__refs__["highlights"]
+    info = Page.__prism__.refs["highlights"]
     assert info.shape is RefShape.KEYED_DICT
     assert info.key_type is UUID
     assert info.target is Highlight
@@ -305,13 +305,13 @@ class SnapshotOwner(ScopedModel):
 
 
 def test_embedded_carrier_example() -> None:
-    info = SnapshotOwner.__refs__["history"]
+    info = SnapshotOwner.__prism__.refs["history"]
     assert info.kind == "embedded"
     assert info.target is Snapshot
-    assert info.scope == SnapshotRef.__prism_scope__
+    assert info.scope == SnapshotRef.__prism__.scope
     assert info.shape is RefShape.COLLECTION
-    assert "history" in SnapshotOwner.__refs__.embedded
-    assert "history" not in SnapshotOwner.__refs__.outgoing
+    assert "history" in SnapshotOwner.__prism__.refs.embedded
+    assert "history" not in SnapshotOwner.__prism__.refs.outgoing
 
 
 # --- "Custom pydantic bases" -----------------------------------------------
@@ -373,4 +373,4 @@ def test_scoped_validator_example() -> None:
     derived = update(url="https://example.com/page")
     assert derived.hostname == "example.com"  # type: ignore[attr-defined]
     assert "derive_hostname" in update.__pydantic_decorators__.model_validators
-    assert repr(Webpage.__prism_validator_scopes__["derive_hostname"]) == "Update"
+    assert repr(Webpage.__prism__.validator_scopes["derive_hostname"]) == "Update"

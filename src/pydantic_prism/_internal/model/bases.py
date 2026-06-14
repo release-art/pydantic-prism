@@ -83,9 +83,11 @@ def _droppable_behavior(cls: type[ScopedModel]) -> str | None:
 
 def _warn_dropped_behavior(cls: type[ScopedModel]) -> None:
     """Warn (once per canonical model) about base behavior being dropped."""
-    if cls.__dict__.get("__prism_base_warned__"):
+    # __prism__ is per-class (created fresh in __init_subclass__), so this flag is
+    # naturally per-class — each model warns at most once.
+    if cls.__prism__.base_warned:
         return
-    cls.__prism_base_warned__ = True
+    cls.__prism__.base_warned = True
     message = _droppable_behavior(cls)
     if message is not None:
         warnings.warn(message, PrismBaseDropWarning, stacklevel=2)

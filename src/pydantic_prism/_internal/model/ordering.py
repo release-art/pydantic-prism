@@ -84,7 +84,7 @@ def _scoped_before_validators(cls: type[ScopedModel]) -> list[str]:
     """Names of this class's ``@scoped_validator(mode="before")`` validators."""
     return [
         name
-        for name in cls.__prism_validator_scopes__
+        for name in cls.__prism__.validator_scopes
         if cls.__pydantic_decorators__.model_validators[name].info.mode == "before"
     ]
 

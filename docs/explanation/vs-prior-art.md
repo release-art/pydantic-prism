@@ -45,7 +45,7 @@ Two things, and they are the differentiators:
    set. Prism lets you declare your own `Scope` classes and compose them with
    `| & - ~`, in tags and at the call site alike.
 2. **A relationship graph on the fields, introspectable, that survives
-   projection.** `ref()` / `backref()` / `__refs__` — nothing surveyed does
+   projection.** `ref()` / `backref()` / `__prism__.refs` — nothing surveyed does
    this. It is what turns "many faces of a model" into "a coherent model graph
    you can narrow", and what the [data-flow report](what-ref-models.md) is built
    on.

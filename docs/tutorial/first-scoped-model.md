@@ -93,7 +93,7 @@ assert full.email == "ada@example.com"
 ## 5. Add a relationship that survives projection
 
 Here is what hand-written `UserIn`/`UserOut` classes cannot do. Declare an
-FK-style reference with `ref(...)`; it is recorded in `__refs__` and stays
+FK-style reference with `ref(...)`; it is recorded in `__prism__.refs` and stays
 introspectable on every projection.
 
 ```python
@@ -106,11 +106,11 @@ class Order(ScopedModel):
 
 
 # the edge is there on the canonical...
-assert Order.__refs__["user_id"].target is User
+assert Order.__prism__.refs["user_id"].target is User
 
 # ...and it is still there after projecting
 OrderPublic = Order.scope(Public)
-assert OrderPublic.__refs__["user_id"].target is User
+assert OrderPublic.__prism__.refs["user_id"].target is User
 ```
 
 The projection forgot the fields it doesn't need, but it did not forget that
