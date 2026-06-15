@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import enum
+import inspect
 import types
 from dataclasses import dataclass, field
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Any, Literal, Union, cast, get_args, get_origin
 
 from pydantic.experimental.missing_sentinel import MISSING
 
@@ -25,6 +26,7 @@ __all__ = [
     "_field_suffix",
     "_import_lines",
     "_render_annotation",
+    "_render_behavior",
     "_render_bare",
     "_render_literal",
     "_render_scope_expr",
@@ -222,6 +224,10 @@ def _field_suffix(info: Any, imports: _Imports) -> str:
             if info.default_factory is factory:
                 field_ref = imports.add_typing("pydantic", "Field")
                 return f" = {field_ref}(default_factory={factory.__name__})"
+        ref = _factory_ref(info.default_factory, imports)
+        if ref is not None:
+            field_ref = imports.add_typing("pydantic", "Field")
+            return f" = {field_ref}(default_factory={ref})"
         return ""
     default = info.default
     if default is None:
@@ -229,3 +235,96 @@ def _field_suffix(info: Any, imports: _Imports) -> str:
     if isinstance(default, (bool, int, float, str, bytes)):
         return f" = {default!r}"
     return ""
+
+
+def _factory_ref(factory: Any, imports: _Imports) -> str | None:
+    """An import reference for a ``default_factory`` callable, or ``None``.
+
+    A module-level callable (a class or function with a resolvable ``__module__``
+    / ``__qualname__``) renders as ``Field(default_factory=Name)`` so the stub
+    field reads optional. A lambda or function-local callable is not importable —
+    return ``None`` and let the field look required (conservative, never wrong).
+    """
+    module = getattr(factory, "__module__", None)
+    qualname = getattr(factory, "__qualname__", None)
+    if not isinstance(module, str) or not isinstance(qualname, str):
+        return None
+    if "<locals>" in qualname or "<lambda>" in qualname:
+        return None
+    return imports.add_typing(module, qualname)
+
+
+# --- behavior rendering ----------------------------------------------------
+
+
+def _render_behavior(name: str, member: Any, imports: _Imports) -> list[str]:
+    """Render a copied behavior as stub lines: decorator (if any), ``def``, ``...``.
+
+    Mirrors the decorator (``@property`` / ``@classmethod`` / ``@staticmethod``)
+    and the underlying function's signature so the projection's typed surface
+    matches the runtime object prism copied on. The body is always ``...`` — the
+    real implementation lives on the canonical at runtime.
+    """
+    if isinstance(member, property):
+        return _render_def(name, "@property", member.fget, imports)
+    if isinstance(member, classmethod):
+        return _render_def(name, "@classmethod", cast(Any, member).__func__, imports)
+    if isinstance(member, staticmethod):
+        return _render_def(name, "@staticmethod", cast(Any, member).__func__, imports)
+    return _render_def(name, None, member, imports)
+
+
+def _render_def(
+    name: str, decorator: str | None, func: Any, imports: _Imports
+) -> list[str]:
+    # eval_str resolves PEP 563 string annotations against the function's module;
+    # if a name won't resolve we keep the signature but drop its annotations.
+    try:
+        sig = inspect.signature(func, eval_str=True)
+        typed = True
+    except Exception:  # noqa: BLE001 — any resolution failure → untyped fallback
+        sig = inspect.signature(func)
+        typed = False
+    params = _render_params(sig, imports, typed)
+    ret = ""
+    if typed and sig.return_annotation is not inspect.Signature.empty:
+        ret = f" -> {_safe_annotation(sig.return_annotation, imports)}"
+    lines = [f"        {decorator}"] if decorator else []
+    lines.append(f"        def {name}({params}){ret}: ...")
+    return lines
+
+
+def _render_params(sig: inspect.Signature, imports: _Imports, typed: bool) -> str:
+    parts: list[str] = []
+    star_seen = False
+    for p in sig.parameters.values():
+        if p.kind is p.VAR_POSITIONAL:
+            parts.append(_annotate(f"*{p.name}", p, imports, typed))
+            star_seen = True
+            continue
+        if p.kind is p.VAR_KEYWORD:
+            parts.append(_annotate(f"**{p.name}", p, imports, typed))
+            continue
+        if p.kind is p.KEYWORD_ONLY and not star_seen:
+            parts.append("*")
+            star_seen = True
+        piece = _annotate(p.name, p, imports, typed)
+        if p.default is not inspect.Parameter.empty:
+            piece += " = ..."
+        parts.append(piece)
+    return ", ".join(parts)
+
+
+def _annotate(head: str, p: inspect.Parameter, imports: _Imports, typed: bool) -> str:
+    """``head`` with a ``: T`` annotation appended when one is available."""
+    if typed and p.annotation is not inspect.Parameter.empty:
+        return f"{head}: {_safe_annotation(p.annotation, imports)}"
+    return head
+
+
+def _safe_annotation(annotation: Any, imports: _Imports) -> str:
+    """Render an annotation, falling back to ``Any`` when it cannot be rendered."""
+    try:
+        return _render_annotation(annotation, imports)
+    except CodegenError:
+        return imports.add_typing("typing", "Any")

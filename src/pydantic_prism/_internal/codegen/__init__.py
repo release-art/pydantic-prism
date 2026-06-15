@@ -40,6 +40,7 @@ from .render import _import_lines as _import_lines
 from .render import _Imports as _Imports
 from .render import _render_annotation as _render_annotation
 from .render import _render_bare as _render_bare
+from .render import _render_behavior as _render_behavior
 from .render import _render_literal as _render_literal
 from .render import _render_scope_expr as _render_scope_expr
 

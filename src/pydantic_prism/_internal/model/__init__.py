@@ -16,6 +16,9 @@ from ...model import ScopedModel as ScopedModel
 from ...model import (
     _build_lock as _build_lock,  # pyright: ignore[reportPrivateUsage] — intra-package
 )
+from .behaviors import (
+    _collect_behaviors as _collect_behaviors,  # pyright: ignore[reportPrivateUsage]
+)
 from .build import _auto_name as _auto_name
 from .build import _BuildContext as _BuildContext
 from .build import _rewrite as _rewrite
