@@ -38,6 +38,18 @@ def _is_behavior(member: object) -> bool:
     ) or inspect.isfunction(member)
 
 
+def _is_dunder(name: str) -> bool:
+    """Whether ``name`` is a ``__dunder__`` — never a user behavior to carry.
+
+    Excludes interpreter/compiler-injected callables that live in a class
+    ``__dict__`` but are machinery, not behavior — notably Python 3.14's
+    PEP-649 ``__annotate_func__`` (a function, so :func:`_is_behavior` would
+    otherwise carry it). Any dunder a projection legitimately needs
+    (``__str__``, ``__eq__``, …) already comes from ``Projection`` / pydantic.
+    """
+    return len(name) > 4 and name.startswith("__") and name.endswith("__")
+
+
 def _is_unprojected(member: Any) -> bool:
     """Whether ``member`` carries the ``@unprojected`` opt-out flag.
 
@@ -79,7 +91,8 @@ def _collect_behaviors(cls: type[ScopedModelT]) -> dict[str, Any]:
 
     Walks ``cls``'s MRO down to — but not including — :class:`ScopedModel`, so
     behavior declared on canonical ancestors is included; the most-derived
-    definition of a name wins. Omitted: a member named like a
+    definition of a name wins. Omitted: any ``__dunder__`` (interpreter
+    machinery, e.g. 3.14's ``__annotate_func__``), a member named like a
     :class:`Projection` / ``BaseModel`` member, a pydantic-managed validator /
     serializer / computed field, and any ``@unprojected`` member.
 
@@ -97,7 +110,12 @@ def _collect_behaviors(cls: type[ScopedModelT]) -> dict[str, Any]:
             if name in seen or not _is_behavior(member):
                 continue
             seen.add(name)
-            if name in managed or _is_unprojected(member) or hasattr(Projection, name):
+            if (
+                _is_dunder(name)
+                or name in managed
+                or _is_unprojected(member)
+                or hasattr(Projection, name)
+            ):
                 continue
             out[name] = member
     return out

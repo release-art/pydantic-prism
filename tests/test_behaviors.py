@@ -127,3 +127,21 @@ def test_model_with_no_extra_behavior_projects() -> None:
         x: Annotated[int, scoped(Header)]
 
     assert Plain.scope(Header)(x=1).x == 1
+
+
+def test_dunder_callables_are_not_carried() -> None:
+    # A __dunder__ in the class dict is interpreter machinery, not a behavior —
+    # notably Python 3.14's PEP-649 __annotate_func__. Excluded by name.
+    class M(ScopedModel):
+        x: Annotated[int, scoped(Header)] = 0
+
+        def normal(self) -> int:
+            return 1
+
+        def __weird__(self) -> int:  # a dunder-named callable
+            return 2
+
+    proj = M.scope(Header)
+    assert proj(x=1).normal() == 1  # ordinary behavior carried
+    assert not hasattr(proj, "__weird__")  # dunder excluded
+    assert M(x=1).__weird__() == 2  # still lives on the canonical

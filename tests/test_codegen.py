@@ -427,6 +427,27 @@ def test_copied_behaviors_run_on_projection() -> None:
     assert not hasattr(card_c, "internal_only")
 
 
+def test_no_dunder_machinery_leaks_into_stub(tmp_path: Path) -> None:
+    # Regression: a model without `from __future__ import annotations` grows a
+    # PEP-649 __annotate_func__ in its class dict on Python 3.14; it is a
+    # function, so behavior collection must exclude it by name. Vacuous on
+    # < 3.14, the real guard on 3.14.
+    eager = "tests._codegen_eager_fixtures"
+    text = generate(
+        _config(
+            tmp_path,
+            modules=(),
+            projections=(ProjectionSpec(f"{eager}:Widget", (f"{eager}:Eager",)),),
+        )
+    )
+    assert "def shout(self) -> str: ..." in text  # the real behavior is emitted
+    assert "__annotate_func__" not in text
+    assert "def __" not in text  # no dunder method emitted at all
+    from tests import _codegen_eager_fixtures as eager_fx
+
+    assert eager_fx.Widget.scope(eager_fx.Eager)(name="hi").shout() == "HI"
+
+
 def test_behavior_unresolvable_annotation_fallback(tmp_path: Path) -> None:
     # `CrossTarget` is TYPE_CHECKING-only, so gen-time signature eval fails and the
     # method renders untyped.
