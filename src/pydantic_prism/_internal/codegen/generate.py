@@ -5,14 +5,20 @@ from __future__ import annotations
 from ..model import (
     Projection,
     _auto_name,  # pyright: ignore[reportPrivateUsage] — intra-package
+    _collect_behaviors,  # pyright: ignore[reportPrivateUsage] — intra-package
 )
 from .config import CodegenError, Config
-from .discover import _build_workset, _discover
+from .discover import (
+    _build_workset,
+    _discover,
+    _Plan,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 from .render import (
     _field_suffix,
     _import_lines,
     _Imports,
     _render_annotation,
+    _render_behavior,
     _render_scope_expr,
     _render_type_ref,
 )
@@ -30,7 +36,7 @@ def generate_readme(config: Config) -> str:
     """Render the GitHub README documenting ``config``'s generated workset."""
     from ..readme import build_readme
 
-    projections = _build_workset(_discover(config))
+    projections, _ = _build_workset(_discover(config))
     if not projections:
         raise CodegenError(
             "no projections to document — the configured modules define no "
@@ -42,7 +48,7 @@ def generate_readme(config: Config) -> str:
 def generate(config: Config) -> str:
     """Render the full generated module for ``config`` as a string."""
     plans = _discover(config)
-    projections = _build_workset(plans)
+    projections, directives = _build_workset(plans)
     if not projections:
         raise CodegenError(
             "no projections to generate — the configured modules define no "
@@ -52,12 +58,15 @@ def generate(config: Config) -> str:
     imports = _Imports()
     imports.add_typing("pydantic_prism", "Projection")
 
+    lattice = _lattice_bases(projections)
+    ordered = _topo_order(projections, lattice)
+
     class_blocks: list[str] = []
     alias_lines: list[str] = []
 
-    for proj in projections:
-        class_blocks.append(_render_class(proj, imports))
-        alias_lines.append(_render_alias(proj, imports))
+    for proj in ordered:
+        class_blocks.append(_render_class(proj, imports, lattice[proj]))
+        alias_lines.append(_render_alias(proj, imports, directives.get(proj)))
 
     out: list[str] = [
         _BANNER.rstrip("\n"),
@@ -79,25 +88,132 @@ def generate(config: Config) -> str:
     return "\n".join(out) + "\n"
 
 
-def _render_class(proj: type[Projection], imports: _Imports) -> str:
-    base_names = [_render_type_ref(base, imports) for base in proj.__prism__.bases]
-    bases = ", ".join([*base_names, "Projection"])
-    lines = [f"    class {proj.__name__}({bases}):"]
+def _lattice_bases(
+    projections: list[type[Projection]],
+) -> dict[type[Projection], list[type[Projection]]]:
+    """For each projection, the projection(s) it should subclass in the stubs.
+
+    ``P`` subclasses ``Q`` when ``Q``'s resolved ``model_fields`` are a strict
+    subset of ``P``'s (so ``P`` only *adds* fields — sound for structural
+    assignment), the two share the same canonical source and carried bases, and
+    every shared field's annotation is identical (an ``as_type=`` retype would
+    otherwise be an incompatible override). The base set is the *maximal* such
+    ``Q``'s — the nearest ancestors — so a chain yields a single base and only a
+    true DAG yields multiple. This mirrors the scope lattice for the common
+    atom-scope case; it is a TYPE_CHECKING-only relation (runtime projections stay
+    independent siblings, so ``isinstance`` across faces is ``False``).
+    """
+    fields = {p: frozenset(p.model_fields) for p in projections}
+    result: dict[type[Projection], list[type[Projection]]] = {}
+    for p in projections:
+        candidates = [
+            q
+            for q in projections
+            if q is not p
+            and q.__prism__.source is p.__prism__.source
+            and q.__prism__.bases == p.__prism__.bases
+            and fields[q] < fields[p]
+            and _annotations_agree(q, p)
+        ]
+        maximal = [
+            q
+            for q in candidates
+            if not any(c is not q and fields[q] < fields[c] for c in candidates)
+        ]
+        # Collapse candidates with identical field sets (e.g. name-only variants)
+        # to one representative, so a subclass never lists two equivalent bases.
+        chosen: dict[frozenset[str], type[Projection]] = {}
+        for q in sorted(maximal, key=lambda q: q.__name__):
+            chosen.setdefault(fields[q], q)
+        result[p] = list(chosen.values())
+    return result
+
+
+def _annotations_agree(base: type[Projection], sub: type[Projection]) -> bool:
+    return all(
+        base.model_fields[name].annotation == sub.model_fields[name].annotation
+        for name in base.model_fields
+    )
+
+
+def _topo_order(
+    projections: list[type[Projection]],
+    bases: dict[type[Projection], list[type[Projection]]],
+) -> list[type[Projection]]:
+    """Order projections so every base precedes its subclasses (name-stable)."""
+    ordered: list[type[Projection]] = []
+    placed: set[type[Projection]] = set()
+
+    def visit(p: type[Projection]) -> None:
+        if p in placed:
+            return
+        for base in bases[p]:
+            visit(base)
+        placed.add(p)
+        ordered.append(p)
+
+    for p in sorted(projections, key=lambda x: x.__name__):
+        visit(p)
+    return ordered
+
+
+def _render_class(
+    proj: type[Projection], imports: _Imports, bases: list[type[Projection]]
+) -> str:
+    if bases:
+        base_names = [b.__name__ for b in bases]
+        inherited = frozenset[str]().union(*(b.model_fields for b in bases))
+    else:
+        carried = [_render_type_ref(b, imports) for b in proj.__prism__.bases]
+        base_names = [*carried, "Projection"]
+        inherited = frozenset[str]()
+    lines = [f"    class {proj.__name__}({', '.join(base_names)}):"]
+    body: list[str] = []
     for name, info in proj.model_fields.items():
+        if name in inherited:
+            continue  # carried by a base stub; re-declaring would be redundant
         annotation = _render_annotation(info.annotation, imports)
-        lines.append(f"        {name}: {annotation}{_field_suffix(info, imports)}")
+        body.append(f"        {name}: {annotation}{_field_suffix(info, imports)}")
         # Preserve the field's description as an attribute docstring — surfaced
         # by pyright/Pylance on hover; the runtime object carries the real one.
         if info.description:
-            lines.append(f"        {info.description!r}")
+            body.append(f"        {info.description!r}")
+    # Behaviors are identical across every face of a source, so a base stub
+    # already carries them all — only a root (baseless) stub emits them.
+    if not bases:
+        for name, member in _collect_behaviors(proj.__prism__.source).items():
+            body.extend(_render_behavior(name, member, imports))
+    # A projection always has >= 1 field (empty scopes raise EmptyProjectionError)
+    # and a subclass always adds >= 1 field beyond its base, so body is non-empty.
+    lines.extend(body)
     return "\n".join(lines)
 
 
-def _render_alias(proj: type[Projection], imports: _Imports) -> str:
+def _render_alias(proj: type[Projection], imports: _Imports, plan: _Plan | None) -> str:
     source = proj.__prism__.source
     source_ref = imports.add_runtime(source.__module__, source.__qualname__)
+    if plan is not None and plan.kind != "scope":
+        return _render_directional_alias(proj, source_ref, plan, imports)
     expr_src = _render_scope_expr(proj.__prism__.scope, imports)
     auto_name = _auto_name(source, proj.__prism__.scope)
     if proj.__name__ == auto_name:
         return f"{proj.__name__} = {source_ref}.scope({expr_src})"
     return f"{proj.__name__} = {source_ref}.scope({expr_src}, name={proj.__name__!r})"
+
+
+def _render_directional_alias(
+    proj: type[Projection], source_ref: str, plan: _Plan, imports: _Imports
+) -> str:
+    """Render an ``.input()`` / ``.output()`` runtime alias from its plan.
+
+    ``plan.expr`` is the *visible* scope (the method subtracts ``Out`` / ``In``).
+    ``name=`` and ``extra=`` are emitted only when they differ from the runtime
+    helper's own defaults (``"{Model}In"`` / ``"{Model}Out"``; ``"forbid"``).
+    """
+    args = [_render_scope_expr(plan.expr, imports)]
+    suffix = "In" if plan.kind == "input" else "Out"
+    if proj.__name__ != f"{plan.source.__name__}{suffix}":
+        args.append(f"name={proj.__name__!r}")
+    if plan.kind == "input" and plan.extra is not None and plan.extra != "forbid":
+        args.append(f"extra={plan.extra!r}")
+    return f"{proj.__name__} = {source_ref}.{plan.kind}({', '.join(args)})"

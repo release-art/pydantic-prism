@@ -245,12 +245,17 @@ def ref(target: type[ScopedModel] | str, *, field: str = "id") -> Ref:
     """Declare that this field references ``target`` (by ``target``'s ``field``).
 
     ``target`` may be a string for models defined later or in cycles; string
-    targets resolve lazily against the owning model's module.
+    targets resolve lazily. A bare name (``ref("Customer")``) resolves against
+    the owning model's module; a fully-qualified ``ref("pkg.mod:Customer")`` or
+    ``ref("pkg.mod.Customer")`` resolves the named module via ``importlib``, for
+    a target that lives in another module.
 
     Usage::
 
         class Order(ScopedModel):
             customer_id: Annotated[UUID, ref(Customer), scoped(Public)]
+            # a target in another module, by qualified path:
+            coupon_id: Annotated[UUID, ref("shop.promos:Coupon"), scoped(Public)]
     """
     _check_target(target, "ref")
     _check_str(field, "ref() field must be a string")

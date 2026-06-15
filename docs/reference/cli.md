@@ -102,6 +102,13 @@ readme = "myapp/MODELS.md"          # optional: also emit a GitHub model doc
 model = "myapp.models:Document"
 scopes = ["myapp.models:Public", "myapp.models:Internal"]  # union
 name = "DocumentPublicView"         # optional name override
+
+[[tool.pydantic-prism.projections]] # a write-side .input() projection
+model = "myapp.models:Document"
+scopes = ["myapp.models:Public"]
+kind = "input"                      # "scope" (default) | "input" | "output"
+extra = "forbid"                    # optional, only valid for kind = "input"
+# name defaults to "DocumentIn" / "DocumentOut", mirroring .input()/.output()
 ```
 
 | key | required | meaning |
@@ -111,4 +118,17 @@ name = "DocumentPublicView"         # optional name override
 | `projections` | one of `modules` / `projections` | Extra projections (unions, name overrides) beyond per-atom. |
 | `readme` | no | Path for the generated GitHub model doc. |
 
+A `projections` entry's `kind` selects the projection method: `"scope"` (the
+default — `.scope(A | B)`), `"input"` (`.input(...)`, the write-side view with
+read-only `Out` fields dropped) or `"output"` (`.output(...)`, the read-side
+view with write-only `In` fields dropped). `name` defaults to `"{Model}In"` /
+`"{Model}Out"` for the directional kinds, matching the runtime helpers. `extra`
+overrides the input projection's `model_config["extra"]` and is only valid for
+`kind = "input"` — setting it on any other kind is a `ValidationError`. Discovery
+(module scan) only emits `.scope()` projections; `.input()` / `.output()` aren't
+reachable by annotation walking, so they need an explicit entry.
+
 A config that selects nothing (neither `modules` nor `projections`) is an error.
+The table is parsed with pydantic, so a malformed or misspelled key (e.g. a
+non-string `output`, an unknown key, or a projection missing `scopes`) fails
+with a native `pydantic.ValidationError` naming the offending field.

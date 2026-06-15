@@ -51,9 +51,12 @@ cardinality. Prism tells you the shape; what you do with it is up to you.
   [`examples/graph`](../../examples/graph) for a minimal resolver over
   `RefInfo`).
 - **Referential integrity on data** — declaration consistency only.
-- **Cross-module string resolution** — `ref("Customer")` resolves in the owning
-  model's module only; pass the class object otherwise.
 - **Conditional / polymorphic refs** (`ref(A) | ref(B)`) — one target per field.
+
+A string target resolves lazily: a bare `ref("Customer")` against the owning
+model's module, and a fully-qualified `ref("pkg.mod:Customer")` /
+`ref("pkg.mod.Customer")` against the named module (via `importlib`) for a target
+that lives elsewhere — the same `"module:Name"` grammar the `prism gen` spec uses.
 
 Because the ref graph is pure metadata that *survives projection*, higher-level
 features compose on top of it without prism ever doing I/O — most notably the

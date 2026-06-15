@@ -8,6 +8,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
 
+from pydantic import ValidationError
+
 from .config import CodegenError, load_config
 from .discover import _resolve  # pyright: ignore[reportPrivateUsage] — intra-package
 from .generate import generate, generate_readme
@@ -152,7 +154,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         text = generate(config)
         readme_path = Path(args.readme) if args.readme else config.readme
         readme_text = generate_readme(config) if readme_path is not None else None
-    except (CodegenError, OSError) as exc:
+    except (CodegenError, ValidationError, OSError) as exc:
         print(f"pydantic-prism: {exc}", file=sys.stderr)
         return 2
 

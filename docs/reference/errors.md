@@ -20,7 +20,7 @@ PrismError(Exception)
 | `EmptyProjectionError` | `Model.scope(...)` selected zero fields — almost always a typo'd scope or a never-tagged model. The message lists the scopes the model defines. |
 | `ProjectionNameError` | Two different scope expressions (or `bases`) would produce one projection class name. Pass `name=` to disambiguate. Also raised *at model definition* when two of a model's scopes share a class-name token (their `cls_name_token`, else `__name__`) — there, rename one or give it a distinct `cls_name_token=`. |
 | `ProjectionBaseError` | A field declared on a carried base is tagged with a scope the requested expression does not select — inherited fields can't be removed, so narrowing would leak it. |
-| `RefResolutionError` | A `ref` / `backref` couldn't resolve: a string target names no `ScopedModel` in the owning module, a function-local model, a `backref(via=...)` that doesn't line up with a forward `ref`, or a keyed-dict key type that doesn't match the target id type. Raised lazily, on `__prism__.refs` access. |
+| `RefResolutionError` | A `ref` / `backref` couldn't resolve: a string target names no `ScopedModel` (a bare name absent from the owning module, or a qualified `module:Name` whose module won't import / lacks the name), a function-local model referenced by a bare name, a `backref(via=...)` that doesn't line up with a forward `ref`, or a keyed-dict key type that doesn't match the target id type. Raised lazily, on `__prism__.refs` access. |
 
 ## Situation → error → when
 

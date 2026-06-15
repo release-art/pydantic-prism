@@ -23,7 +23,12 @@ from ...model import Projection, ScopedModel
 if TYPE_CHECKING:
     from ...model import ScopedModel as ScopedModelT
 
-__all__ = ["_copy_behaviors", "_is_unprojected", "_pydantic_managed"]
+__all__ = [
+    "_collect_behaviors",
+    "_copy_behaviors",
+    "_is_unprojected",
+    "_pydantic_managed",
+]
 
 
 def _is_behavior(member: object) -> bool:
@@ -69,17 +74,22 @@ def _pydantic_managed(cls: type[ScopedModelT]) -> set[str]:
     }
 
 
-def _copy_behaviors(cls: type[ScopedModelT], projection: type[Projection]) -> None:
-    """Copy ``cls``'s (and its canonical ancestors') behaviors onto ``projection``.
+def _collect_behaviors(cls: type[ScopedModelT]) -> dict[str, Any]:
+    """The canonical behaviors prism carries onto a projection: name → member.
 
     Walks ``cls``'s MRO down to — but not including — :class:`ScopedModel`, so
-    behavior declared on canonical ancestors carries too; the most-derived
-    definition of a name wins. Left untouched: a member already present on
-    ``projection`` (a pydantic-generated attribute), one named like a
+    behavior declared on canonical ancestors is included; the most-derived
+    definition of a name wins. Omitted: a member named like a
     :class:`Projection` / ``BaseModel`` member, a pydantic-managed validator /
     serializer / computed field, and any ``@unprojected`` member.
+
+    The single source of truth shared by the runtime copy (:func:`_copy_behaviors`)
+    and ``prism gen`` (which renders these into each face's stub), so both honor
+    ``@unprojected`` and the pydantic-managed exclusions identically.
     """
-    seen = set(vars(projection)) | _pydantic_managed(cls)
+    managed = _pydantic_managed(cls)
+    seen: set[str] = set()
+    out: dict[str, Any] = {}
     for klass in cls.__mro__:
         if klass is ScopedModel:
             break
@@ -87,6 +97,20 @@ def _copy_behaviors(cls: type[ScopedModelT], projection: type[Projection]) -> No
             if name in seen or not _is_behavior(member):
                 continue
             seen.add(name)
-            if _is_unprojected(member) or hasattr(Projection, name):
+            if name in managed or _is_unprojected(member) or hasattr(Projection, name):
                 continue
+            out[name] = member
+    return out
+
+
+def _copy_behaviors(cls: type[ScopedModelT], projection: type[Projection]) -> None:
+    """Copy ``cls``'s (and its canonical ancestors') behaviors onto ``projection``.
+
+    Uses :func:`_collect_behaviors` for the selection, additionally skipping any
+    name already present on ``projection`` (a pydantic-generated class attribute
+    must never be overwritten).
+    """
+    existing = set(vars(projection))
+    for name, member in _collect_behaviors(cls).items():
+        if name not in existing:
             setattr(projection, name, member)

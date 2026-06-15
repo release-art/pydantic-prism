@@ -43,6 +43,22 @@ and validators, refs, carried bases, partial defaults, and FastAPI
 `response_model=` all keep working. The file carries a do-not-edit banner;
 regenerate it, don't hand-edit.
 
+The stubs also mirror the **scope lattice**: when one face's fields are a subset
+of another's (e.g. a `Public` projection's fields ⊆ an `Internal` one's), the
+richer stub *subclasses* the leaner one, so a value of the richer face is
+assignable where the leaner is expected — matching how a hand-written
+inheritance chain behaved. This is a TYPE_CHECKING-only relation: at runtime the
+projections stay independent cached classes (so `isinstance` across faces is
+`False` — assignability is structural, not nominal). Any **behavior** prism
+copies onto a projection — a `@property`, `@classmethod`, `@staticmethod`, or
+method on the canonical (anything not `@unprojected`) — is emitted into the stub
+too, so the editor sees it.
+
+> **Note — `ruff format`.** The generated file's `# ruff: noqa` banner disables
+> *linting*, not *formatting*; `ruff format` may rewrite it (quotes, wrapping)
+> and then `pydantic-prism check` reports it stale. Exclude the generated module
+> from the formatter — e.g. `[tool.ruff] extend-exclude = ["myapp/_prism.py"]`.
+
 ## 3. Gate drift in CI
 
 ```console
