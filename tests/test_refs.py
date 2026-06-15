@@ -53,6 +53,20 @@ class NodeB(ScopedModel):
     a_id: Annotated[UUID, ref(NodeA), scoped(Public)]
 
 
+class CrossColon(ScopedModel):
+    id: Annotated[UUID, scoped(Public)]
+    target_id: Annotated[
+        UUID, ref("tests._refs_cross_fixtures:CrossTarget"), scoped(Public)
+    ]
+
+
+class CrossDotted(ScopedModel):
+    id: Annotated[UUID, scoped(Public)]
+    target_id: Annotated[
+        UUID, ref("tests._refs_cross_fixtures.CrossTarget"), scoped(Public)
+    ]
+
+
 def test_forward_ref_info() -> None:
     info = Order.__prism__.refs["customer_id"]
     assert isinstance(info, RefInfo)
@@ -115,6 +129,49 @@ def test_unresolvable_string_target() -> None:
 
     with pytest.raises(RefResolutionError, match="NoSuchModel"):
         Dangling.__prism__.refs["other_id"]
+
+
+def test_cross_module_ref_colon_form() -> None:
+    from tests._refs_cross_fixtures import CrossTarget
+
+    assert CrossColon.__prism__.refs["target_id"].target is CrossTarget
+
+
+def test_cross_module_ref_dotted_form() -> None:
+    from tests._refs_cross_fixtures import CrossTarget
+
+    assert CrossDotted.__prism__.refs["target_id"].target is CrossTarget
+
+
+def test_cross_module_ref_resolves_for_local_model() -> None:
+    # The qualified form sidesteps the owner's module entirely, so it works even
+    # for a model defined inside a function (where a bare name cannot).
+    from tests._refs_cross_fixtures import CrossTarget
+
+    class LocalOwner(ScopedModel):
+        target_id: Annotated[
+            UUID, ref("tests._refs_cross_fixtures:CrossTarget"), scoped(Public)
+        ]
+
+    assert LocalOwner.__prism__.refs["target_id"].target is CrossTarget
+
+
+def test_cross_module_ref_unimportable_module() -> None:
+    class BadModule(ScopedModel):
+        other_id: Annotated[UUID, ref("no.such.module:Thing"), scoped(Public)]
+
+    with pytest.raises(RefResolutionError, match="cannot import module"):
+        BadModule.__prism__.refs["other_id"]
+
+
+def test_cross_module_ref_missing_attribute() -> None:
+    class BadAttr(ScopedModel):
+        other_id: Annotated[
+            UUID, ref("tests._refs_cross_fixtures:Nope"), scoped(Public)
+        ]
+
+    with pytest.raises(RefResolutionError, match="cannot resolve"):
+        BadAttr.__prism__.refs["other_id"]
 
 
 def test_backref_via_missing_field() -> None:

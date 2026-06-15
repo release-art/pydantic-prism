@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from collections import deque
@@ -166,9 +167,11 @@ def shape_of(annotation: Any) -> tuple[RefShape, bool, Any]:
 class RefGraph(Mapping[str, RefInfo]):
     """The relationship graph of one model: a mapping of field name → RefInfo.
 
-    Targets resolve lazily on access (string forward references are looked up
-    in the owning model's module), so circular model graphs work regardless of
-    definition order. Resolution failures raise :class:`RefResolutionError`.
+    Targets resolve lazily on access, so circular model graphs work regardless
+    of definition order. A string forward reference may be a bare name (looked
+    up in the owning model's module), or a fully-qualified ``"module:Name"`` /
+    ``"module.path.Name"`` path for a target in another module. Resolution
+    failures raise :class:`RefResolutionError`.
     """
 
     def __init__(
@@ -302,27 +305,11 @@ class RefGraph(Mapping[str, RefInfo]):
         return RefGraph(self._owner, raw)
 
     def _resolve(self, field_name: str) -> RefInfo:
-        from .model import ScopedModel
-
         edge = self._raw[field_name]
         marker = edge.marker
         target = marker.target
         if isinstance(target, str):
-            if "<locals>" in self._owner.__qualname__:
-                raise RefResolutionError(
-                    f"{self._owner.__name__}.{field_name}: string target {target!r} "
-                    f"cannot be resolved for a model defined inside a function; "
-                    f"pass the class object instead"
-                )
-            module = sys.modules.get(self._owner.__module__)
-            candidate = getattr(module, target, None)
-            if not (isinstance(candidate, type) and issubclass(candidate, ScopedModel)):
-                raise RefResolutionError(
-                    f"{self._owner.__name__}.{field_name}: cannot resolve "
-                    f"{target!r} to a ScopedModel in module "
-                    f"{self._owner.__module__!r}"
-                )
-            target = candidate
+            target = self._resolve_string(field_name, target)
         common: dict[str, Any] = {
             "field_name": field_name,
             "target": target,
@@ -339,6 +326,51 @@ class RefGraph(Mapping[str, RefInfo]):
         if edge.shape is RefShape.KEYED_DICT:
             self._check_key_type(field_name, target, marker.target_field, edge.key_type)
         return IdRefInfo(kind="ref", **common)
+
+    def _resolve_string(self, field_name: str, target: str) -> type[ScopedModel]:
+        """Resolve a string ``ref()`` target to its ScopedModel class.
+
+        Three forms share one grammar:
+
+        - ``"module.path:Name"`` — colon-separated (matches the ``prism gen`` spec)
+        - ``"module.path.Name"`` — dotted (matches ``importlib``)
+        - ``"Name"`` — a bare name, looked up in the *owner's* module (the
+          self-reference / within-module-cycle case)
+
+        The qualified forms ``importlib.import_module`` the module portion
+        (idempotent in any realistic call — the target's module is already
+        loaded). Only the bare form needs the owner's module on ``sys.modules``,
+        so the "defined inside a function" guard applies to it alone.
+        """
+        from .model import ScopedModel
+
+        sep = ":" if ":" in target else ("." if "." in target else "")
+        if sep:
+            module_name, _, attr = target.rpartition(sep)
+            try:
+                module = importlib.import_module(module_name)
+            except ImportError as exc:  # noqa: F841 — message carries module_name
+                raise RefResolutionError(
+                    f"{self._owner.__name__}.{field_name}: cannot import module "
+                    f"{module_name!r} for ref target {target!r}"
+                ) from exc
+        else:
+            if "<locals>" in self._owner.__qualname__:
+                raise RefResolutionError(
+                    f"{self._owner.__name__}.{field_name}: string target {target!r} "
+                    f"cannot be resolved for a model defined inside a function; "
+                    f"pass the class object instead"
+                )
+            module_name = self._owner.__module__
+            module = sys.modules.get(module_name)
+            attr = target
+        candidate = getattr(module, attr, None)
+        if not (isinstance(candidate, type) and issubclass(candidate, ScopedModel)):
+            raise RefResolutionError(
+                f"{self._owner.__name__}.{field_name}: cannot resolve {target!r} "
+                f"to a ScopedModel in module {module_name!r}"
+            )
+        return candidate
 
     def _check_key_type(
         self,
