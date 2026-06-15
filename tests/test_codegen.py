@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal, Optional
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 
 from pydantic_prism._internal.codegen import (
     CodegenError,
@@ -114,16 +115,23 @@ def test_load_config_full(tmp_path: Path) -> None:
     )
 
 
+def test_load_config_no_table(tmp_path: Path) -> None:
+    # The table being absent entirely stays a CodegenError — pydantic has
+    # nothing to validate.
+    with pytest.raises(CodegenError):
+        load_config(_write_pyproject(tmp_path, "[tool.other]\nx = 1\n"))
+
+
 @pytest.mark.parametrize(
     "body",
     [
-        "[tool.other]\nx = 1\n",  # no table
         '[tool.pydantic-prism]\nmodules = ["m"]\n',  # no output
         '[tool.pydantic-prism]\noutput = "o.py"\n',  # selects nothing
+        '[tool.pydantic-prism]\noutput = "o.py"\nmods = ["m"]\n',  # unknown key
     ],
 )
 def test_load_config_errors(tmp_path: Path, body: str) -> None:
-    with pytest.raises(CodegenError):
+    with pytest.raises(ValidationError):
         load_config(_write_pyproject(tmp_path, body))
 
 
@@ -136,11 +144,12 @@ def test_load_config_errors(tmp_path: Path, body: str) -> None:
         '{ model = "m:M", scopes = [] }',  # empty scopes
         '{ model = "m:M", scopes = [1] }',  # non-string scope
         '{ model = "m:M", scopes = ["m:S"], name = 3 }',  # bad name
+        '{ model = "m:M", scopes = ["m:S"], extra = 1 }',  # unknown key
     ],
 )
 def test_load_config_bad_projection_entry(tmp_path: Path, entry: str) -> None:
     body = f'[tool.pydantic-prism]\noutput = "o.py"\nprojections = [{entry}]\n'
-    with pytest.raises(CodegenError):
+    with pytest.raises(ValidationError):
         load_config(_write_pyproject(tmp_path, body))
 
 
@@ -381,7 +390,7 @@ def test_readme_cli_override(tmp_path: Path) -> None:
 
 def test_readme_config_must_be_string(tmp_path: Path) -> None:
     body = '[tool.pydantic-prism]\noutput = "o.py"\nmodules = ["m"]\nreadme = 123\n'
-    with pytest.raises(CodegenError, match="`readme` must be a string"):
+    with pytest.raises(ValidationError, match="readme"):
         load_config(_write_pyproject(tmp_path, body))
 
 

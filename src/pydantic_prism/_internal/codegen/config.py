@@ -1,12 +1,21 @@
-"""``[tool.pydantic-prism]`` configuration loading."""
+"""``[tool.pydantic-prism]`` configuration loading.
+
+The raw TOML table is parsed and normalised through pydantic models
+(:class:`_RawConfig` / :class:`_RawProjection`) — prism depends on pydantic,
+so there is no reason to hand-roll the shape checks. Field-shape problems
+surface as a native ``pydantic.ValidationError``; the two conditions pydantic
+cannot phrase helpfully (the table is absent entirely, or it selects nothing
+to generate) stay as :class:`CodegenError`.
+"""
 
 from __future__ import annotations
 
 import tomllib
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 __all__ = ["CodegenError", "Config", "ProjectionSpec", "load_config"]
 
@@ -39,67 +48,59 @@ class Config:
     readme: Path | None = None
 
 
+class _RawProjection(BaseModel):
+    """A ``[[tool.pydantic-prism.projections]]`` table, as written in TOML."""
+
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
+    model: str
+    scopes: Annotated[tuple[str, ...], Field(min_length=1)]
+    name: str | None = None
+
+
+class _RawConfig(BaseModel):
+    """The ``[tool.pydantic-prism]`` table, as written in TOML."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    output: str
+    modules: tuple[str, ...] = ()
+    projections: tuple[_RawProjection, ...] = ()
+    readme: str | None = None
+
+    @model_validator(mode="after")
+    def _selects_something(self) -> _RawConfig:
+        if not self.modules and not self.projections:
+            raise ValueError(
+                "[tool.pydantic-prism] selects nothing — set `modules` "
+                "and/or `projections`"
+            )
+        return self
+
+
 def load_config(pyproject: Path) -> Config:
-    """Read ``[tool.pydantic-prism]`` from a ``pyproject.toml``."""
+    """Read ``[tool.pydantic-prism]`` from a ``pyproject.toml``.
+
+    Raises :class:`CodegenError` if the table is missing, and
+    ``pydantic.ValidationError`` if its contents are malformed.
+    """
     with pyproject.open("rb") as handle:
-        data = tomllib.load(handle)
+        data: dict[str, Any] = tomllib.load(handle)
     table = data.get("tool", {}).get("pydantic-prism")
-    if not isinstance(table, dict):
+    if table is None:
         raise CodegenError(
             f"{pyproject}: no [tool.pydantic-prism] table; add one with an "
             f"`output` path and `modules` to scan"
         )
-    table = cast(dict[str, Any], table)
-    output = table.get("output")
-    if not isinstance(output, str):
-        raise CodegenError(
-            f"{pyproject}: [tool.pydantic-prism] needs a string `output` path"
-        )
-    modules = tuple(cast(Sequence[str], table.get("modules", [])))
-    raw_projections = cast(Sequence[Any], table.get("projections", []))
-    projections = tuple(_parse_spec(entry, pyproject) for entry in raw_projections)
-    if not modules and not projections:
-        raise CodegenError(
-            f"{pyproject}: [tool.pydantic-prism] selects nothing — set `modules` "
-            f"and/or `projections`"
-        )
-    readme = table.get("readme")
-    if readme is not None and not isinstance(readme, str):
-        raise CodegenError(
-            f"{pyproject}: [tool.pydantic-prism] `readme` must be a string path"
-        )
+    raw = _RawConfig.model_validate(table)
     root = pyproject.resolve().parent
     return Config(
-        output=root / output,
-        modules=modules,
-        projections=projections,
+        output=root / raw.output,
+        modules=raw.modules,
+        projections=tuple(
+            ProjectionSpec(model=spec.model, scopes=spec.scopes, name=spec.name)
+            for spec in raw.projections
+        ),
         root=root,
-        readme=(root / readme) if isinstance(readme, str) else None,
-    )
-
-
-def _parse_spec(entry: Any, pyproject: Path) -> ProjectionSpec:
-    if not isinstance(entry, dict):
-        raise CodegenError(
-            f"{pyproject}: each [[tool.pydantic-prism.projections]] "
-            f"entry must be a table, got {entry!r}"
-        )
-    entry = cast(dict[str, Any], entry)
-    model = entry.get("model")
-    scopes = entry.get("scopes")
-    name = entry.get("name")
-    if not isinstance(model, str):
-        raise CodegenError(f"{pyproject}: a projections entry needs a string `model`")
-    scope_list = cast(list[Any], scopes) if isinstance(scopes, list) else []
-    if not scope_list or not all(isinstance(s, str) for s in scope_list):
-        raise CodegenError(
-            f"{pyproject}: projections entry for {model!r} needs a non-empty "
-            f"`scopes` list of 'module:Name' strings"
-        )
-    if name is not None and not isinstance(name, str):
-        raise CodegenError(
-            f"{pyproject}: projections `name` for {model!r} must be a string"
-        )
-    return ProjectionSpec(
-        model=model, scopes=tuple(cast(list[str], scope_list)), name=name
+        readme=(root / raw.readme) if raw.readme is not None else None,
     )

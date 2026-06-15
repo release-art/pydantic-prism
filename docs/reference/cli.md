@@ -112,3 +112,6 @@ name = "DocumentPublicView"         # optional name override
 | `readme` | no | Path for the generated GitHub model doc. |
 
 A config that selects nothing (neither `modules` nor `projections`) is an error.
+The table is parsed with pydantic, so a malformed or misspelled key (e.g. a
+non-string `output`, an unknown key, or a projection missing `scopes`) fails
+with a native `pydantic.ValidationError` naming the offending field.
