@@ -7,7 +7,11 @@ from ..model import (
     _auto_name,  # pyright: ignore[reportPrivateUsage] — intra-package
 )
 from .config import CodegenError, Config
-from .discover import _build_workset, _discover
+from .discover import (
+    _build_workset,
+    _discover,
+    _Plan,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 from .render import (
     _field_suffix,
     _import_lines,
@@ -30,7 +34,7 @@ def generate_readme(config: Config) -> str:
     """Render the GitHub README documenting ``config``'s generated workset."""
     from ..readme import build_readme
 
-    projections = _build_workset(_discover(config))
+    projections, _ = _build_workset(_discover(config))
     if not projections:
         raise CodegenError(
             "no projections to document — the configured modules define no "
@@ -42,7 +46,7 @@ def generate_readme(config: Config) -> str:
 def generate(config: Config) -> str:
     """Render the full generated module for ``config`` as a string."""
     plans = _discover(config)
-    projections = _build_workset(plans)
+    projections, directives = _build_workset(plans)
     if not projections:
         raise CodegenError(
             "no projections to generate — the configured modules define no "
@@ -57,7 +61,7 @@ def generate(config: Config) -> str:
 
     for proj in projections:
         class_blocks.append(_render_class(proj, imports))
-        alias_lines.append(_render_alias(proj, imports))
+        alias_lines.append(_render_alias(proj, imports, directives.get(proj)))
 
     out: list[str] = [
         _BANNER.rstrip("\n"),
@@ -93,11 +97,31 @@ def _render_class(proj: type[Projection], imports: _Imports) -> str:
     return "\n".join(lines)
 
 
-def _render_alias(proj: type[Projection], imports: _Imports) -> str:
+def _render_alias(proj: type[Projection], imports: _Imports, plan: _Plan | None) -> str:
     source = proj.__prism__.source
     source_ref = imports.add_runtime(source.__module__, source.__qualname__)
+    if plan is not None and plan.kind != "scope":
+        return _render_directional_alias(proj, source_ref, plan, imports)
     expr_src = _render_scope_expr(proj.__prism__.scope, imports)
     auto_name = _auto_name(source, proj.__prism__.scope)
     if proj.__name__ == auto_name:
         return f"{proj.__name__} = {source_ref}.scope({expr_src})"
     return f"{proj.__name__} = {source_ref}.scope({expr_src}, name={proj.__name__!r})"
+
+
+def _render_directional_alias(
+    proj: type[Projection], source_ref: str, plan: _Plan, imports: _Imports
+) -> str:
+    """Render an ``.input()`` / ``.output()`` runtime alias from its plan.
+
+    ``plan.expr`` is the *visible* scope (the method subtracts ``Out`` / ``In``).
+    ``name=`` and ``extra=`` are emitted only when they differ from the runtime
+    helper's own defaults (``"{Model}In"`` / ``"{Model}Out"``; ``"forbid"``).
+    """
+    args = [_render_scope_expr(plan.expr, imports)]
+    suffix = "In" if plan.kind == "input" else "Out"
+    if proj.__name__ != f"{plan.source.__name__}{suffix}":
+        args.append(f"name={proj.__name__!r}")
+    if plan.kind == "input" and plan.extra is not None and plan.extra != "forbid":
+        args.append(f"extra={plan.extra!r}")
+    return f"{proj.__name__} = {source_ref}.{plan.kind}({', '.join(args)})"

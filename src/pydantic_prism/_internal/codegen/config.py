@@ -13,11 +13,14 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 __all__ = ["CodegenError", "Config", "ProjectionSpec", "load_config"]
+
+ProjectionKind = Literal["scope", "input", "output"]
+ExtraPolicy = Literal["allow", "ignore", "forbid"]
 
 
 class CodegenError(Exception):
@@ -29,12 +32,19 @@ class ProjectionSpec:
     """One opt-in projection beyond a model's per-atom defaults.
 
     ``model`` and each ``scopes`` entry are ``"package.module:Name"`` paths; the
-    scopes union together (equivalent to ``.scope(A | B)``).
+    scopes union together. ``kind`` selects the projection method: ``"scope"``
+    (the default, ``.scope(A | B)``), ``"input"`` (``.input(...)`` — the
+    write-side view, read-only ``Out`` fields dropped) or ``"output"``
+    (``.output(...)`` — the read-side view, write-only ``In`` fields dropped).
+    ``extra`` overrides the input projection's ``model_config["extra"]`` and is
+    only valid for ``kind="input"``.
     """
 
     model: str
     scopes: tuple[str, ...]
     name: str | None = None
+    kind: ProjectionKind = "scope"
+    extra: ExtraPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +66,17 @@ class _RawProjection(BaseModel):
     model: str
     scopes: Annotated[tuple[str, ...], Field(min_length=1)]
     name: str | None = None
+    kind: ProjectionKind = "scope"
+    extra: ExtraPolicy | None = None
+
+    @model_validator(mode="after")
+    def _extra_only_for_input(self) -> _RawProjection:
+        if self.extra is not None and self.kind != "input":
+            raise ValueError(
+                f'`extra` is only meaningful for kind="input" projections, '
+                f"not kind={self.kind!r}"
+            )
+        return self
 
 
 class _RawConfig(BaseModel):
@@ -98,7 +119,13 @@ def load_config(pyproject: Path) -> Config:
         output=root / raw.output,
         modules=raw.modules,
         projections=tuple(
-            ProjectionSpec(model=spec.model, scopes=spec.scopes, name=spec.name)
+            ProjectionSpec(
+                model=spec.model,
+                scopes=spec.scopes,
+                name=spec.name,
+                kind=spec.kind,
+                extra=spec.extra,
+            )
             for spec in raw.projections
         ),
         root=root,

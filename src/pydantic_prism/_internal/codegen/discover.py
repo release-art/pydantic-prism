@@ -10,16 +10,34 @@ from typing import Any, cast, get_args
 
 from ..model import Projection, ScopedModel
 from ..scopes import ScopeExpr, as_expr, union_all
-from .config import CodegenError, Config
+from .config import CodegenError, Config, ExtraPolicy, ProjectionKind
 
 __all__ = ["_build_workset", "_discover", "_projections_in", "_reject_name_clashes"]
 
 
 @dataclass(slots=True)
 class _Plan:
+    """A planned top-level projection.
+
+    For ``kind == "scope"`` ``expr`` is the scope expression to project; for
+    ``"input"`` / ``"output"`` ``expr`` is the *visible* scope (the directional
+    method subtracts ``Out`` / ``In`` itself). ``extra`` only applies to input.
+    """
+
     source: type[ScopedModel]
     expr: ScopeExpr
     name: str | None
+    kind: ProjectionKind = "scope"
+    extra: ExtraPolicy | None = None
+
+    def build(self) -> type[Projection]:
+        if self.kind == "input":
+            if self.extra is None:
+                return self.source.input(self.expr, name=self.name)
+            return self.source.input(self.expr, name=self.name, extra=self.extra)
+        if self.kind == "output":
+            return self.source.output(self.expr, name=self.name)
+        return self.source.scope(self.expr, name=self.name)
 
 
 def _resolve(path: str) -> Any:
@@ -38,14 +56,20 @@ def _resolve(path: str) -> Any:
         ) from exc
 
 
+_PlanKey = tuple[
+    type[ScopedModel], ScopeExpr, str | None, ProjectionKind, ExtraPolicy | None
+]
+
+
 def _discover(config: Config) -> list[_Plan]:
-    """The (model, scope-expression, name) triples to generate, deduplicated."""
+    """The planned projections to generate, deduplicated."""
     if str(config.root) not in sys.path:
         sys.path.insert(0, str(config.root))
-    plans: dict[tuple[type[ScopedModel], ScopeExpr, str | None], _Plan] = {}
+    plans: dict[_PlanKey, _Plan] = {}
 
-    def add(source: type[ScopedModel], expr: ScopeExpr, name: str | None) -> None:
-        plans.setdefault((source, expr, name), _Plan(source, expr, name))
+    def add(plan: _Plan) -> None:
+        key: _PlanKey = (plan.source, plan.expr, plan.name, plan.kind, plan.extra)
+        plans.setdefault(key, plan)
 
     for module_name in config.modules:
         module = importlib.import_module(module_name)
@@ -57,27 +81,38 @@ def _discover(config: Config) -> list[_Plan]:
                 and obj.__module__ == module_name
             ):
                 for scope in sorted(obj.scopes(), key=lambda s: s.__name__):
-                    add(obj, as_expr(scope), None)
+                    add(_Plan(obj, as_expr(scope), None))
 
     for spec in config.projections:
         source = _resolve(spec.model)
         if not (isinstance(source, type) and issubclass(source, ScopedModel)):
             raise CodegenError(f"{spec.model!r} is not a ScopedModel subclass")
         expr = union_all(as_expr(_resolve(path)) for path in spec.scopes)
-        add(source, expr, spec.name)
+        add(_Plan(source, expr, spec.name, spec.kind, spec.extra))
 
     return list(plans.values())
 
 
-def _build_workset(plans: Sequence[_Plan]) -> list[type[Projection]]:
-    """Build planned projections and every nested projection they reference."""
+def _build_workset(
+    plans: Sequence[_Plan],
+) -> tuple[list[type[Projection]], dict[type[Projection], _Plan]]:
+    """Build planned projections and every nested projection they reference.
+
+    Returns the ordered, clash-checked workset plus a map from each *top-level*
+    built projection back to its plan, so the alias renderer can emit the
+    matching ``.scope()`` / ``.input()`` / ``.output()`` runtime call. Nested
+    projections collected from field annotations are absent from the map (they
+    are always plain ``.scope()`` projections).
+    """
     workset: dict[type[Projection], None] = {}
+    directives: dict[type[Projection], _Plan] = {}
     for plan in plans:
-        built = plan.source.scope(plan.expr, name=plan.name)
+        built = plan.build()
+        directives.setdefault(built, plan)
         _collect(built, workset)
     ordered = sorted(workset, key=lambda p: p.__name__)
     _reject_name_clashes(ordered)
-    return ordered
+    return ordered, directives
 
 
 def _collect(proj: type[Projection], workset: dict[type[Projection], None]) -> None:

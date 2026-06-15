@@ -38,6 +38,7 @@ from pydantic_prism._internal.codegen import (
 from pydantic_prism._internal.scopes import ScopeExpr, as_expr
 
 from . import _codegen_fixtures as fx
+from . import _codegen_io_fixtures as io_fx
 
 
 class _Color(enum.Enum):
@@ -236,6 +237,97 @@ def test_generated_module_imports_with_identity(
     assert instance.carrier() == "ScreenshotStorage"
     # partial projection: all optional
     assert mod.ScreenshotUpdate().model_dump(exclude_none=True) == {}
+
+
+# --- input() / output() projections ----------------------------------------
+
+
+def test_load_config_kind_and_extra(tmp_path: Path) -> None:
+    pyproject = _write_pyproject(
+        tmp_path,
+        """
+        [tool.pydantic-prism]
+        output = "o.py"
+
+        [[tool.pydantic-prism.projections]]
+        model = "m:M"
+        scopes = ["m:Public"]
+        kind = "input"
+        extra = "ignore"
+
+        [[tool.pydantic-prism.projections]]
+        model = "m:M"
+        scopes = ["m:Public"]
+        kind = "output"
+        """,
+    )
+    config = load_config(pyproject)
+    assert config.projections == (
+        ProjectionSpec("m:M", ("m:Public",), kind="input", extra="ignore"),
+        ProjectionSpec("m:M", ("m:Public",), kind="output"),
+    )
+    # kind defaults to "scope", extra to None
+    assert ProjectionSpec("m:M", ("m:S",)).kind == "scope"
+
+
+@pytest.mark.parametrize("kind", ["scope", "output"])
+def test_extra_only_valid_for_input(tmp_path: Path, kind: str) -> None:
+    body = (
+        '[tool.pydantic-prism]\noutput = "o.py"\n'
+        "[[tool.pydantic-prism.projections]]\n"
+        f'model = "m:M"\nscopes = ["m:S"]\nkind = "{kind}"\nextra = "ignore"\n'
+    )
+    with pytest.raises(ValidationError, match="extra"):
+        load_config(_write_pyproject(tmp_path, body))
+
+
+_IO = "tests._codegen_io_fixtures"
+
+
+def test_input_output_projection_codegen(
+    import_generated: Callable[[Config], Any], tmp_path: Path
+) -> None:
+    config = _config(
+        tmp_path,
+        modules=(),
+        projections=(
+            ProjectionSpec(f"{_IO}:Account", (f"{_IO}:Public",), kind="input"),
+            ProjectionSpec(f"{_IO}:Account", (f"{_IO}:Public",), kind="output"),
+            ProjectionSpec(
+                f"{_IO}:Account",
+                (f"{_IO}:Public",),
+                kind="input",
+                name="AccountWrite",
+                extra="ignore",
+            ),
+            ProjectionSpec(
+                f"{_IO}:Account",
+                (f"{_IO}:Public",),
+                kind="input",
+                name="AccountForbid",
+                extra="forbid",
+            ),
+        ),
+    )
+    mod = import_generated(config)
+    # identity: each alias IS the cached runtime projection
+    assert mod.AccountIn is io_fx.Account.input(io_fx.Public)
+    assert mod.AccountOut is io_fx.Account.output(io_fx.Public)
+    assert mod.AccountWrite is io_fx.Account.input(
+        io_fx.Public, name="AccountWrite", extra="ignore"
+    )
+    # input drops the read-only (Out) field; output drops the write-only (In) one
+    assert set(mod.AccountIn.model_fields) == {"handle", "password"}
+    assert set(mod.AccountOut.model_fields) == {"id", "handle"}
+    # default name/extra omitted; non-defaults emitted; explicit forbid omitted
+    text = config.output.read_text()
+    assert "AccountIn = Account.input(Public)" in text
+    assert "AccountOut = Account.output(Public)" in text
+    assert (
+        "AccountWrite = Account.input(Public, name='AccountWrite', extra='ignore')"
+        in text
+    )
+    assert "AccountForbid = Account.input(Public, name='AccountForbid')" in text
 
 
 # --- CLI -------------------------------------------------------------------
