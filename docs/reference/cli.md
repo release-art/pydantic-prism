@@ -97,6 +97,7 @@ See [trace data flow](../how-to/trace-data-flow.md).
 output = "myapp/_prism.py"          # required: where pydantic-prism gen writes the stub module
 modules = ["myapp.models"]          # scan these for ScopedModels (one stub per scope)
 readme = "myapp/MODELS.md"          # optional: also emit a GitHub model doc
+sys-path = ["src"]                  # optional: extra import roots (see below)
 
 [[tool.pydantic-prism.projections]] # optional: projections beyond per-atom
 model = "myapp.models:Document"
@@ -117,6 +118,7 @@ extra = "forbid"                    # optional, only valid for kind = "input"
 | `modules` | one of `modules` / `projections` | Modules to scan; each scope yields one per-atom projection stub. |
 | `projections` | one of `modules` / `projections` | Extra projections (unions, name overrides) beyond per-atom. |
 | `readme` | no | Path for the generated GitHub model doc. |
+| `sys-path` | no | Extra import roots (relative to the `pyproject.toml` dir) prepended to `sys.path` before discovery. |
 
 A `projections` entry's `kind` selects the projection method: `"scope"` (the
 default — `.scope(A | B)`), `"input"` (`.input(...)`, the write-side view with
@@ -127,6 +129,16 @@ overrides the input projection's `model_config["extra"]` and is only valid for
 `kind = "input"` — setting it on any other kind is a `ValidationError`. Discovery
 (module scan) only emits `.scope()` projections; `.input()` / `.output()` aren't
 reachable by annotation walking, so they need an explicit entry.
+
+The `model` / `scopes` / `modules` paths are imported with `importlib`, so the
+target package must be importable from the project root. prism adds the
+`pyproject.toml` directory to `sys.path`, and — for the common `src/` layout —
+`<root>/src` automatically when that directory exists, so discovery works
+without a prior install (fresh CI checkout, `pipx`/`uvx`/`pre-commit`). For any
+other layout, list the import roots explicitly via `sys-path` (resolved relative
+to the `pyproject.toml` directory). The console script is `pydantic-prism`;
+`python -m pydantic_prism …` is the equivalent invocation that pins the exact
+interpreter (handy when a `pyenv` shim shadows the project's environment).
 
 A config that selects nothing (neither `modules` nor `projections`) is an error.
 The table is parsed with pydantic, so a malformed or misspelled key (e.g. a

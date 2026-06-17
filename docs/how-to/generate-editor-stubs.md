@@ -20,6 +20,19 @@ scopes = ["myapp.models:Public", "myapp.models:Internal"]  # union
 name = "DocumentPublicView"         # optional name override
 ```
 
+The `model` / `scopes` / `modules` paths are imported with `importlib`, so the
+target package has to be importable from the project root. A plain (flat) layout
+works as-is. For the common **`src/` layout** prism adds `<root>/src` to the
+import path automatically when that directory exists — no install required, so
+`pydantic-prism check` runs on a fresh CI checkout or under `pipx`/`uvx`/
+`pre-commit`. For any other layout, list the import roots explicitly (resolved
+relative to the `pyproject.toml` directory):
+
+```toml
+[tool.pydantic-prism]
+sys-path = ["src", "generated"]     # extra roots prepended before import
+```
+
 ## 2. Generate
 
 ```console

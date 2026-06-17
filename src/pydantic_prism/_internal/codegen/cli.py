@@ -11,7 +11,10 @@ from typing import Any, cast
 from pydantic import ValidationError
 
 from .config import CodegenError, load_config
-from .discover import _resolve  # pyright: ignore[reportPrivateUsage] — intra-package
+from .discover import (
+    _prepend_sys_path,  # pyright: ignore[reportPrivateUsage] — intra-package
+    _resolve,  # pyright: ignore[reportPrivateUsage] — intra-package
+)
 from .generate import generate, generate_readme
 
 __all__ = ["main"]
@@ -33,7 +36,7 @@ def _build_cli_diagram(kind: str, paths: Sequence[str], direction: str) -> Any:
     from ..scopes import Scope
 
     # console scripts don't put the cwd on the path the way `python` does
-    sys.path.insert(0, str(Path.cwd()))
+    _prepend_sys_path(Path.cwd())
     if kind == "scope":
         scopes = [_resolve_kind(p, Scope, "Scope class") for p in paths]
         return scope_diagram(*scopes, direction=direction)
@@ -79,7 +82,7 @@ def _run_flow(args: argparse.Namespace) -> int:
     from ..model import ScopedModel
 
     # console scripts don't put the cwd on the path the way `python` does
-    sys.path.insert(0, str(Path.cwd()))
+    _prepend_sys_path(Path.cwd())
     try:
         model = _resolve_kind(args.path, ScopedModel, "ScopedModel subclass")
     except CodegenError as exc:

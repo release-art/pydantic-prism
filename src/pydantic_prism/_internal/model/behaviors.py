@@ -97,8 +97,8 @@ def _collect_behaviors(cls: type[ScopedModelT]) -> dict[str, Any]:
     serializer / computed field, and any ``@unprojected`` member.
 
     The single source of truth shared by the runtime copy (:func:`_copy_behaviors`)
-    and ``prism gen`` (which renders these into each face's stub), so both honor
-    ``@unprojected`` and the pydantic-managed exclusions identically.
+    and ``pydantic-prism gen`` (which renders these into each face's stub), so
+    both honor ``@unprojected`` and the pydantic-managed exclusions identically.
     """
     managed = _pydantic_managed(cls)
     seen: set[str] = set()

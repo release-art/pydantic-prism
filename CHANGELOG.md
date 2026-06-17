@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-06-17
+
+### Fixed
+
+- **`src/`-layout discovery without a prior install.** `pydantic-prism gen` /
+  `check` (and `diagram` / `flow`) resolve the configured paths with
+  `importlib`, but only the `pyproject.toml` directory was put on `sys.path`, so
+  a package under `src/` was unimportable unless an editable install had already
+  added `src/` — breaking fresh CI checkouts and isolated runners
+  (`pipx`/`uvx`/`pre-commit`) with `cannot import module`. prism now adds
+  `<root>/src` to `sys.path` automatically when that directory exists.
+
+### Added
+
+- **`[tool.pydantic-prism] sys-path`** — list extra import roots (resolved
+  relative to the `pyproject.toml` directory) to prepend to `sys.path` before
+  discovery, for layouts other than flat or `src/`. Pure addition.
+
+### Changed
+
+- **Generated-stub banner names the real console script.** The do-not-edit
+  header now reads `pydantic-prism gen` / `pydantic-prism check` instead of the
+  bare `prism` (which is not an installed entry point and collides with `pyenv`
+  shims). Docs use the same canonical spelling. Regenerating bumps the banner —
+  run `pydantic-prism gen` once; `check` will otherwise report the old banner
+  stale.
+
 ## [0.3.0] - 2026-06-10
 
 ### Added

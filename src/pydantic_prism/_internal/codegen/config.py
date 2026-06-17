@@ -55,6 +55,7 @@ class Config:
     modules: tuple[str, ...]
     projections: tuple[ProjectionSpec, ...]
     root: Path
+    sys_path: tuple[str, ...] = ()
     readme: Path | None = None
 
 
@@ -87,6 +88,7 @@ class _RawConfig(BaseModel):
     output: str
     modules: tuple[str, ...] = ()
     projections: tuple[_RawProjection, ...] = ()
+    sys_path: Annotated[tuple[str, ...], Field(alias="sys-path")] = ()
     readme: str | None = None
 
     @model_validator(mode="after")
@@ -129,5 +131,6 @@ def load_config(pyproject: Path) -> Config:
             for spec in raw.projections
         ),
         root=root,
+        sys_path=raw.sys_path,
         readme=(root / raw.readme) if raw.readme is not None else None,
     )

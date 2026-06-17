@@ -56,7 +56,7 @@ cardinality. Prism tells you the shape; what you do with it is up to you.
 A string target resolves lazily: a bare `ref("Customer")` against the owning
 model's module, and a fully-qualified `ref("pkg.mod:Customer")` /
 `ref("pkg.mod.Customer")` against the named module (via `importlib`) for a target
-that lives elsewhere — the same `"module:Name"` grammar the `prism gen` spec uses.
+that lives elsewhere — the same `"module:Name"` grammar the `pydantic-prism gen` spec uses.
 
 Because the ref graph is pure metadata that *survives projection*, higher-level
 features compose on top of it without prism ever doing I/O — most notably the

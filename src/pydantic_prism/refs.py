@@ -332,7 +332,7 @@ class RefGraph(Mapping[str, RefInfo]):
 
         Three forms share one grammar:
 
-        - ``"module.path:Name"`` — colon-separated (matches the ``prism gen`` spec)
+        - ``"module.path:Name"`` — colon-separated (the ``pydantic-prism gen`` spec)
         - ``"module.path.Name"`` — dotted (matches ``importlib``)
         - ``"Name"`` — a bare name, looked up in the *owner's* module (the
           self-reference / within-module-cycle case)

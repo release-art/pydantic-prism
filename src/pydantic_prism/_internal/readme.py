@@ -1,4 +1,4 @@
-"""Generate a GitHub-flavoured README for ``prism gen``-reflected models.
+"""Generate a GitHub-flavoured README for ``pydantic-prism gen``-reflected models.
 
 GitHub renders ```mermaid fenced blocks inline, so the generated doc ships with
 visible diagrams (scope hierarchy, per-model projection fan-out, relationship
@@ -35,12 +35,13 @@ def _fenced_mermaid(body: str) -> list[str]:
 
 
 def build_readme(
-    projections: Sequence[type[Projection]], *, regen_hint: str = "prism gen"
+    projections: Sequence[type[Projection]], *, regen_hint: str = "pydantic-prism gen"
 ) -> str:
     """Render the GitHub README for a generated projection workset.
 
-    ``regen_hint`` is the command shown in the do-not-edit banner (``prism gen``
-    for stub generation, or whatever script produced the file).
+    ``regen_hint`` is the command shown in the do-not-edit banner
+    (``pydantic-prism gen`` for stub generation, or whatever script produced the
+    file).
     """
     by_source: dict[type[ScopedModel], list[type[Projection]]] = defaultdict(list)
     for proj in projections:

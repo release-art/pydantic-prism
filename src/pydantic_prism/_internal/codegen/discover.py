@@ -6,13 +6,20 @@ import importlib
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, cast, get_args
 
 from ..model import Projection, ScopedModel
 from ..scopes import ScopeExpr, as_expr, union_all
 from .config import CodegenError, Config, ExtraPolicy, ProjectionKind
 
-__all__ = ["_build_workset", "_discover", "_projections_in", "_reject_name_clashes"]
+__all__ = [
+    "_build_workset",
+    "_discover",
+    "_prepend_sys_path",
+    "_projections_in",
+    "_reject_name_clashes",
+]
 
 
 @dataclass(slots=True)
@@ -61,10 +68,28 @@ _PlanKey = tuple[
 ]
 
 
+def _prepend_sys_path(root: Path, extra: Sequence[str] = ()) -> None:
+    """Make the target package importable from ``root`` without a prior install.
+
+    Prepends ``root`` itself, any explicitly configured ``extra`` roots (resolved
+    relative to ``root``), and — for the ubiquitous ``src/`` layout — ``root/src``
+    when it exists. Entries already on ``sys.path`` are left where they are, so a
+    prior install or an existing ``PYTHONPATH`` keeps its precedence.
+    """
+    candidates = [root]
+    src = root / "src"
+    if src.is_dir():
+        candidates.append(src)
+    candidates.extend(root / entry for entry in extra)
+    for path in candidates:
+        spelling = str(path)
+        if spelling not in sys.path:
+            sys.path.insert(0, spelling)
+
+
 def _discover(config: Config) -> list[_Plan]:
     """The planned projections to generate, deduplicated."""
-    if str(config.root) not in sys.path:
-        sys.path.insert(0, str(config.root))
+    _prepend_sys_path(config.root, config.sys_path)
     plans: dict[_PlanKey, _Plan] = {}
 
     def add(plan: _Plan) -> None:
