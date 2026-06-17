@@ -595,6 +595,48 @@ def test_main_check_missing_file(tmp_path: Path) -> None:
     assert main(["check", "--config", str(pyproject)]) == 1
 
 
+def test_check_tolerates_formatter_churn(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A `ruff format` pass rewrites layout/quotes but preserves meaning; check
+    # compares ASTs, so a reformatted-but-equivalent stub stays "up to date".
+    import ast
+
+    pyproject = _cli_pyproject(tmp_path, name=True)
+    assert main(["gen", "--config", str(pyproject)]) == 0
+    capsys.readouterr()
+    out = tmp_path / "out.py"
+    original = out.read_text()
+    # ast.unparse normalises *all* formatting (and drops comments) while keeping
+    # the AST — a dependency-free stand-in for any formatter's churn.
+    reformatted = ast.unparse(ast.parse(original))
+    assert reformatted != original  # genuinely different bytes
+    out.write_text(reformatted, encoding="utf-8")
+    assert main(["check", "--config", str(pyproject)]) == 0
+    assert "up to date" in capsys.readouterr().out
+
+
+def test_check_detects_semantic_drift(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # valid Python, but a different AST -> genuinely stale, not mere formatting.
+    pyproject = _cli_pyproject(tmp_path)
+    main(["gen", "--config", str(pyproject)])
+    capsys.readouterr()
+    out = tmp_path / "out.py"
+    out.write_text(out.read_text() + "\nEXTRA_SYMBOL = 1\n", encoding="utf-8")
+    assert main(["check", "--config", str(pyproject)]) == 1
+    assert "out of date" in capsys.readouterr().err
+
+
+def test_check_unparseable_stub_is_stale(tmp_path: Path) -> None:
+    # a stub that no longer parses can't be AST-compared -> treated as stale.
+    pyproject = _cli_pyproject(tmp_path)
+    main(["gen", "--config", str(pyproject)])
+    (tmp_path / "out.py").write_text("def oops(:\n", encoding="utf-8")
+    assert main(["check", "--config", str(pyproject)]) == 1
+
+
 def test_main_config_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     pyproject = _write_pyproject(tmp_path, "[tool.other]\n")
     assert main(["gen", "--config", str(pyproject)]) == 2

@@ -68,9 +68,11 @@ method on the canonical (anything not `@unprojected`) — is emitted into the st
 too, so the editor sees it.
 
 > **Note — `ruff format`.** The generated file's `# ruff: noqa` banner disables
-> *linting*, not *formatting*; `ruff format` may rewrite it (quotes, wrapping)
-> and then `pydantic-prism check` reports it stale. Exclude the generated module
-> from the formatter — e.g. `[tool.ruff] extend-exclude = ["myapp/_prism.py"]`.
+> *linting*, not *formatting*, so `ruff format` may rewrite it (quotes, wrapping).
+> That's fine: `pydantic-prism check` compares the **AST**, not the bytes, so a
+> formatter pass that only reshuffles layout does not report the stub stale — no
+> need to exclude it from the formatter. (Only a change in *meaning* — a model
+> edit the stub doesn't reflect — fails the check.)
 
 ## 3. Gate drift in CI
 
@@ -78,8 +80,9 @@ too, so the editor sees it.
 $ pydantic-prism check        # exit 1 if the stub is out of date
 ```
 
-`pydantic-prism check` regenerates the module in memory and byte-diffs it against the file
-on disk, so any model change that the stub doesn't reflect fails the check. Wire
+`pydantic-prism check` regenerates the module in memory and compares its AST to
+the file on disk, so any model change that the stub doesn't reflect fails the
+check — while a pure formatter pass (which leaves the AST unchanged) does not. Wire
 it into CI so a stale stub fails the build. (There is no runtime check: the
 `.scope()` alias is recomputed live every import, so it is never itself stale —
 only the static stub the type checker reads can drift, and that is exactly what

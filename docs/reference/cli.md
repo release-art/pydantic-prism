@@ -28,7 +28,10 @@ See [generate editor stubs](../how-to/generate-editor-stubs.md).
 ## `pydantic-prism check`
 
 Exit non-zero if the generated stub module (or configured README) is out of
-date. A CI gate. Same options as `gen`.
+date. A CI gate. Same options as `gen`. The stub is compared by **AST**, so a
+`ruff format` (or other formatter) pass that only reshuffles layout does not
+report it stale — only a change in meaning does. (The README, being Markdown, is
+compared exactly.)
 
 ```console
 $ pydantic-prism check

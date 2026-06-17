@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -111,6 +112,34 @@ def _stale(path: Path, expected: str) -> bool:
     return existing != expected
 
 
+def _ast_equal(a: str, b: str) -> bool:
+    """True if two Python sources parse to the same AST (formatting/comments aside).
+
+    ``ast.dump`` drops layout (whitespace, wrapping), comments, and quote style,
+    so two sources that differ only by a formatter pass compare equal. A source
+    that no longer parses is treated as *not* equal (i.e. stale).
+    """
+    try:
+        return ast.dump(ast.parse(a)) == ast.dump(ast.parse(b))
+    except SyntaxError:
+        return False
+
+
+def _stub_stale(path: Path, expected: str) -> bool:
+    """Whether the generated stub on disk is out of date.
+
+    Unlike :func:`_stale` (used for the Markdown README), this tolerates pure
+    formatter churn: the stub is valid Python whose *meaning* is what the type
+    checker reads, so a ``ruff format`` pass that only reshuffles layout must not
+    fail ``check``. Bytes are compared first as a fast path; only a genuine byte
+    difference falls back to the AST comparison.
+    """
+    if not path.exists():
+        return True
+    existing = path.read_text(encoding="utf-8")
+    return existing != expected and not _ast_equal(existing, expected)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="pydantic-prism",
@@ -171,7 +200,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     stale = "is out of date — run `pydantic-prism gen`"
-    if _stale(config.output, text):
+    if _stub_stale(config.output, text):
         print(f"pydantic-prism: {config.output} {stale}", file=sys.stderr)
         return 1
     if readme_text is not None and _stale(cast(Path, readme_path), readme_text):
