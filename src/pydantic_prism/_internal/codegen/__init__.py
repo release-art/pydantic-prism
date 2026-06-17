@@ -17,7 +17,8 @@ For each projection it emits, into one module::
 
 The runtime alias is recomputed live every import, so it is never stale; drift
 between the static stub and the model is caught by ``pydantic-prism check`` (which
-regenerates the module and byte-diffs it) as a CI gate.
+regenerates the module and compares its AST, tolerating formatter churn) as a
+CI gate.
 
 Layout: :mod:`config` (load `[tool.pydantic-prism]`), :mod:`discover` (find
 the projection workset), :mod:`render` (annotations/scopes/defaults → source),

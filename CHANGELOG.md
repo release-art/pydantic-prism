@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`pydantic-prism check` is immune to formatter churn.** The generated stub is
+  now compared by **AST** rather than byte-for-byte, so a `ruff format` (or any
+  formatter) pass that only reshuffles layout — quotes, wrapping, trailing
+  commas, blank lines — no longer reports the stub stale. Only a change in
+  *meaning* (a model edit the stub doesn't reflect) fails the check; a stub that
+  no longer parses is treated as stale. You no longer need to exclude the
+  generated module from your formatter. The README, being Markdown, is still
+  compared exactly.
+
 ## [0.6.2] - 2026-06-17
 
 ### Fixed
@@ -28,9 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Generated-stub banner names the real console script.** The do-not-edit
   header now reads `pydantic-prism gen` / `pydantic-prism check` instead of the
   bare `prism` (which is not an installed entry point and collides with `pyenv`
-  shims). Docs use the same canonical spelling. Regenerating bumps the banner —
-  run `pydantic-prism gen` once; `check` will otherwise report the old banner
-  stale.
+  shims). Docs use the same canonical spelling. The banner is a comment, so the
+  now-AST-based `check` ignores it — upgrading needs no regeneration.
 
 ## [0.3.0] - 2026-06-10
 
